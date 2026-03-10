@@ -12,4 +12,3 @@
 - Lint Rust code with `cargo clippy --all-targets --all-features -- -D warnings`.
 - Run `cargo test` for the automated test suite.
 - Run `cargo llvm-cov --summary-only` and keep coverage at or above 80% across the codebase before considering work complete.
-- For small lexical filters and token-shape checks, prefer direct string predicates such as `contains()` plus a single `chars().any(...)` pass over regexes. Reserve regexes for genuinely pattern-oriented parsing or matching.
