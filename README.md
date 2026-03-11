@@ -1,5 +1,7 @@
 # covgate
 
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
+
 A blazing-fast, zero-dependency CI/CD quality gate that enforces code coverage strictly on your pull request diffs. 
 
 Built in Rust, `covgate` evaluates **line, branch, and region coverage** by parsing lossless, compiler-native JSON reports. It operates entirely locally in your CI runner, preventing untested code from merging without the false positives or SaaS costs associated with other coverage tools.
@@ -108,4 +110,4 @@ Contributions are welcome! If you want to add support for a new language ecosyst
 
 ## License
 
-Apache 2.0. See [LICENSE](LICENSE) for details.
+Apache 2.0. See [LICENSE](./LICENSE) for details.
