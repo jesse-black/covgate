@@ -27,11 +27,11 @@ struct FileConfig {
     base: Option<String>,
     markdown_output: Option<PathBuf>,
     #[serde(default)]
-    thresholds: ThresholdConfig,
+    gates: GateConfig,
 }
 
 #[derive(Debug, Default, Deserialize)]
-struct ThresholdConfig {
+struct GateConfig {
     #[serde(alias = "region")]
     regions: Option<f64>,
     #[serde(alias = "line")]
@@ -104,13 +104,13 @@ fn resolve_threshold(args: &Args, file_config: Option<&FileConfig>) -> Result<Th
     }
 
     if let Some(config) = file_config
-        && let Some(threshold) = config.thresholds.to_threshold()?
+        && let Some(threshold) = config.gates.to_threshold()?
     {
         return Ok(threshold);
     }
 
     bail!(
-        "one of --fail-under-regions, --fail-under-lines, or --fail-under-branches is required unless {} defines a supported [thresholds] default",
+        "one of --fail-under-regions, --fail-under-lines, or --fail-under-branches is required unless {} defines a supported [gates] default",
         CONFIG_FILE_NAME
     )
 }
@@ -138,7 +138,7 @@ fn cli_threshold(args: &Args) -> Result<Option<Threshold>> {
     exactly_one_threshold(configured, "CLI flags")
 }
 
-impl ThresholdConfig {
+impl GateConfig {
     fn to_threshold(&self) -> Result<Option<Threshold>> {
         let mut configured = Vec::new();
         if let Some(percent) = self.regions {
@@ -166,7 +166,7 @@ impl ThresholdConfig {
             });
         }
 
-        exactly_one_threshold(configured, &format!("{CONFIG_FILE_NAME} [thresholds]"))
+        exactly_one_threshold(configured, &format!("{CONFIG_FILE_NAME} [gates]"))
     }
 }
 
@@ -185,7 +185,7 @@ mod tests {
     use tempfile::tempdir;
 
     use super::{
-        CONFIG_FILE_NAME, FileConfig, ThresholdConfig, cli_threshold, load_file_config_from,
+        CONFIG_FILE_NAME, FileConfig, GateConfig, cli_threshold, load_file_config_from,
         resolve_diff_source, resolve_threshold,
     };
     use crate::{cli::Args, diff::DiffSource, model::MetricKind};
@@ -229,7 +229,7 @@ mod tests {
 
     #[test]
     fn config_threshold_rejects_multiple_metrics() {
-        let thresholds = ThresholdConfig {
+        let thresholds = GateConfig {
             regions: Some(90.0),
             lines: Some(80.0),
             branches: None,
@@ -242,15 +242,14 @@ mod tests {
         assert!(
             error
                 .to_string()
-                .contains("covgate.toml [thresholds] may set exactly one threshold in v1")
+                .contains("covgate.toml [gates] may set exactly one threshold in v1")
         );
     }
 
     #[test]
     fn prefers_cli_over_config_defaults() {
-        let file_config: FileConfig =
-            toml::from_str("base = \"main\"\n[thresholds]\nregions = 40\n")
-                .expect("config should parse");
+        let file_config: FileConfig = toml::from_str("base = \"main\"\n[gates]\nregions = 40\n")
+            .expect("config should parse");
 
         let args = Args {
             coverage_json: "coverage.json".into(),
@@ -277,9 +276,8 @@ mod tests {
 
     #[test]
     fn loads_defaults_from_repo_config() {
-        let file_config: FileConfig =
-            toml::from_str("base = \"main\"\n[thresholds]\nregions = 75\n")
-                .expect("config should parse");
+        let file_config: FileConfig = toml::from_str("base = \"main\"\n[gates]\nregions = 75\n")
+            .expect("config should parse");
 
         let args = Args {
             coverage_json: "coverage.json".into(),
@@ -309,7 +307,7 @@ mod tests {
         let temp = tempdir().expect("tempdir");
         fs::write(
             temp.path().join(CONFIG_FILE_NAME),
-            "base = \"main\"\nmarkdown_output = \"summary.md\"\n[thresholds]\nregions = 80\n",
+            "base = \"main\"\nmarkdown_output = \"summary.md\"\n[gates]\nregions = 80\n",
         )
         .expect("write config");
 
@@ -322,16 +320,16 @@ mod tests {
             config.markdown_output.as_deref(),
             Some(std::path::Path::new("summary.md"))
         );
-        assert_eq!(config.thresholds.regions, Some(80.0));
+        assert_eq!(config.gates.regions, Some(80.0));
     }
 
     #[test]
-    fn file_config_defaults_empty_thresholds() {
+    fn file_config_defaults_empty_gates() {
         let config: FileConfig = toml::from_str("").expect("empty config should parse");
         assert!(config.base.is_none());
         assert!(
             config
-                .thresholds
+                .gates
                 .to_threshold()
                 .expect("threshold parse")
                 .is_none()

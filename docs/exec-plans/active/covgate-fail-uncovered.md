@@ -22,7 +22,7 @@ You will also know this is working when a repository can keep defaults in `covga
 
     base = "origin/main"
 
-    [thresholds]
+    [gates]
     fail_under_regions = 90
     fail_uncovered_regions = 1
 
@@ -84,13 +84,13 @@ In this plan, an “uncovered-count gate” means a rule that fails when the num
 
 The current implementation already computes the raw data needed for uncovered-count gates. `src/metrics.rs` returns the total number of covered changed opportunities, the total number of changed opportunities, and a vector of uncovered changed opportunities. What is missing is a model that can hold more than one rule at a time, gate evaluation that can check different rule types, and renderers that can explain which rule or rules failed.
 
-The current CLI and TOML surfaces are also intentionally narrow. `src/cli.rs` exposes `--fail-under-regions`, `--fail-under-lines`, and `--fail-under-branches`. `src/config.rs` resolves those into exactly one `Threshold`, and the TOML loader treats `[thresholds]` as a place where exactly one threshold may be set in v1. This plan must relax that one-threshold assumption without breaking the existing behavior for users who only set a fail-under threshold.
+The current CLI and TOML surfaces are also intentionally narrow. `src/cli.rs` exposes `--fail-under-regions`, `--fail-under-lines`, and `--fail-under-branches`. `src/config.rs` resolves those into exactly one `Threshold`, and the TOML loader treats `[gates]` as a place where exactly one threshold may be set in v1. This plan must relax that one-threshold assumption without breaking the existing behavior for users who only set a fail-under threshold.
 
 ## Plan of Work
 
 Start in `src/model.rs` by replacing the current single-threshold representation with a small gate-rule model that can represent both kinds of checks cleanly. Keep `MetricKind`, but introduce a dedicated rule type that distinguishes between a minimum-percent rule and a maximum-uncovered rule. The exact names are up to the implementation, but the model must make it obvious whether a rule compares a percentage or a count. Add a result shape that can report every evaluated rule, whether each one passed, and which ones caused the overall failure. Do not hide count gates behind overloaded percentage fields.
 
-Once the model can represent multiple rules, update `src/config.rs` so it resolves an ordered collection of effective rules instead of one `Threshold`. Preserve the current repository-local config discovery from `./covgate.toml`. Extend the CLI layer in `src/cli.rs` with pluralized flags `--fail-uncovered-regions`, `--fail-uncovered-lines`, and `--fail-uncovered-branches`. Extend the TOML format with matching keys inside `[thresholds]`, such as `fail_uncovered_regions = 1`. Keep the existing fail-under names and allow both families to appear together. CLI precedence must stay per field: if TOML sets both a percent rule and an uncovered-count rule, and the CLI overrides only one of them, the unoverridden rule should still come from TOML.
+Once the model can represent multiple rules, update `src/config.rs` so it resolves an ordered collection of effective rules instead of one `Threshold`. Preserve the current repository-local config discovery from `./covgate.toml`. Extend the CLI layer in `src/cli.rs` with pluralized flags `--fail-uncovered-regions`, `--fail-uncovered-lines`, and `--fail-uncovered-branches`. Extend the TOML format with matching keys inside `[gates]`, such as `fail_uncovered_regions = 1`. Keep the existing fail-under names and allow both families to appear together. CLI precedence must stay per field: if TOML sets both a percent rule and an uncovered-count rule, and the CLI overrides only one of them, the unoverridden rule should still come from TOML.
 
 After configuration resolution, update `src/gate.rs` to evaluate every effective rule against the computed metric. The overall run should pass only if every configured rule passes. A percent rule uses the existing percentage value. An uncovered-count rule compares the length of `uncovered_changed_opportunities` against the configured maximum. Make the evaluation order deterministic and preserve enough detail for renderers to report individual pass/fail status. If a rule refers to a metric that the loaded report does not support, return a clear configuration error instead of silently ignoring it.
 
@@ -222,7 +222,7 @@ Expected TOML excerpt:
 
     base = "origin/main"
 
-    [thresholds]
+    [gates]
     fail_under_regions = 40
     fail_uncovered_regions = 1
 
@@ -243,3 +243,5 @@ In `src/render/console.rs` and `src/render/markdown.rs`, renderers must consume 
 At the bottom of this plan, append a revision note every time the plan changes materially, describing what changed and why.
 
 Revision note: Initial standalone plan created for the `--fail-uncovered-*` feature so uncovered-count gates can be designed and implemented as a separate threshold family without overloading the current fail-under work.
+
+Revision note: Updated the intended TOML section name from `[thresholds]` to `[gates]` so the follow-up plan matches the current repository configuration vocabulary.

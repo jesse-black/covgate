@@ -7,8 +7,12 @@ on:
 jobs:
   quality-check:
     runs-on: ubuntu-latest
+    env:
+      COVGATE_FAIL_UNDER_REGIONS: "80"
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
@@ -21,8 +25,12 @@ jobs:
         run: cargo clippy --all-targets --all-features -- -D warnings
       - name: Test
         run: cargo test
-      - name: Coverage
-        run: cargo llvm-cov --summary-only
+      - name: Coverage JSON
+        run: cargo llvm-cov --json --output-path coverage.json
+      - name: Coverage Summary
+        run: cargo llvm-cov report
+      - name: Dogfood covgate
+        run: cargo run -- --coverage-json coverage.json --base origin/main --fail-under-regions "$COVGATE_FAIL_UNDER_REGIONS"
 
   dependency-hygiene:
     runs-on: ubuntu-latest
@@ -32,4 +40,3 @@ jobs:
       - uses: taiki-e/install-action@cargo-machete
       - name: Dependency hygiene
         run: cargo machete
-

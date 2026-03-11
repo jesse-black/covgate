@@ -1,54 +1,35 @@
 use std::{
     fs,
     path::{Path, PathBuf},
-    process::Command,
+    process::{Command, Output},
 };
 
 use tempfile::tempdir;
 
-fn fixture_root() -> PathBuf {
+fn fixture_root(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests")
         .join("fixtures")
         .join("rust")
-        .join("basic-fail")
+        .join(name)
 }
 
 #[test]
 fn basic_fail_rust_fixture() {
     let temp = tempdir().expect("tempdir should exist");
-    let fixture = fixture_root();
-    let repo_src = fixture.join("repo");
-    let overlay_src = fixture.join("overlay");
-    let worktree = temp.path().join("repo");
-    copy_tree(&repo_src, &worktree);
-    init_git_repo(&worktree);
+    let worktree = setup_fixture_worktree(temp.path(), "basic-fail");
+    let diff_file = write_worktree_diff(temp.path(), &worktree);
 
-    copy_tree(&overlay_src, &worktree);
-
-    let diff_output = Command::new("git")
-        .args(["diff", "--unified=0", "--no-ext-diff"])
-        .current_dir(&worktree)
-        .output()
-        .expect("git diff should run");
-    assert!(diff_output.status.success(), "git diff should succeed");
-    let diff_file = temp.path().join("scenario.diff");
-    fs::write(&diff_file, diff_output.stdout).expect("diff file should be written");
-
-    let coverage_json = fixture.join("coverage.json");
-    let binary = env!("CARGO_BIN_EXE_covgate");
-    let output = Command::new(binary)
-        .args([
-            "--coverage-json",
-            coverage_json.to_str().expect("utf8 path"),
-            "--diff-file",
-            diff_file.to_str().expect("utf8 path"),
-            "--fail-under-regions",
-            "60",
-        ])
-        .current_dir(&worktree)
-        .output()
-        .expect("covgate should run");
+    let output = run_covgate(
+        &worktree,
+        "basic-fail",
+        &[
+            "--diff-file".to_string(),
+            diff_file.to_string_lossy().into_owned(),
+            "--fail-under-regions".to_string(),
+            "60".to_string(),
+        ],
+    );
 
     assert_eq!(
         output.status.code(),
@@ -62,9 +43,111 @@ fn basic_fail_rust_fixture() {
 }
 
 #[test]
+fn basic_pass_rust_fixture() {
+    let temp = tempdir().expect("tempdir should exist");
+    let worktree = setup_fixture_worktree(temp.path(), "basic-pass");
+    let diff_file = write_worktree_diff(temp.path(), &worktree);
+
+    let output = run_covgate(
+        &worktree,
+        "basic-pass",
+        &[
+            "--diff-file".to_string(),
+            diff_file.to_string_lossy().into_owned(),
+            "--fail-under-regions".to_string(),
+            "90".to_string(),
+        ],
+    );
+
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "fixture should pass the gate"
+    );
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+    assert!(stdout.contains("Diff Coverage: PASS"));
+    assert!(stdout.contains("Coverage: 100.00%"));
+    assert!(stdout.contains("Threshold: 90.00%"));
+}
+
+#[test]
+fn markdown_summary_rust_fixture() {
+    let temp = tempdir().expect("tempdir should exist");
+    let worktree = setup_fixture_worktree(temp.path(), "basic-pass");
+    let diff_file = write_worktree_diff(temp.path(), &worktree);
+    let markdown_output = temp.path().join("summary.md");
+
+    let output = run_covgate(
+        &worktree,
+        "basic-pass",
+        &[
+            "--diff-file".to_string(),
+            diff_file.to_string_lossy().into_owned(),
+            "--fail-under-regions".to_string(),
+            "90".to_string(),
+            "--markdown-output".to_string(),
+            markdown_output.to_string_lossy().into_owned(),
+        ],
+    );
+
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "markdown output should not change the gate outcome"
+    );
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+    assert!(stdout.contains("Diff Coverage: PASS"));
+    assert!(markdown_output.exists(), "markdown file should be written");
+
+    let markdown = fs::read_to_string(markdown_output).expect("markdown should be readable");
+    assert!(markdown.contains("## Covgate"));
+    assert!(markdown.contains("### Diff Coverage"));
+    assert!(markdown.contains("| Result | Metric | Changed Coverage | Threshold |"));
+    assert!(markdown.contains("| PASS | region | 100.00% | 90.00% |"));
+    assert!(markdown.contains("### Overall Coverage"));
+}
+
+#[test]
+fn pr_branch_against_main_fixture() {
+    let temp = tempdir().expect("tempdir should exist");
+    let fixture = fixture_root("basic-pass");
+    let repo_src = fixture.join("repo");
+    let overlay_src = fixture.join("overlay");
+    let worktree = temp.path().join("repo");
+    copy_tree(&repo_src, &worktree);
+    init_git_repo(&worktree);
+    run_git(&worktree, &["branch", "-M", "main"]);
+    run_git(&worktree, &["checkout", "-b", "feature/pr-fixture"]);
+    copy_tree(&overlay_src, &worktree);
+    run_git(&worktree, &["add", "."]);
+    run_git(&worktree, &["commit", "-m", "feature change"]);
+
+    let output = run_covgate(
+        &worktree,
+        "basic-pass",
+        &[
+            "--base".to_string(),
+            "main".to_string(),
+            "--fail-under-regions".to_string(),
+            "90".to_string(),
+        ],
+    );
+
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "branch-versus-main fixture should pass the gate"
+    );
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+    assert!(stdout.contains("Diff: main...HEAD"));
+    assert!(stdout.contains("Diff Coverage: PASS"));
+    assert!(stdout.contains("Coverage: 100.00%"));
+}
+
+#[test]
 fn uses_repo_config_defaults_for_base_and_threshold() {
     let temp = tempdir().expect("tempdir should exist");
-    let fixture = fixture_root();
+    let fixture = fixture_root("basic-fail");
     let repo_src = fixture.join("repo");
     let overlay_src = fixture.join("overlay");
     let worktree = temp.path().join("repo");
@@ -78,20 +161,11 @@ fn uses_repo_config_defaults_for_base_and_threshold() {
     run_git(&worktree, &["commit", "-m", "feature change"]);
     fs::write(
         worktree.join("covgate.toml"),
-        "base = \"main\"\n[thresholds]\nregions = 40\n",
+        "base = \"main\"\n[gates]\nregions = 40\n",
     )
     .expect("config should be written");
 
-    let coverage_json = fixture.join("coverage.json");
-    let binary = env!("CARGO_BIN_EXE_covgate");
-    let output = Command::new(binary)
-        .args([
-            "--coverage-json",
-            coverage_json.to_str().expect("utf8 path"),
-        ])
-        .current_dir(&worktree)
-        .output()
-        .expect("covgate should run");
+    let output = run_covgate(&worktree, "basic-fail", &[]);
 
     assert_eq!(
         output.status.code(),
@@ -107,7 +181,7 @@ fn uses_repo_config_defaults_for_base_and_threshold() {
 #[test]
 fn cli_threshold_overrides_repo_config_default() {
     let temp = tempdir().expect("tempdir should exist");
-    let fixture = fixture_root();
+    let fixture = fixture_root("basic-fail");
     let repo_src = fixture.join("repo");
     let overlay_src = fixture.join("overlay");
     let worktree = temp.path().join("repo");
@@ -121,22 +195,15 @@ fn cli_threshold_overrides_repo_config_default() {
     run_git(&worktree, &["commit", "-m", "feature change"]);
     fs::write(
         worktree.join("covgate.toml"),
-        "base = \"main\"\n[thresholds]\nregions = 40\n",
+        "base = \"main\"\n[gates]\nregions = 40\n",
     )
     .expect("config should be written");
 
-    let coverage_json = fixture.join("coverage.json");
-    let binary = env!("CARGO_BIN_EXE_covgate");
-    let output = Command::new(binary)
-        .args([
-            "--coverage-json",
-            coverage_json.to_str().expect("utf8 path"),
-            "--fail-under-regions",
-            "60",
-        ])
-        .current_dir(&worktree)
-        .output()
-        .expect("covgate should run");
+    let output = run_covgate(
+        &worktree,
+        "basic-fail",
+        &["--fail-under-regions".to_string(), "60".to_string()],
+    );
 
     assert_eq!(
         output.status.code(),
@@ -147,6 +214,40 @@ fn cli_threshold_overrides_repo_config_default() {
     assert!(stdout.contains("Diff: main...HEAD"));
     assert!(stdout.contains("Threshold: 60.00%"));
     assert!(stdout.contains("Diff Coverage: FAIL"));
+}
+
+fn setup_fixture_worktree(temp_root: &Path, fixture_name: &str) -> PathBuf {
+    let fixture = fixture_root(fixture_name);
+    let repo_src = fixture.join("repo");
+    let overlay_src = fixture.join("overlay");
+    let worktree = temp_root.join("repo");
+    copy_tree(&repo_src, &worktree);
+    init_git_repo(&worktree);
+    copy_tree(&overlay_src, &worktree);
+    worktree
+}
+
+fn write_worktree_diff(temp_root: &Path, worktree: &Path) -> PathBuf {
+    let diff_output = Command::new("git")
+        .args(["diff", "--unified=0", "--no-ext-diff"])
+        .current_dir(worktree)
+        .output()
+        .expect("git diff should run");
+    assert!(diff_output.status.success(), "git diff should succeed");
+    let diff_file = temp_root.join("scenario.diff");
+    fs::write(&diff_file, diff_output.stdout).expect("diff file should be written");
+    diff_file
+}
+
+fn run_covgate(worktree: &Path, fixture_name: &str, extra_args: &[String]) -> Output {
+    let coverage_json = fixture_root(fixture_name).join("coverage.json");
+    let binary = env!("CARGO_BIN_EXE_covgate");
+    let mut command = Command::new(binary);
+    command.arg("--coverage-json");
+    command.arg(&coverage_json);
+    command.args(extra_args);
+    command.current_dir(worktree);
+    command.output().expect("covgate should run")
 }
 
 fn init_git_repo(path: &Path) {

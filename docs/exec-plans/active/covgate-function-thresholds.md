@@ -20,7 +20,7 @@ You will know this is working when a contributor can run a command like the exam
 
 You will also know this is working when a repository can keep defaults in `covgate.toml` such as:
 
-    [thresholds]
+    [gates]
     fail_under_functions = 100
     fail_uncovered_functions = 0
 
@@ -91,7 +91,7 @@ After normalization exists, the CLI and TOML layers should grow function-specifi
 
 and matching TOML keys:
 
-    [thresholds]
+    [gates]
     fail_under_functions = 100
     fail_uncovered_functions = 0
 
@@ -216,7 +216,7 @@ Expected CLI examples for the eventual feature:
 
 Expected TOML excerpt:
 
-    [thresholds]
+    [gates]
     fail_under_functions = 100
     fail_uncovered_functions = 0
 
@@ -228,7 +228,7 @@ Stay on Rust stable. Reuse the repository’s existing dependency strategy unles
 
 In `src/model.rs`, the eventual implementation should expose one shared public metric family for functions and one shared opportunity kind for callable units. Parser adapters must translate Istanbul functions and Coverlet methods into those shared concepts.
 
-In `src/config.rs` and `src/cli.rs`, the eventual implementation should follow the same metric-specific threshold pattern already used elsewhere in `covgate`. The function threshold keys should be named `fail_under_functions` and `fail_uncovered_functions` in TOML and `--fail-under-functions` and `--fail-uncovered-functions` on the CLI.
+In `src/config.rs` and `src/cli.rs`, the eventual implementation should follow the same metric-specific threshold pattern already used elsewhere in `covgate`. The function gate keys should be named `fail_under_functions` and `fail_uncovered_functions` in TOML and `--fail-under-functions` and `--fail-uncovered-functions` on the CLI.
 
 In `src/metrics.rs`, changed-function selection should reuse the same diff-overlap principle already used for changed regions: a callable unit counts as changed when its normalized span overlaps added or modified lines in the diff.
 
@@ -237,3 +237,5 @@ In `src/gate.rs`, function thresholds should be evaluated by the same general ga
 At the bottom of this plan, append a revision note every time the plan changes materially, describing what changed and why.
 
 Revision note: Initial draft plan created for future function or method thresholds because Istanbul and Coverlet are the next intended coverage formats and both expose a callable-unit signal worth gating.
+
+Revision note: Updated the intended TOML section name from `[thresholds]` to `[gates]` so this draft matches the current repository configuration vocabulary.
