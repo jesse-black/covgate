@@ -27,7 +27,9 @@ You will also know this is working when GitHub Actions can run one `covgate` com
 - [x] (2026-03-11 19:05Z) Implement repository-local TOML configuration loading from `covgate.toml` and merge it with CLI values so `base` and gate defaults can come from config while explicit CLI flags still win.
 - [x] (2026-03-11 20:05Z) Replace the generic `--fail-under METRIC=PERCENT` CLI shape with pluralized metric-specific `--fail-under-*` flags and align TOML gate keys to the same naming scheme while keeping v1 limited to one effective threshold per run.
 - [x] (2026-03-11 20:55Z) Expand copied-fixture Rust CLI coverage with a passing diff-file scenario, a Markdown-output scenario, and an explicit branch-versus-main Git-base scenario.
-- [ ] Implement the LLVM JSON parser, Git diff reader, region-to-diff intersection logic, console reporting, Markdown summary reporting, and threshold evaluation for changed-region coverage. Completed: initial end-to-end vertical slice with LLVM JSON parsing, unified diff parsing, changed-region metrics, gate evaluation, console/Markdown renderers, and explicit pass/fail fixture coverage for both diff-file and branch-versus-main paths. Remaining: broaden parser fidelity and tighten renderer/report details against more scenarios.
+- [x] (2026-03-11 22:10Z) Normalize real LLVM JSON file paths to repository-relative paths so branch-versus-main dogfooding can match coverage records to Git diff entries instead of falsely reporting zero changed regions.
+- [x] (2026-03-11 22:25Z) Add an end-to-end CLI regression test that rewrites fixture coverage JSON to use an absolute temp-worktree path, proving that real-path LLVM normalization survives full diff matching and does not regress back to `Changed regions: 0`.
+- [ ] Implement the LLVM JSON parser, Git diff reader, region-to-diff intersection logic, console reporting, Markdown summary reporting, and threshold evaluation for changed-region coverage. Completed: initial end-to-end vertical slice with LLVM JSON parsing, unified diff parsing, changed-region metrics, gate evaluation, console/Markdown renderers, explicit pass/fail fixture coverage for both diff-file and branch-versus-main paths, and repository-relative normalization for absolute LLVM JSON file paths. Remaining: tighten renderer/report details and broaden parser-oriented fixture variety beyond the current small Rust scenarios.
 - [ ] Add unit tests, fixture tests, and copied-fixture CLI integration tests using temporary working directories and immutable checked-in fixtures. Completed: focused unit tests plus copied-fixture Rust CLI integration tests covering diff-file failure, diff-file success, Markdown emission, PR-branch-against-main behavior, config-provided `base` and gate defaults, and CLI-over-config threshold precedence. Remaining: expand parser-oriented fixture variety and wire fuller follow-up setup for Dotnet and Vitest.
 - [ ] Capture final validation evidence and move this plan to `docs/exec-plans/completed/` when the first usable `covgate` release exists.
 
@@ -47,6 +49,12 @@ You will also know this is working when GitHub Actions can run one `covgate` com
 
 - Observation: The copied-fixture test harness is sufficient to model both direct diff-file inputs and realistic branch-versus-main Git-base scenarios without a second fixture convention.
   Evidence: `cargo test` now passes `basic_pass_rust_fixture`, `markdown_summary_rust_fixture`, and `pr_branch_against_main_fixture` in `tests/cli.rs` using the same helper flow of copied worktree plus nested Git repository setup.
+
+- Observation: The first CI dogfooding attempt exposed a real parser fidelity gap that fixture-only JSON had not covered: real `cargo llvm-cov --json` output can use absolute file paths, which must be normalized to repository-relative paths before diff intersection.
+  Evidence: The initial dogfood run reported `Changed regions: 0` on a branch with significant changes. After adding absolute-path normalization plus a dedicated parser test, the Rust validation stack remains green and the code now has explicit coverage for that path case.
+
+- Observation: A parser-only regression test is not enough for this path-handling bug; the failure mode needs a CLI-level assertion because the user-visible symptom is a false zero-change pass after diff matching.
+  Evidence: `cargo test` and `cargo llvm-cov --summary-only` now both pass `absolute_llvm_paths_match_diff_fixture` in `tests/cli.rs`, which rewrites the copied fixture coverage file to use the temporary worktree’s absolute `src/lib.rs` path and asserts that `Changed regions: 2` appears instead of `Changed regions: 0`.
 
 ## Decision Log
 
@@ -477,3 +485,7 @@ Revision note: Switched the fail-under CLI from a generic `METRIC=PERCENT` value
 Revision note: Renamed the repository-local TOML section from `[thresholds]` to `[gates]` so the configuration vocabulary matches the product more closely and leaves room for non-percent gate rules.
 
 Revision note: Expanded copied-fixture Rust CLI coverage with explicit pass, Markdown-output, and branch-versus-main scenarios. The plan now records that the same temporary-worktree fixture harness covers both diff-file and Git-base execution paths.
+
+Revision note: Added repository-relative normalization for absolute LLVM JSON file paths after the first CI dogfooding attempt exposed false zero-changed-region results. The plan now records that parser fidelity work includes real-path handling, not just synthetic fixture parsing.
+
+Revision note: Added an end-to-end CLI regression test for absolute LLVM JSON paths so the CI dogfooding failure mode is covered above the parser layer as well as inside unit tests.

@@ -1,6 +1,6 @@
 use std::{
     collections::BTreeMap,
-    fs,
+    env, fs,
     path::{Path, PathBuf},
 };
 
@@ -18,13 +18,19 @@ pub fn parse_path(path: &Path) -> Result<CoverageReport> {
 }
 
 pub fn parse_str(input: &str) -> Result<CoverageReport> {
+    let repo_root = env::current_dir()
+        .context("failed to determine current directory for llvm path normalization")?;
+    parse_str_with_repo_root(input, &repo_root)
+}
+
+fn parse_str_with_repo_root(input: &str, repo_root: &Path) -> Result<CoverageReport> {
     let export: LlvmExport = serde_json::from_str(input).context("failed to parse llvm json")?;
     let mut opportunities = Vec::new();
     let mut totals_by_file = BTreeMap::new();
 
     for data in export.data {
         for file in data.files {
-            let path = normalize_path(&file.filename);
+            let path = normalize_path(&file.filename, repo_root);
             let mut covered = 0usize;
             let mut total = 0usize;
 
@@ -55,8 +61,20 @@ pub fn parse_str(input: &str) -> Result<CoverageReport> {
     })
 }
 
-fn normalize_path(value: &str) -> PathBuf {
-    PathBuf::from(value)
+fn normalize_path(value: &str, repo_root: &Path) -> PathBuf {
+    let path = lexical_normalize(Path::new(value));
+    let repo_root = lexical_normalize(repo_root);
+    if path.is_absolute() {
+        path.strip_prefix(&repo_root)
+            .map(lexical_normalize)
+            .unwrap_or(path)
+    } else {
+        path
+    }
+}
+
+fn lexical_normalize(path: impl AsRef<Path>) -> PathBuf {
+    path.as_ref().components().collect()
 }
 
 #[derive(Debug, Deserialize)]
@@ -127,7 +145,9 @@ fn bool_at(values: &[serde_json::Value], index: usize) -> Option<bool> {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_str;
+    use std::path::{Path, PathBuf};
+
+    use super::{normalize_path, parse_str};
 
     #[test]
     fn parses_basic_llvm_export() {
@@ -165,5 +185,12 @@ mod tests {
     #[test]
     fn rejects_invalid_json() {
         assert!(parse_str("{").is_err());
+    }
+
+    #[test]
+    fn normalizes_absolute_paths_to_repo_relative() {
+        let repo_root = Path::new("/workspace/covgate");
+        let normalized = normalize_path("/workspace/covgate/src/lib.rs", repo_root);
+        assert_eq!(normalized, PathBuf::from("src/lib.rs"));
     }
 }

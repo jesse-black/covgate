@@ -71,6 +71,37 @@ fn basic_pass_rust_fixture() {
 }
 
 #[test]
+fn absolute_llvm_paths_match_diff_fixture() {
+    let temp = tempdir().expect("tempdir should exist");
+    let worktree = setup_fixture_worktree(temp.path(), "basic-pass");
+    let diff_file = write_worktree_diff(temp.path(), &worktree);
+    let coverage_json = temp.path().join("coverage-absolute.json");
+    write_absolute_path_coverage_fixture("basic-pass", &worktree, &coverage_json);
+
+    let output = run_covgate_with_coverage(
+        &worktree,
+        &coverage_json,
+        &[
+            "--diff-file".to_string(),
+            diff_file.to_string_lossy().into_owned(),
+            "--fail-under-regions".to_string(),
+            "90".to_string(),
+        ],
+    );
+
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "absolute-path coverage fixture should still pass the gate"
+    );
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+    assert!(stdout.contains("Diff Coverage: PASS"));
+    assert!(stdout.contains("Changed regions: 2"));
+    assert!(!stdout.contains("Changed regions: 0"));
+    assert!(stdout.contains("Coverage: 100.00%"));
+}
+
+#[test]
 fn markdown_summary_rust_fixture() {
     let temp = tempdir().expect("tempdir should exist");
     let worktree = setup_fixture_worktree(temp.path(), "basic-pass");
@@ -241,13 +272,33 @@ fn write_worktree_diff(temp_root: &Path, worktree: &Path) -> PathBuf {
 
 fn run_covgate(worktree: &Path, fixture_name: &str, extra_args: &[String]) -> Output {
     let coverage_json = fixture_root(fixture_name).join("coverage.json");
+    run_covgate_with_coverage(worktree, &coverage_json, extra_args)
+}
+
+fn run_covgate_with_coverage(
+    worktree: &Path,
+    coverage_json: &Path,
+    extra_args: &[String],
+) -> Output {
     let binary = env!("CARGO_BIN_EXE_covgate");
     let mut command = Command::new(binary);
     command.arg("--coverage-json");
-    command.arg(&coverage_json);
+    command.arg(coverage_json);
     command.args(extra_args);
     command.current_dir(worktree);
     command.output().expect("covgate should run")
+}
+
+fn write_absolute_path_coverage_fixture(fixture_name: &str, worktree: &Path, destination: &Path) {
+    let template = fixture_root(fixture_name).join("coverage.json");
+    let absolute_source_path = worktree.join("src").join("lib.rs");
+    let updated = fs::read_to_string(template)
+        .expect("fixture coverage should be readable")
+        .replace(
+            "\"src/lib.rs\"",
+            &format!("\"{}\"", absolute_source_path.display()),
+        );
+    fs::write(destination, updated).expect("absolute-path coverage fixture should be written");
 }
 
 fn init_git_repo(path: &Path) {
