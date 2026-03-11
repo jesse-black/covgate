@@ -1,0 +1,18 @@
+#!/usr/bin/env sh
+
+set -eu
+
+repo_root=$(git rev-parse --show-toplevel)
+cd "$repo_root"
+
+coverage_json=$(mktemp "${TMPDIR:-/tmp}/covgate-pre-push-XXXXXX.json")
+trap 'rm -f "$coverage_json"' EXIT INT TERM HUP
+
+echo "Running cargo clippy --all-targets --all-features -- -D warnings"
+cargo clippy --all-targets --all-features -- -D warnings
+
+echo "Running cargo llvm-cov --json --output-path $coverage_json"
+cargo llvm-cov --json --output-path "$coverage_json"
+
+echo "Running cargo run -- --coverage-json $coverage_json"
+cargo run -- --coverage-json "$coverage_json"

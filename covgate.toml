@@ -1,0 +1,4 @@
+base = "origin/main"
+
+[gates]
+regions = 80

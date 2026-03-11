@@ -7,8 +7,6 @@ on:
 jobs:
   quality-check:
     runs-on: ubuntu-latest
-    env:
-      COVGATE_FAIL_UNDER_REGIONS: "80"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -28,7 +26,7 @@ jobs:
       - name: Coverage Summary
         run: cargo llvm-cov report
       - name: Dogfood covgate
-        run: cargo run -- --coverage-json coverage.json --base origin/main --fail-under-regions "$COVGATE_FAIL_UNDER_REGIONS" --markdown-output "$GITHUB_STEP_SUMMARY"
+        run: cargo run -- --coverage-json coverage.json --markdown-output "$GITHUB_STEP_SUMMARY"
 
   dependency-hygiene:
     runs-on: ubuntu-latest
