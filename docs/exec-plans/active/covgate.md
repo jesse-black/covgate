@@ -23,6 +23,7 @@ You will also know this is working when GitHub Actions can run one `covgate` com
 - [x] (2026-03-07 00:00Z) Create a standalone ExecPlan for `covgate` that defines a future-proof architecture around metrics, formats, and outputs while keeping the first implementation intentionally narrow.
 - [x] (2026-03-10 00:00Z) Evaluate whether diff collection in v1 should use `git2-rs`, `gitoxide` (`gix`), or the installed `git` CLI.
 - [x] (2026-03-11 00:00Z) Define the initial crate layout, command-line contract, and core data model for diff coverage opportunities, metrics, and report formats.
+- [x] (2026-03-11 18:20Z) Clarify that v1 includes repository-local TOML configuration and that configuration values may provide defaults for `--base` and `--fail-under-<METRIC>` while remaining overridable from the CLI.
 - [ ] Implement the LLVM JSON parser, Git diff reader, region-to-diff intersection logic, console reporting, Markdown summary reporting, and threshold evaluation for changed-region coverage. Completed: initial end-to-end vertical slice with LLVM JSON parsing, unified diff parsing, changed-region metrics, gate evaluation, and console/Markdown renderers. Remaining: strengthen Git-base behavior, broaden parser fidelity, and tighten renderer/report details against more scenarios.
 - [ ] Add unit tests, fixture tests, and copied-fixture CLI integration tests using temporary working directories and immutable checked-in fixtures. Completed: focused unit tests plus one copied-fixture Rust CLI integration test. Remaining: expand fixture scenarios, add passing and Markdown-oriented fixture coverage, and wire fuller follow-up setup for Dotnet and Vitest.
 - [ ] Capture final validation evidence and move this plan to `docs/exec-plans/completed/` when the first usable `covgate` release exists.
@@ -92,6 +93,10 @@ You will also know this is working when GitHub Actions can run one `covgate` com
   Rationale: That is the dominant way teams will consume `covgate` in GitHub Actions and similar CI systems. The implementation and tests therefore need to treat "PR branch versus main" as the default Git-base scenario, even while still allowing explicit diff-file input for controlled tests and edge cases.
   Date/Author: 2026-03-11 / Codex
 
+- Decision: V1 should support a repository-local TOML configuration file whose values provide defaults for selected CLI options, including `--base` and `--fail-under-<METRIC>`, with explicit command-line flags taking precedence.
+  Rationale: Teams using `covgate` in CI and local development will usually want one checked-in default base reference and one or more default gate thresholds. Keeping those defaults in TOML avoids repeating them in every invocation while preserving the normal CLI expectation that explicit flags override configuration-file values.
+  Date/Author: 2026-03-11 / Codex
+
 ## Outcomes & Retrospective
 
 This plan exists before implementation, so the current outcome is a scoped specification rather than working behavior. The main design result so far is clarity about what belongs in v1 and what does not. V1 must do one thing well: fail a diff-based LLVM coverage gate and explain the result clearly in CI and local output. In practice that first gate is changed-region coverage, but the architecture must stay ready for imminent follow-up work around Coverlet and Istanbul, where line and branch metrics matter more. Future-proofing matters, but only at the architecture layer, not as extra parser or metric work in the first delivery.
@@ -113,9 +118,11 @@ In this plan, a "coverage opportunity" means a measurable unit of executable cod
 The expected external inputs are:
 
 - a coverage report generated from the repository under test, initially LLVM JSON from `cargo llvm-cov --json --output-path coverage.json`
-- a Git diff range, usually expressed as a base reference such as `origin/main` for the current pull-request branch, a base and head pair, or a precomputed unified diff file
-- one or more threshold settings, initially only a changed-region threshold at the CLI layer even though the internal threshold model must remain metric-agnostic
+- a Git diff range, usually expressed as a base reference such as `origin/main` for the current pull-request branch, a base and head pair, or a precomputed unified diff file; in v1, the default base reference may come from a repository-local TOML configuration file and still be overridden by `--base`
+- one or more threshold settings, initially only a changed-region threshold at the user-facing layer even though the internal threshold model must remain metric-agnostic; in v1, default threshold values may come from a repository-local TOML configuration file and still be overridden by `--fail-under-<METRIC>` flags
 - optional output configuration controlling Markdown summary emission
+
+The user-facing configuration surface in v1 should have two layers. The first layer is explicit CLI arguments passed to `covgate` for one-off runs and CI overrides. The second layer is a repository-local TOML configuration file checked into the repository under test. That file should be able to declare default values for the same concepts the CLI already exposes, including the default Git base reference and the default fail-under threshold for each supported metric family. The precedence rule must be simple and documented in help text, tests, and examples: explicit CLI arguments win, TOML configuration supplies defaults when the CLI omits a value, and missing values that are required after that merge should still produce actionable configuration errors.
 
 The core architectural challenge is not parsing one format. It is preserving enough semantic structure that the code can later support other formats and metrics without breaking the v1 gate or forcing a redesign when Coverlet and Istanbul support arrive. That means the internal data model must distinguish between:
 
@@ -132,7 +139,7 @@ The test harness should mirror that assumption. Integration tests should create 
 
 ## Plan of Work
 
-Start by creating a new binary crate for `covgate` with a library-first layout. Keep the main binary entrypoint thin so it only parses arguments, calls a library function, prints the selected output, and exits with a status code derived from the gate result. Put the real implementation behind the library crate and split the code into a small set of modules whose responsibilities stay stable even as new metrics and formats are added later. At minimum, the codebase needs clear boundaries for CLI parsing, diff loading, coverage parsing, normalized internal data, metric and gate evaluation, and output rendering. Exact filenames do not matter yet as long as those responsibilities remain separated.
+Start by creating a new binary crate for `covgate` with a library-first layout. Keep the main binary entrypoint thin so it only parses arguments, loads repository-local TOML configuration when present, resolves CLI-over-config precedence, calls a library function, prints the selected output, and exits with a status code derived from the gate result. Put the real implementation behind the library crate and split the code into a small set of modules whose responsibilities stay stable even as new metrics and formats are added later. At minimum, the codebase needs clear boundaries for CLI parsing, configuration loading and merge rules, diff loading, coverage parsing, normalized internal data, metric and gate evaluation, and output rendering. Exact filenames do not matter yet as long as those responsibilities remain separated.
 
 Define the fixture-repository layout early because it affects parser tests, diff tests, and CLI integration tests. A good starting shape is a `tests/fixtures/` tree with one directory per language family and one directory per scenario underneath it. Each scenario should contain at least a committed repository skeleton, an overlay directory containing files that should be copied into the working tree to create the diff for that scenario when needed, and expected-output snapshots or assertions. For example, the Rust v1 scenarios might live under paths such as `tests/fixtures/rust/basic-pass/repo/` and `tests/fixtures/rust/basic-pass/overlay/`. Reserve sibling top-level directories such as `tests/fixtures/dotnet/` and `tests/fixtures/vitest/` now even if they only contain README-style placeholders in v1.
 
@@ -162,7 +169,7 @@ With parsing and diff selection in place, implement the metric layer. The first 
 
 The metric layer should return both the aggregate ratio and the underlying uncovered changed opportunities so the renderers can explain failures. Even though combined, line, and branch gates are out of scope for implementation, the metric layer must already be structured so future metric calculators can be added without changing the diff or parser modules.
 
-Implement threshold evaluation in a dedicated gate module as a separate step after metric computation. The gate should accept one or more threshold definitions even though v1 only supports a region threshold in the CLI. That keeps the code ready for later additions without making the current user-facing interface confusing. The gate result should capture pass or fail, the active metric family, the computed percentage, the configured threshold, and the uncovered changed opportunities that caused failure.
+Implement threshold evaluation in a dedicated gate module as a separate step after metric computation. The gate should accept one or more threshold definitions even though v1 only supports a region threshold in the first metric implementation. That keeps the code ready for later additions without making the current user-facing interface confusing. The gate result should capture pass or fail, the active metric family, the computed percentage, the configured threshold, and the uncovered changed opportunities that caused failure. Configuration resolution should happen before this step so the gate module receives fully merged effective thresholds regardless of whether they came from TOML defaults or explicit CLI flags.
 
 Renderers should consume the gate result, not raw parser output. The console renderer should produce a concise but informative summary suitable for local development and CI logs. It should follow a compact report shape: short header, diff description, per-file lines, then final totals. The pass or fail state, computed percentage, and threshold must be obvious without reading the whole output. Per-file lines should stay compact and should list uncovered changed spans only when coverage is incomplete. The Markdown renderer should produce a GitHub-friendly summary with headings and compact tables that remain readable in GitHub’s summary UI. Keep Markdown output deterministic and plain; this is a machine-written CI artifact, not a rich report site. When Markdown output is requested, `covgate` should still print its normal console summary to standard output and then exit according to the gate result; Markdown emission must be an additional side effect, not a mode switch that suppresses the text summary or changes exit-code behavior.
 
@@ -174,7 +181,8 @@ The CLI contract should be explicit and stable in v1. A novice should be able to
 
 - where to point the tool at LLVM JSON coverage data
 - how to specify the Git base reference or diff file
-- how to set a changed-region threshold
+- how repository-local TOML configuration supplies defaults and how CLI flags override those defaults
+- how to set a changed-region threshold from the CLI and how a default threshold may come from TOML configuration
 - how to write Markdown output to a file or directly to `$GITHUB_STEP_SUMMARY`
 - that Markdown output does not replace the standard-output summary
 - that overall coverage shown in Markdown is informational and does not affect the exit code in v1
@@ -231,7 +239,7 @@ Run the following commands from the `covgate` repository root.
         cargo test cli -- basic_pass_rust_fixture
         cargo test cli -- markdown_summary_rust_fixture
 
-    Expected outcome: The CLI prints a readable console report to standard output on every run, writes Markdown output when requested, and exits with success or failure according to the configured changed-region threshold. When the parsed coverage report includes repository-wide totals, the Markdown output should include both the diff result and an informational overall summary, each rendered as a table. Writing Markdown must not require a separate shell step to preserve the exit code.
+    Expected outcome: The CLI prints a readable console report to standard output on every run, writes Markdown output when requested, and exits with success or failure according to the effective changed-region threshold after merging TOML defaults with CLI overrides. When the parsed coverage report includes repository-wide totals, the Markdown output should include both the diff result and an informational overall summary, each rendered as a table. Writing Markdown must not require a separate shell step to preserve the exit code.
 
 5. Add end-to-end CLI integration tests using copied fixtures.
 
@@ -264,6 +272,8 @@ Acceptance is complete only when all of the following are true.
 
 Running `covgate` against a repository with LLVM JSON input and a known diff computes changed-region coverage only from the changed lines in the diff, not from the entire repository. At minimum, tests must prove the tool distinguishes between changed and unchanged covered regions in the same file.
 
+Running `covgate` in a repository that contains the supported TOML configuration file should load default values for the Git base reference and fail-under thresholds when the CLI omits them. At minimum, tests must prove that `covgate` uses the configured default base reference when `--base` is absent, uses the configured default threshold when `--fail-under-<METRIC>` is absent, and prefers the explicit CLI flag value when both sources specify the same setting.
+
 The LLVM JSON parser must be validated with checked-in fixtures representing at least:
 
 - a clean small report with covered and uncovered regions
@@ -292,7 +302,10 @@ CLI integration tests must use copied fixtures in temporary working directories.
 
 - success exit code when changed-region coverage meets the threshold
 - failure exit code when changed-region coverage falls below the threshold
+- success exit code when the effective threshold comes only from TOML configuration and the diff coverage meets that default
+- failure exit code when a CLI `--fail-under-<METRIC>` override is stricter than the TOML default and the computed coverage no longer passes
 - console output includes the metric name, computed percentage, threshold, and uncovered changed regions
+- console output or error output clearly identifies effective configuration problems after merging TOML values with CLI inputs
 - Markdown output can be written to a file that matches expected content closely enough to detect regressions
 - a single invocation can both write Markdown output and emit the standard-output summary without changing exit-code behavior
 - Markdown output includes an informational overall coverage summary when the input report already provides repository-wide totals
@@ -318,6 +331,10 @@ The console report should be concise enough for local use. It should resemble a 
 A GitHub Actions step should be able to look like the example below, with no extra shell logic to preserve status after writing the summary file:
 
     covgate --coverage-json coverage.json --base origin/main --fail-under region=90 --markdown-output "$GITHUB_STEP_SUMMARY"
+
+A repository that prefers checked-in defaults should also be able to use a workflow step like the example below, where the TOML configuration file supplies the default base reference and diff gate threshold:
+
+    covgate --coverage-json coverage.json --markdown-output "$GITHUB_STEP_SUMMARY"
 
 ## Idempotence and Recovery
 
@@ -429,3 +446,5 @@ Revision note: Added a concrete fixture-repository architecture. The plan now ca
 Revision note: Removed stale crate-bootstrap steps, aligned concrete command examples with the copied-fixture test architecture, and clarified that the region-shaped console and Markdown excerpts are examples of the active v1 metric rather than required shared-interface labels.
 
 Revision note: Clarified that the main CI diff path is the current PR branch against main and made the fixture harness spell out nested Git initialization plus scenario-specific Git operations in copied worktrees.
+
+Revision note: Clarified that v1 includes repository-local TOML configuration and that TOML values may supply defaults for `--base` and `--fail-under-<METRIC>`. The plan now requires explicit CLI flags to override config-file defaults and adds acceptance coverage for that precedence rule.
