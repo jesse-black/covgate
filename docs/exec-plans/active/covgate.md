@@ -22,9 +22,9 @@ You will also know this is working when GitHub Actions can run one `covgate` com
 
 - [x] (2026-03-07 00:00Z) Create a standalone ExecPlan for `covgate` that defines a future-proof architecture around metrics, formats, and outputs while keeping the first implementation intentionally narrow.
 - [x] (2026-03-10 00:00Z) Evaluate whether diff collection in v1 should use `git2-rs`, `gitoxide` (`gix`), or the installed `git` CLI.
-- [ ] Define the initial crate layout, command-line contract, and core data model for diff coverage opportunities, metrics, and report formats.
-- [ ] Implement the LLVM JSON parser, Git diff reader, region-to-diff intersection logic, console reporting, Markdown summary reporting, and threshold evaluation for changed-region coverage.
-- [ ] Add unit tests, fixture tests, and copied-fixture CLI integration tests using temporary working directories and immutable checked-in fixtures.
+- [x] (2026-03-11 00:00Z) Define the initial crate layout, command-line contract, and core data model for diff coverage opportunities, metrics, and report formats.
+- [ ] Implement the LLVM JSON parser, Git diff reader, region-to-diff intersection logic, console reporting, Markdown summary reporting, and threshold evaluation for changed-region coverage. Completed: initial end-to-end vertical slice with LLVM JSON parsing, unified diff parsing, changed-region metrics, gate evaluation, and console/Markdown renderers. Remaining: strengthen Git-base behavior, broaden parser fidelity, and tighten renderer/report details against more scenarios.
+- [ ] Add unit tests, fixture tests, and copied-fixture CLI integration tests using temporary working directories and immutable checked-in fixtures. Completed: focused unit tests plus one copied-fixture Rust CLI integration test. Remaining: expand fixture scenarios, add passing and Markdown-oriented fixture coverage, and wire fuller follow-up setup for Dotnet and Vitest.
 - [ ] Capture final validation evidence and move this plan to `docs/exec-plans/completed/` when the first usable `covgate` release exists.
 
 ## Surprises & Discoveries
@@ -34,6 +34,9 @@ You will also know this is working when GitHub Actions can run one `covgate` com
 
 - Observation: For v1, the critical Git behavior is matching the changed-line output users already inspect with `git diff`, not broad repository API coverage.
   Evidence: The current plan only needs repository-relative changed files and added or modified line ranges to drive region intersection and reporting.
+
+- Observation: A thin vertical slice is practical if the first CLI integration test uses a copied miniature Rust repository, an overlay file to create the diff, and a checked-in LLVM JSON report rather than full fixture-side coverage generation.
+  Evidence: The current implementation already compiles, passes unit tests, and passes one copied-fixture Rust CLI integration test with that pattern.
 
 ## Decision Log
 
@@ -85,9 +88,15 @@ You will also know this is working when GitHub Actions can run one `covgate` com
   Rationale: The first implementation needs one narrow Git capability: stable zero-context diff text whose semantics match ordinary `git diff` in developer machines and CI. Shelling out keeps the implementation small and aligned with user expectations. `git2-rs` would add a `libgit2` dependency and can differ from the Git CLI behavior people compare against. `gix` is the more attractive Rust-native fallback because it is pure Rust, but it would still expand the API surface and implementation scope before `covgate` has validated its core coverage model.
   Date/Author: 2026-03-10 / Codex
 
+- Decision: The primary CI use case in v1 is comparing the current pull-request branch against the repository’s mainline branch, usually exposed as a base such as `origin/main`.
+  Rationale: That is the dominant way teams will consume `covgate` in GitHub Actions and similar CI systems. The implementation and tests therefore need to treat "PR branch versus main" as the default Git-base scenario, even while still allowing explicit diff-file input for controlled tests and edge cases.
+  Date/Author: 2026-03-11 / Codex
+
 ## Outcomes & Retrospective
 
 This plan exists before implementation, so the current outcome is a scoped specification rather than working behavior. The main design result so far is clarity about what belongs in v1 and what does not. V1 must do one thing well: fail a diff-based LLVM coverage gate and explain the result clearly in CI and local output. In practice that first gate is changed-region coverage, but the architecture must stay ready for imminent follow-up work around Coverlet and Istanbul, where line and branch metrics matter more. Future-proofing matters, but only at the architecture layer, not as extra parser or metric work in the first delivery.
+
+The first implementation slice now exists and works. The crate has a library-first structure, a functioning CLI/config path, a basic LLVM JSON parser, unified diff parsing, changed-region metric computation, threshold evaluation, console and Markdown renderers, focused unit tests, and one copied-fixture Rust CLI integration test. The largest remaining gaps are breadth and robustness rather than total absence: more parser cases, stronger Git-base behavior, richer fixture scenarios, and fuller end-to-end validation.
 
 The main risk to watch during implementation is over-generalizing too early. If the code tries to fully solve cross-language coverage normalization in the first pass, the tool will likely become slow to build and hard to validate. The intended balance is a narrow first parser and metric with a clean internal model that makes later formats and metrics additions straightforward.
 
@@ -104,7 +113,7 @@ In this plan, a "coverage opportunity" means a measurable unit of executable cod
 The expected external inputs are:
 
 - a coverage report generated from the repository under test, initially LLVM JSON from `cargo llvm-cov --json --output-path coverage.json`
-- a Git diff range, usually expressed as a base reference such as `origin/main`, a base and head pair, or a precomputed unified diff file
+- a Git diff range, usually expressed as a base reference such as `origin/main` for the current pull-request branch, a base and head pair, or a precomputed unified diff file
 - one or more threshold settings, initially only a changed-region threshold at the CLI layer even though the internal threshold model must remain metric-agnostic
 - optional output configuration controlling Markdown summary emission
 
@@ -119,13 +128,23 @@ The core architectural challenge is not parsing one format. It is preserving eno
 
 The plan assumes Git is available in the execution environment for local runs and CI, and that repositories using the tool already know how to generate LLVM JSON coverage before invoking `covgate`. That assumption is deliberate for v1: the diff reader will rely on the installed Git CLI instead of embedding a Git implementation immediately.
 
-The test harness should mirror that assumption. Integration tests should create a temporary working directory, copy a checked-in fixture repository into it, initialize or refresh the expected Git state there, copy in one or more preauthored changed files from a separate "overlay" area, generate coverage using the fixture language toolchain, run `covgate`, assert on output and exit code, and then rely on temporary-directory cleanup to remove the injected files. Checked-in baseline fixture files should remain committed and unchanged so they do not appear in the test diff unless a specific scenario requires it.
+The test harness should mirror that assumption. Integration tests should create a temporary working directory, copy a checked-in fixture repository into it, initialize a nested Git repository there, perform the Git operations needed for the scenario, copy in one or more preauthored changed files from a separate overlay area when the scenario requires working-tree changes, generate coverage using the fixture language toolchain, run `covgate`, assert on output and exit code, and then rely on temporary-directory cleanup to remove the nested repository and injected files. Checked-in baseline fixture files should remain committed and unchanged so they do not appear in the test diff unless a specific scenario requires it.
 
 ## Plan of Work
 
 Start by creating a new binary crate for `covgate` with a library-first layout. Keep the main binary entrypoint thin so it only parses arguments, calls a library function, prints the selected output, and exits with a status code derived from the gate result. Put the real implementation behind the library crate and split the code into a small set of modules whose responsibilities stay stable even as new metrics and formats are added later. At minimum, the codebase needs clear boundaries for CLI parsing, diff loading, coverage parsing, normalized internal data, metric and gate evaluation, and output rendering. Exact filenames do not matter yet as long as those responsibilities remain separated.
 
-Define the fixture-repository layout early because it affects parser tests, diff tests, and CLI integration tests. A good starting shape is a `tests/fixtures/` tree with one directory per language family and one directory per scenario underneath it. Each scenario should contain at least a committed repository skeleton, an overlay directory containing files that should be copied into the working tree to create the diff for that scenario, and expected-output snapshots or assertions. For example, the Rust v1 scenarios might live under paths such as `tests/fixtures/rust/basic-pass/repo/` and `tests/fixtures/rust/basic-pass/overlay/`. Reserve sibling top-level directories such as `tests/fixtures/dotnet/` and `tests/fixtures/vitest/` now even if they only contain README-style placeholders in v1.
+Define the fixture-repository layout early because it affects parser tests, diff tests, and CLI integration tests. A good starting shape is a `tests/fixtures/` tree with one directory per language family and one directory per scenario underneath it. Each scenario should contain at least a committed repository skeleton, an overlay directory containing files that should be copied into the working tree to create the diff for that scenario when needed, and expected-output snapshots or assertions. For example, the Rust v1 scenarios might live under paths such as `tests/fixtures/rust/basic-pass/repo/` and `tests/fixtures/rust/basic-pass/overlay/`. Reserve sibling top-level directories such as `tests/fixtures/dotnet/` and `tests/fixtures/vitest/` now even if they only contain README-style placeholders in v1.
+
+The scenario runner should be explicit about its Git setup steps. For each copied fixture worktree, the test harness should:
+
+1. initialize a nested Git repository inside the copied temporary directory
+2. commit the checked-in baseline fixture state
+3. create whatever branch or base-reference arrangement the scenario requires
+4. apply overlay files or additional commits as needed to model the desired diff-base case
+5. run either `covgate --base <mainline-ref>` for branch-versus-main scenarios or `covgate --diff-file <path>` for direct patch scenarios
+
+That structure makes it possible to cover both the main CI case, "current PR branch versus main," and lower-level parser scenarios without inventing separate fixture conventions.
 
 Define the internal model first. The model must not hard-code region coverage as the only possible metric even though v1 only computes changed-region coverage. Avoid names, enums, structs, helper functions, and renderer contracts that imply the active metric is always region-based. It should have a way to distinguish metric families such as region, line, branch, and combined coverage, and it should represent thresholds independently from CLI parsing so later expansion remains additive. It should also define a parser-neutral source span representation that can at least hold a repository-relative file path plus start and end line information, because diff intersection and report rendering both need that information even when future formats provide richer column-level data.
 
@@ -135,7 +154,7 @@ The LLVM JSON parser module should do two things only: parse the JSON safely int
 
 For fixture generation in v1, prefer producing real LLVM JSON from the miniature Rust repositories rather than hand-authoring large synthetic reports when a scenario can be expressed naturally with code. Small malformed JSON inputs may still be checked in directly for parser-failure tests, but behavioral integration tests should lean on real coverage tool output so the path from source change to coverage report stays realistic.
 
-Implement Git diff handling separately from coverage parsing. In v1, the diff module should shell out to the installed Git CLI with a fixed command equivalent to `git diff --unified=0 --no-ext-diff <base>...HEAD` when the user supplies a base reference, or read a unified diff file directly when the user supplies a diff path. Normalize either source into repository-relative changed-file entries with changed line ranges. Keep the subprocess wrapper narrow and deterministic so optional user customizations such as external diff tools do not affect parsing. The intersection algorithm should then compare changed line ranges against normalized region spans and decide which coverage regions count toward the changed-region metric. Make the intersection rule explicit in code and tests: a region counts as changed when its source span overlaps at least one added or modified line in the diff. Deleted-only lines should not create coverage obligations because there is no remaining executable code to measure.
+Implement Git diff handling separately from coverage parsing. In v1, the diff module should shell out to the installed Git CLI with a fixed command equivalent to `git diff --unified=0 --no-ext-diff <base>...HEAD` when the user supplies a base reference, or read a unified diff file directly when the user supplies a diff path. The base-reference path must be treated as the primary CI path, especially for branch-versus-main comparisons such as `origin/main...HEAD`. Normalize either source into repository-relative changed-file entries with changed line ranges. Keep the subprocess wrapper narrow and deterministic so optional user customizations such as external diff tools do not affect parsing. The intersection algorithm should then compare changed line ranges against normalized region spans and decide which coverage regions count toward the changed-region metric. Make the intersection rule explicit in code and tests: a region counts as changed when its source span overlaps at least one added or modified line in the diff. Deleted-only lines should not create coverage obligations because there is no remaining executable code to measure.
 
 With parsing and diff selection in place, implement the metric layer. The first required metric is changed-region coverage:
 
@@ -197,8 +216,9 @@ Run the following commands from the `covgate` repository root.
 
         cargo test diff
         cargo test intersection
+        cargo test cli -- pr_branch_against_main_fixture
 
-    Expected outcome: Tests prove that changed lines are selected correctly from fixture diffs or temporary Git repositories, deleted-only hunks are ignored for gating, and changed lines intersect correctly with region spans.
+    Expected outcome: Tests prove that changed lines are selected correctly from fixture diffs or temporary Git repositories, deleted-only hunks are ignored for gating, branch-versus-main Git-base scenarios work as expected, and changed lines intersect correctly with region spans.
 
 4. Implement changed-region metric computation, threshold evaluation, and rendering.
 
@@ -257,6 +277,7 @@ The fixture architecture itself must be validated. At minimum, tests must prove 
 - copied overlay files reliably appear in the Git diff for the scenario under test
 - deleting the temporary working directory removes the injected files and leaves checked-in fixtures untouched
 - the same fixture scenario can be rerun without manual cleanup
+- initializing nested Git repositories inside copied fixture directories is sufficient to model the intended base-reference scenarios
 
 The diff parser must be validated with checked-in fixtures or temporary Git repositories representing at least:
 
@@ -265,6 +286,7 @@ The diff parser must be validated with checked-in fixtures or temporary Git repo
 - deleted-only hunks that must not count toward changed coverage
 - multiple files in one diff
 - a file present in the coverage report but absent from the diff, which must not count toward changed coverage
+- a pull-request-like branch-versus-main scenario where `--base origin/main` or an equivalent local mainline ref is the diff source
 
 CLI integration tests must use copied fixtures in temporary working directories. The checked-in fixtures should include miniature repository skeletons plus reproducible fixture data that the tests copy before invoking the compiled `covgate` binary. For v1, those skeletons should be real Rust projects capable of producing LLVM JSON through `cargo llvm-cov`. The fixture tree should also reserve directories for future Dotnet and Vitest scenarios so the next follow-up plans can add Coverlet and Istanbul-based coverage generation without changing the test harness layout. Acceptance is not complete until those integration tests assert:
 
@@ -277,6 +299,7 @@ CLI integration tests must use copied fixtures in temporary working directories.
 - overall coverage shown in Markdown is clearly labeled informational and does not change the gate result
 - Markdown uses GitHub-flavored tables for both diff coverage and overall coverage summaries
 - overlay-based changed files appear in the diff while committed baseline files do not
+- copied fixture directories can be turned into nested Git repositories and manipulated to model different diff-base cases
 - rerunning the CLI on the same fixture is idempotent
 - subprocess-based diff collection remains deterministic even when Git configuration would normally enable an external diff tool
 
@@ -404,3 +427,5 @@ Revision note: Strengthened the anti-hardcoding guidance around region coverage.
 Revision note: Added a concrete fixture-repository architecture. The plan now calls for checked-in baseline repository skeletons plus copied overlay files in temporary working directories, starts with real Rust coverage generation, and reserves matching fixture slots for Dotnet and Vitest follow-up work.
 
 Revision note: Removed stale crate-bootstrap steps, aligned concrete command examples with the copied-fixture test architecture, and clarified that the region-shaped console and Markdown excerpts are examples of the active v1 metric rather than required shared-interface labels.
+
+Revision note: Clarified that the main CI diff path is the current PR branch against main and made the fixture harness spell out nested Git initialization plus scenario-specific Git operations in copied worktrees.
