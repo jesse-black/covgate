@@ -1,5 +1,11 @@
 use crate::model::GateResult;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct SpanKey {
+    start_line: u32,
+    end_line: u32,
+}
+
 pub fn render(result: &GateResult, _diff_description: &str) -> String {
     let mut out = String::new();
     out.push_str("## Covgate\n\n");
@@ -16,15 +22,15 @@ pub fn render(result: &GateResult, _diff_description: &str) -> String {
     out.push_str("| File | Covered Changed Opportunities | Total Changed Opportunities | Cover | Missed Changed Spans |\n");
     out.push_str("| --- | ---: | ---: | ---: | --- |\n");
     let mut missed_by_file =
-        std::collections::BTreeMap::<String, std::collections::BTreeMap<String, usize>>::new();
+        std::collections::BTreeMap::<String, std::collections::BTreeMap<SpanKey, usize>>::new();
     for opportunity in &result.uncovered_changed_opportunities {
         missed_by_file
             .entry(opportunity.span.path.display().to_string())
             .or_default()
-            .entry(format!(
-                "{}-{}",
-                opportunity.span.start_line, opportunity.span.end_line
-            ))
+            .entry(SpanKey {
+                start_line: opportunity.span.start_line,
+                end_line: opportunity.span.end_line,
+            })
             .and_modify(|count| *count += 1)
             .or_insert(1);
     }
@@ -39,7 +45,8 @@ pub fn render(result: &GateResult, _diff_description: &str) -> String {
             .map(|values| {
                 values
                     .iter()
-                    .map(|(label, count)| {
+                    .map(|(key, count)| {
+                        let label = format!("{}-{}", key.start_line, key.end_line);
                         if *count > 1 {
                             format!("`{label}({count})`")
                         } else {
@@ -175,5 +182,55 @@ mod tests {
 
         let rendered = render(&result, "origin/main...HEAD");
         assert!(rendered.contains("`5-6(2)`"));
+    }
+
+    #[test]
+    fn sorts_spans_numerically() {
+        let result = GateResult {
+            metric: MetricKind::Region,
+            covered: 1,
+            total: 3,
+            percent: 33.33,
+            threshold: Threshold {
+                metric: MetricKind::Region,
+                minimum_percent: 90.0,
+            },
+            passed: false,
+            uncovered_changed_opportunities: vec![
+                crate::model::CoverageOpportunity {
+                    kind: crate::model::OpportunityKind::Region,
+                    span: crate::model::SourceSpan {
+                        path: PathBuf::from("src/lib.rs"),
+                        start_line: 102,
+                        end_line: 102,
+                    },
+                    covered: false,
+                },
+                crate::model::CoverageOpportunity {
+                    kind: crate::model::OpportunityKind::Region,
+                    span: crate::model::SourceSpan {
+                        path: PathBuf::from("src/lib.rs"),
+                        start_line: 48,
+                        end_line: 48,
+                    },
+                    covered: false,
+                },
+            ],
+            changed_totals_by_file: BTreeMap::from([(
+                PathBuf::from("src/lib.rs"),
+                FileTotals {
+                    covered: 1,
+                    total: 3,
+                },
+            )]),
+            totals_by_file: BTreeMap::new(),
+        };
+
+        let rendered = render(&result, "origin/main...HEAD");
+        let row = rendered
+            .lines()
+            .find(|line| line.starts_with("| `src/lib.rs` |"))
+            .expect("file row should exist");
+        assert!(row.find("`48-48`").expect("48-48") < row.find("`102-102`").expect("102-102"));
     }
 }

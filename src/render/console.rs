@@ -63,19 +63,29 @@ struct FileSummary {
     missed: Vec<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct SpanKey {
+    start_line: u32,
+    end_line: u32,
+}
+
 fn group_spans(spans: &[&SourceSpan]) -> BTreeMap<String, FileSummary> {
-    let mut grouped: BTreeMap<String, BTreeMap<String, usize>> = BTreeMap::new();
+    let mut grouped: BTreeMap<String, BTreeMap<SpanKey, usize>> = BTreeMap::new();
     for span in spans {
-        let label = format!("{}-{}", span.start_line, span.end_line);
+        let key = SpanKey {
+            start_line: span.start_line,
+            end_line: span.end_line,
+        };
         let entry = grouped.entry(span.path.display().to_string()).or_default();
-        *entry.entry(label).or_default() += 1;
+        *entry.entry(key).or_default() += 1;
     }
     grouped
         .into_iter()
         .map(|(path, spans)| {
             let missed = spans
                 .into_iter()
-                .map(|(label, count)| {
+                .map(|(key, count)| {
+                    let label = format!("{}-{}", key.start_line, key.end_line);
                     if count > 1 {
                         format!("{label}({count})")
                     } else {
@@ -177,5 +187,55 @@ mod tests {
 
         let rendered = render(&result, "origin/main...HEAD");
         assert!(rendered.contains("5-6(2)"));
+    }
+
+    #[test]
+    fn sorts_spans_numerically() {
+        let result = GateResult {
+            metric: MetricKind::Region,
+            covered: 1,
+            total: 3,
+            percent: 33.33,
+            threshold: Threshold {
+                metric: MetricKind::Region,
+                minimum_percent: 90.0,
+            },
+            passed: false,
+            uncovered_changed_opportunities: vec![
+                crate::model::CoverageOpportunity {
+                    kind: crate::model::OpportunityKind::Region,
+                    span: crate::model::SourceSpan {
+                        path: PathBuf::from("src/lib.rs"),
+                        start_line: 102,
+                        end_line: 102,
+                    },
+                    covered: false,
+                },
+                crate::model::CoverageOpportunity {
+                    kind: crate::model::OpportunityKind::Region,
+                    span: crate::model::SourceSpan {
+                        path: PathBuf::from("src/lib.rs"),
+                        start_line: 48,
+                        end_line: 48,
+                    },
+                    covered: false,
+                },
+            ],
+            changed_totals_by_file: BTreeMap::from([(
+                PathBuf::from("src/lib.rs"),
+                FileTotals {
+                    covered: 1,
+                    total: 3,
+                },
+            )]),
+            totals_by_file: BTreeMap::new(),
+        };
+
+        let rendered = render(&result, "origin/main...HEAD");
+        let row = rendered
+            .lines()
+            .find(|line| line.starts_with("src/lib.rs "))
+            .expect("file row should exist");
+        assert!(row.find("48-48").expect("48-48") < row.find("102-102").expect("102-102"));
     }
 }
