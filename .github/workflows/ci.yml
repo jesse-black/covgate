@@ -28,7 +28,7 @@ jobs:
       - name: Coverage Summary
         run: cargo llvm-cov report
       - name: Dogfood covgate
-        run: cargo run -- --coverage-json coverage.json --base origin/main --fail-under-regions "$COVGATE_FAIL_UNDER_REGIONS"
+        run: cargo run -- --coverage-json coverage.json --base origin/main --fail-under-regions "$COVGATE_FAIL_UNDER_REGIONS" --markdown-output "$GITHUB_STEP_SUMMARY"
 
   dependency-hygiene:
     runs-on: ubuntu-latest
