@@ -123,7 +123,7 @@ You will also know this is working when GitHub Actions can run one `covgate` com
   Date/Author: 2026-03-11 / Codex
 
 - Decision: The fail-under CLI should use pluralized metric-specific flags such as `--fail-under-regions`, `--fail-under-lines`, and `--fail-under-branches` instead of a generic `--fail-under METRIC=PERCENT` form.
-  Rationale: The expected metric set is small and mostly stable, and most non-LLVM ecosystems will primarily care about line and branch thresholds. Metric-specific flags are easier to read in `--help`, CI configuration, and examples, and they line up cleanly with TOML keys like `[gates].regions`.
+  Rationale: The expected metric set is small and mostly stable, and most non-LLVM ecosystems will primarily care about line and branch thresholds. Metric-specific flags are easier to read in `--help`, CI configuration, and examples, and they line up cleanly with TOML keys like `[gates].fail_under_regions`.
   Date/Author: 2026-03-11 / Codex
 
 - Decision: `--fail-uncovered-*` thresholds are deferred until a later milestone.
@@ -155,7 +155,7 @@ The expected external inputs are:
 - one or more threshold settings, initially only a changed-region threshold at the user-facing layer even though the internal threshold model must remain metric-agnostic; in v1, default threshold values may come from a repository-local TOML configuration file and still be overridden by metric-specific flags such as `--fail-under-regions`
 - optional output configuration controlling Markdown summary emission
 
-The user-facing configuration surface in v1 should have two layers. The first layer is explicit CLI arguments passed to `covgate` for one-off runs and CI overrides. The second layer is a repository-local TOML configuration file checked into the repository under test. That file should be able to declare default values for the same concepts the CLI already exposes, including the default Git base reference and the default fail-under threshold for each supported metric family. The CLI and TOML naming should stay aligned, so a flag such as `--fail-under-regions` corresponds naturally to `[gates].regions`. The precedence rule must be simple and documented in help text, tests, and examples: explicit CLI arguments win, TOML configuration supplies defaults when the CLI omits a value, and missing values that are required after that merge should still produce actionable configuration errors.
+The user-facing configuration surface in v1 should have two layers. The first layer is explicit CLI arguments passed to `covgate` for one-off runs and CI overrides. The second layer is a repository-local TOML configuration file checked into the repository under test. That file should be able to declare default values for the same concepts the CLI already exposes, including the default Git base reference and the default fail-under threshold for each supported metric family. The CLI and TOML naming should stay aligned, so a flag such as `--fail-under-regions` corresponds naturally to `[gates].fail_under_regions`. The precedence rule must be simple and documented in help text, tests, and examples: explicit CLI arguments win, TOML configuration supplies defaults when the CLI omits a value, and missing values that are required after that merge should still produce actionable configuration errors.
 
 The core architectural challenge is not parsing one format. It is preserving enough semantic structure that the code can later support other formats and metrics without breaking the v1 gate or forcing a redesign when Coverlet and Istanbul support arrive. That means the internal data model must distinguish between:
 
@@ -215,7 +215,7 @@ The CLI contract should be explicit and stable in v1. A novice should be able to
 - where to point the tool at LLVM JSON coverage data
 - how to specify the Git base reference or diff file
 - how repository-local TOML configuration supplies defaults and how CLI flags override those defaults
-- how to set a changed-region threshold from the CLI with `--fail-under-regions` and how a default threshold may come from `[gates].regions` in TOML configuration
+- how to set a changed-region threshold from the CLI with `--fail-under-regions` and how a default threshold may come from `[gates].fail_under_regions` in TOML configuration
 - how to write Markdown output to a file or directly to `$GITHUB_STEP_SUMMARY`
 - that Markdown output does not replace the standard-output summary
 - that overall coverage shown in Markdown is informational and does not affect the exit code in v1

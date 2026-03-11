@@ -32,12 +32,9 @@ struct FileConfig {
 
 #[derive(Debug, Default, Deserialize)]
 struct GateConfig {
-    #[serde(alias = "region")]
-    regions: Option<f64>,
-    #[serde(alias = "line")]
-    lines: Option<f64>,
-    #[serde(alias = "branch")]
-    branches: Option<f64>,
+    fail_under_regions: Option<f64>,
+    fail_under_lines: Option<f64>,
+    fail_under_branches: Option<f64>,
     combined: Option<f64>,
 }
 
@@ -141,19 +138,19 @@ fn cli_threshold(args: &Args) -> Result<Option<Threshold>> {
 impl GateConfig {
     fn to_threshold(&self) -> Result<Option<Threshold>> {
         let mut configured = Vec::new();
-        if let Some(percent) = self.regions {
+        if let Some(percent) = self.fail_under_regions {
             configured.push(Threshold {
                 metric: MetricKind::Region,
                 minimum_percent: percent,
             });
         }
-        if let Some(percent) = self.lines {
+        if let Some(percent) = self.fail_under_lines {
             configured.push(Threshold {
                 metric: MetricKind::Line,
                 minimum_percent: percent,
             });
         }
-        if let Some(percent) = self.branches {
+        if let Some(percent) = self.fail_under_branches {
             configured.push(Threshold {
                 metric: MetricKind::Branch,
                 minimum_percent: percent,
@@ -230,9 +227,9 @@ mod tests {
     #[test]
     fn config_threshold_rejects_multiple_metrics() {
         let thresholds = GateConfig {
-            regions: Some(90.0),
-            lines: Some(80.0),
-            branches: None,
+            fail_under_regions: Some(90.0),
+            fail_under_lines: Some(80.0),
+            fail_under_branches: None,
             combined: None,
         };
 
@@ -248,8 +245,9 @@ mod tests {
 
     #[test]
     fn prefers_cli_over_config_defaults() {
-        let file_config: FileConfig = toml::from_str("base = \"main\"\n[gates]\nregions = 40\n")
-            .expect("config should parse");
+        let file_config: FileConfig =
+            toml::from_str("base = \"main\"\n[gates]\nfail_under_regions = 40\n")
+                .expect("config should parse");
 
         let args = Args {
             coverage_json: "coverage.json".into(),
@@ -276,8 +274,9 @@ mod tests {
 
     #[test]
     fn loads_defaults_from_repo_config() {
-        let file_config: FileConfig = toml::from_str("base = \"main\"\n[gates]\nregions = 75\n")
-            .expect("config should parse");
+        let file_config: FileConfig =
+            toml::from_str("base = \"main\"\n[gates]\nfail_under_regions = 75\n")
+                .expect("config should parse");
 
         let args = Args {
             coverage_json: "coverage.json".into(),
@@ -307,7 +306,7 @@ mod tests {
         let temp = tempdir().expect("tempdir");
         fs::write(
             temp.path().join(CONFIG_FILE_NAME),
-            "base = \"main\"\nmarkdown_output = \"summary.md\"\n[gates]\nregions = 80\n",
+            "base = \"main\"\nmarkdown_output = \"summary.md\"\n[gates]\nfail_under_regions = 80\n",
         )
         .expect("write config");
 
@@ -320,7 +319,7 @@ mod tests {
             config.markdown_output.as_deref(),
             Some(std::path::Path::new("summary.md"))
         );
-        assert_eq!(config.gates.regions, Some(80.0));
+        assert_eq!(config.gates.fail_under_regions, Some(80.0));
     }
 
     #[test]

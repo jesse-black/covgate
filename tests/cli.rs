@@ -195,7 +195,7 @@ fn uses_repo_config_defaults_for_base_and_threshold() {
     run_git(&worktree, &["commit", "-m", "feature change"]);
     fs::write(
         worktree.join("covgate.toml"),
-        "base = \"main\"\n[gates]\nregions = 40\n",
+        "base = \"main\"\n[gates]\nfail_under_regions = 40\n",
     )
     .expect("config should be written");
 
@@ -229,7 +229,7 @@ fn cli_threshold_overrides_repo_config_default() {
     run_git(&worktree, &["commit", "-m", "feature change"]);
     fs::write(
         worktree.join("covgate.toml"),
-        "base = \"main\"\n[gates]\nregions = 40\n",
+        "base = \"main\"\n[gates]\nfail_under_regions = 40\n",
     )
     .expect("config should be written");
 

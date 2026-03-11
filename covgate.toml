@@ -1,4 +1,4 @@
 base = "origin/main"
 
 [gates]
-regions = 80
+fail_under_regions = 80
