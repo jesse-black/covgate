@@ -29,6 +29,7 @@ You will also know this is working when GitHub Actions can run one `covgate` com
 - [x] (2026-03-11 20:55Z) Expand copied-fixture Rust CLI coverage with a passing diff-file scenario, a Markdown-output scenario, and an explicit branch-versus-main Git-base scenario.
 - [x] (2026-03-11 22:10Z) Normalize real LLVM JSON file paths to repository-relative paths so branch-versus-main dogfooding can match coverage records to Git diff entries instead of falsely reporting zero changed regions.
 - [x] (2026-03-11 22:25Z) Add an end-to-end CLI regression test that rewrites fixture coverage JSON to use an absolute temp-worktree path, proving that real-path LLVM normalization survives full diff matching and does not regress back to `Changed regions: 0`.
+- [x] (2026-03-11 22:40Z) Fix deleted-file unified diff handling via TDD by first reproducing the `/dev/null` header failure in a diff parser test and then teaching the parser to skip deleted-file hunks without poisoning the next file’s path state.
 - [ ] Implement the LLVM JSON parser, Git diff reader, region-to-diff intersection logic, console reporting, Markdown summary reporting, and threshold evaluation for changed-region coverage. Completed: initial end-to-end vertical slice with LLVM JSON parsing, unified diff parsing, changed-region metrics, gate evaluation, console/Markdown renderers, explicit pass/fail fixture coverage for both diff-file and branch-versus-main paths, and repository-relative normalization for absolute LLVM JSON file paths. Remaining: tighten renderer/report details and broaden parser-oriented fixture variety beyond the current small Rust scenarios.
 - [ ] Add unit tests, fixture tests, and copied-fixture CLI integration tests using temporary working directories and immutable checked-in fixtures. Completed: focused unit tests plus copied-fixture Rust CLI integration tests covering diff-file failure, diff-file success, Markdown emission, PR-branch-against-main behavior, config-provided `base` and gate defaults, and CLI-over-config threshold precedence. Remaining: expand parser-oriented fixture variety and wire fuller follow-up setup for Dotnet and Vitest.
 - [ ] Capture final validation evidence and move this plan to `docs/exec-plans/completed/` when the first usable `covgate` release exists.
@@ -55,6 +56,9 @@ You will also know this is working when GitHub Actions can run one `covgate` com
 
 - Observation: A parser-only regression test is not enough for this path-handling bug; the failure mode needs a CLI-level assertion because the user-visible symptom is a false zero-change pass after diff matching.
   Evidence: `cargo test` and `cargo llvm-cov --summary-only` now both pass `absolute_llvm_paths_match_diff_fixture` in `tests/cli.rs`, which rewrites the copied fixture coverage file to use the temporary worktree’s absolute `src/lib.rs` path and asserts that `Changed regions: 2` appears instead of `Changed regions: 0`.
+
+- Observation: Deleted-file parsing was brittle until the parser tracked `diff --git` headers explicitly instead of relying only on `+++ b/...` lines to seed file state.
+  Evidence: A new failing test first reproduced `encountered hunk before file header` for a diff that began with a deleted file using `+++ /dev/null`. After the parser was updated to track `diff --git` headers and skip deleted-file hunks, the reproducer passes in both `cargo test diff` and the full validation stack.
 
 ## Decision Log
 
@@ -489,3 +493,5 @@ Revision note: Expanded copied-fixture Rust CLI coverage with explicit pass, Mar
 Revision note: Added repository-relative normalization for absolute LLVM JSON file paths after the first CI dogfooding attempt exposed false zero-changed-region results. The plan now records that parser fidelity work includes real-path handling, not just synthetic fixture parsing.
 
 Revision note: Added an end-to-end CLI regression test for absolute LLVM JSON paths so the CI dogfooding failure mode is covered above the parser layer as well as inside unit tests.
+
+Revision note: Fixed deleted-file unified diff handling via TDD after review identified that `+++ /dev/null` could leave the parser without a valid current file. The plan now records that deleted-file hunks are ignored safely and no longer break the next file in the diff.
