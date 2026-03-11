@@ -24,8 +24,6 @@ jobs:
       - name: Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
       - name: Test
-        run: cargo test
-      - name: Coverage JSON
         run: cargo llvm-cov --json --output-path coverage.json
       - name: Coverage Summary
         run: cargo llvm-cov report
