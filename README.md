@@ -1,5 +1,6 @@
 # covgate
 
+[![CI](https://github.com/jesse-black/covgate/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/jesse-black/covgate/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
 
 A blazing-fast, zero-dependency CI/CD quality gate that enforces code coverage strictly on your pull request diffs. 
