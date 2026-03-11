@@ -64,16 +64,28 @@ struct FileSummary {
 }
 
 fn group_spans(spans: &[&SourceSpan]) -> BTreeMap<String, FileSummary> {
-    let mut grouped = BTreeMap::new();
+    let mut grouped: BTreeMap<String, BTreeMap<String, usize>> = BTreeMap::new();
     for span in spans {
-        let entry = grouped
-            .entry(span.path.display().to_string())
-            .or_insert(FileSummary { missed: Vec::new() });
-        entry
-            .missed
-            .push(format!("{}-{}", span.start_line, span.end_line));
+        let label = format!("{}-{}", span.start_line, span.end_line);
+        let entry = grouped.entry(span.path.display().to_string()).or_default();
+        *entry.entry(label).or_default() += 1;
     }
     grouped
+        .into_iter()
+        .map(|(path, spans)| {
+            let missed = spans
+                .into_iter()
+                .map(|(label, count)| {
+                    if count > 1 {
+                        format!("{label}({count})")
+                    } else {
+                        label
+                    }
+                })
+                .collect();
+            (path, FileSummary { missed })
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -119,5 +131,51 @@ mod tests {
         assert!(rendered.contains("Diff Coverage: FAIL"));
         assert!(rendered.contains("src/lib.rs (50.00%)"));
         assert!(rendered.contains("Threshold: 90.00%"));
+    }
+
+    #[test]
+    fn groups_duplicate_spans_with_counts() {
+        let result = GateResult {
+            metric: MetricKind::Region,
+            covered: 1,
+            total: 3,
+            percent: 33.33,
+            threshold: Threshold {
+                metric: MetricKind::Region,
+                minimum_percent: 90.0,
+            },
+            passed: false,
+            uncovered_changed_opportunities: vec![
+                crate::model::CoverageOpportunity {
+                    kind: crate::model::OpportunityKind::Region,
+                    span: crate::model::SourceSpan {
+                        path: PathBuf::from("src/lib.rs"),
+                        start_line: 5,
+                        end_line: 6,
+                    },
+                    covered: false,
+                },
+                crate::model::CoverageOpportunity {
+                    kind: crate::model::OpportunityKind::Region,
+                    span: crate::model::SourceSpan {
+                        path: PathBuf::from("src/lib.rs"),
+                        start_line: 5,
+                        end_line: 6,
+                    },
+                    covered: false,
+                },
+            ],
+            changed_totals_by_file: BTreeMap::from([(
+                PathBuf::from("src/lib.rs"),
+                FileTotals {
+                    covered: 1,
+                    total: 3,
+                },
+            )]),
+            totals_by_file: BTreeMap::new(),
+        };
+
+        let rendered = render(&result, "origin/main...HEAD");
+        assert!(rendered.contains("5-6(2)"));
     }
 }
