@@ -52,7 +52,7 @@ pub fn render(result: &GateResult, diff_description: &str) -> String {
     ));
     out.push_str(&format!("Coverage: {:.2}%\n", result.percent));
     out.push_str(&format!(
-        "Threshold: {:.2}%\n",
+        "Gate: ≥ {:.2}%\n",
         result.threshold.minimum_percent
     ));
     out.push_str("-------------");
@@ -140,7 +140,7 @@ mod tests {
         let rendered = render(&result, "origin/main...HEAD");
         assert!(rendered.contains("Diff Coverage: FAIL"));
         assert!(rendered.contains("src/lib.rs (50.00%)"));
-        assert!(rendered.contains("Threshold: 90.00%"));
+        assert!(rendered.contains("Gate: ≥ 90.00%"));
     }
 
     #[test]

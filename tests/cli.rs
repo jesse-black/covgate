@@ -67,7 +67,7 @@ fn basic_pass_rust_fixture() {
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
     assert!(stdout.contains("Diff Coverage: PASS"));
     assert!(stdout.contains("Coverage: 100.00%"));
-    assert!(stdout.contains("Threshold: 90.00%"));
+    assert!(stdout.contains("Gate: ≥ 90.00%"));
 }
 
 #[test]
@@ -134,7 +134,7 @@ fn markdown_summary_rust_fixture() {
     assert!(markdown.contains("## Covgate"));
     assert!(markdown.contains("### Diff Coverage"));
     assert!(markdown.contains("| Result | Metric | Changed Coverage | Gate |"));
-    assert!(markdown.contains("| PASS | region | 100.00% | >= 90.00% |"));
+    assert!(markdown.contains("| PASS | region | 100.00% | ≥ 90.00% |"));
     assert!(markdown.contains(
         "| File | Covered Changed Regions | Changed Regions | Coverage | Missed Changed Spans |"
     ));
@@ -208,7 +208,7 @@ fn uses_repo_config_defaults_for_base_and_threshold() {
     );
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
     assert!(stdout.contains("Diff: main...HEAD"));
-    assert!(stdout.contains("Threshold: 40.00%"));
+    assert!(stdout.contains("Gate: ≥ 40.00%"));
     assert!(stdout.contains("Coverage: 50.00%"));
 }
 
@@ -246,7 +246,7 @@ fn cli_threshold_overrides_repo_config_default() {
     );
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
     assert!(stdout.contains("Diff: main...HEAD"));
-    assert!(stdout.contains("Threshold: 60.00%"));
+    assert!(stdout.contains("Gate: ≥ 60.00%"));
     assert!(stdout.contains("Diff Coverage: FAIL"));
 }
 

@@ -14,7 +14,7 @@ pub fn render(result: &GateResult, _diff_description: &str) -> String {
     out.push_str("| Result | Metric | Changed Coverage | Gate |\n");
     out.push_str("| --- | --- | ---: | ---: |\n");
     out.push_str(&format!(
-        "| {} | {} | {:.2}% | >= {:.2}% |\n\n",
+        "| {} | {} | {:.2}% | ≥ {:.2}% |\n\n",
         if result.passed { "PASS" } else { "FAIL" },
         result.metric.as_str(),
         result.percent,
@@ -146,7 +146,7 @@ mod tests {
 
         let rendered = render(&result, "origin/main...HEAD");
         assert!(rendered.contains("| Result | Metric | Changed Coverage | Gate |"));
-        assert!(rendered.contains("| FAIL | region | 50.00% | >= 90.00% |"));
+        assert!(rendered.contains("| FAIL | region | 50.00% | ≥ 90.00% |"));
         assert!(rendered.contains(
             "| File | Covered Changed Regions | Changed Regions | Coverage | Missed Changed Spans |"
         ));
