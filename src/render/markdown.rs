@@ -7,19 +7,22 @@ struct SpanKey {
 }
 
 pub fn render(result: &GateResult, _diff_description: &str) -> String {
+    let metric_label = title_case(result.metric.label());
     let mut out = String::new();
     out.push_str("## Covgate\n\n");
     out.push_str("### Diff Coverage\n\n");
-    out.push_str("| Result | Metric | Changed Coverage | Threshold |\n");
+    out.push_str("| Result | Metric | Changed Coverage | Gate |\n");
     out.push_str("| --- | --- | ---: | ---: |\n");
     out.push_str(&format!(
-        "| {} | {} | {:.2}% | {:.2}% |\n\n",
+        "| {} | {} | {:.2}% | >= {:.2}% |\n\n",
         if result.passed { "PASS" } else { "FAIL" },
         result.metric.as_str(),
         result.percent,
         result.threshold.minimum_percent
     ));
-    out.push_str("| File | Covered Changed Opportunities | Total Changed Opportunities | Cover | Missed Changed Spans |\n");
+    out.push_str(&format!(
+        "| File | Covered Changed {metric_label} | Changed {metric_label} | Coverage | Missed Changed Spans |\n"
+    ));
     out.push_str("| --- | ---: | ---: | ---: | --- |\n");
     let mut missed_by_file =
         std::collections::BTreeMap::<String, std::collections::BTreeMap<SpanKey, usize>>::new();
@@ -67,8 +70,9 @@ pub fn render(result: &GateResult, _diff_description: &str) -> String {
         ));
     }
     out.push_str("\n### Overall Coverage\n\n");
-    out.push_str("Informational only. Does not affect the gate result in v1.\n\n");
-    out.push_str("| File | Covered Opportunities | Total Opportunities | Cover |\n");
+    out.push_str(&format!(
+        "| File | Covered {metric_label} | {metric_label} | Coverage |\n"
+    ));
     out.push_str("| --- | ---: | ---: | ---: |\n");
     for (path, totals) in &result.totals_by_file {
         let percent = if totals.total == 0 {
@@ -85,6 +89,14 @@ pub fn render(result: &GateResult, _diff_description: &str) -> String {
         ));
     }
     out
+}
+
+fn title_case(value: &str) -> String {
+    let mut chars = value.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+        None => String::new(),
+    }
 }
 
 #[cfg(test)]
@@ -133,9 +145,15 @@ mod tests {
         };
 
         let rendered = render(&result, "origin/main...HEAD");
-        assert!(rendered.contains("| Result | Metric | Changed Coverage | Threshold |"));
+        assert!(rendered.contains("| Result | Metric | Changed Coverage | Gate |"));
+        assert!(rendered.contains("| FAIL | region | 50.00% | >= 90.00% |"));
+        assert!(rendered.contains(
+            "| File | Covered Changed Regions | Changed Regions | Coverage | Missed Changed Spans |"
+        ));
         assert!(rendered.contains("| `src/lib.rs` | 1 | 2 | 50.00% |"));
+        assert!(rendered.contains("| File | Covered Regions | Regions | Coverage |"));
         assert!(rendered.contains("### Overall Coverage"));
+        assert!(!rendered.contains("Informational only. Does not affect the gate result in v1."));
     }
 
     #[test]

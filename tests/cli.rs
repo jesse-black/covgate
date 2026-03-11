@@ -133,8 +133,13 @@ fn markdown_summary_rust_fixture() {
     let markdown = fs::read_to_string(markdown_output).expect("markdown should be readable");
     assert!(markdown.contains("## Covgate"));
     assert!(markdown.contains("### Diff Coverage"));
-    assert!(markdown.contains("| Result | Metric | Changed Coverage | Threshold |"));
-    assert!(markdown.contains("| PASS | region | 100.00% | 90.00% |"));
+    assert!(markdown.contains("| Result | Metric | Changed Coverage | Gate |"));
+    assert!(markdown.contains("| PASS | region | 100.00% | >= 90.00% |"));
+    assert!(
+        markdown.contains(
+            "| File | Covered Changed Regions | Changed Regions | Coverage | Missed Changed Spans |"
+        )
+    );
     assert!(markdown.contains("### Overall Coverage"));
 }
 
