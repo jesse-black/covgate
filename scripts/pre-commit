@@ -5,5 +5,45 @@ set -eu
 repo_root=$(git rev-parse --show-toplevel)
 cd "$repo_root"
 
-echo "Running cargo fmt --check"
-cargo fmt --check
+is_relevant_path() {
+    case "$1" in
+        *.rs|build.rs|Cargo.toml|rust-toolchain|rust-toolchain.toml|.rustfmt.toml|rustfmt.toml)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+should_run=0
+needs_full_check=0
+set --
+
+for path in $(git diff --cached --name-only --diff-filter=ACMR); do
+    if is_relevant_path "$path"; then
+        should_run=1
+        case "$path" in
+            *.rs|build.rs)
+                set -- "$@" "$path"
+                ;;
+            Cargo.toml|rust-toolchain|rust-toolchain.toml|.rustfmt.toml|rustfmt.toml)
+                needs_full_check=1
+                ;;
+        esac
+    fi
+done
+
+if [ "$should_run" -eq 0 ]; then
+    echo "Skipping cargo fmt --check; no staged Rust formatting inputs changed."
+    exit 0
+fi
+
+if [ "$needs_full_check" -eq 1 ] || [ "$#" -eq 0 ]; then
+    echo "Running cargo fmt --check"
+    cargo fmt --check
+    exit 0
+fi
+
+echo "Running cargo fmt --check -- $*"
+cargo fmt --check -- "$@"
