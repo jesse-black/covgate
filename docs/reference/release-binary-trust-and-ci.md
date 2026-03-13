@@ -22,13 +22,11 @@ This document separates those concerns so we can decide which controls belong in
 
 ## Recommended CI Checks
 
-The existing repository CI already covers formatting, compilation, linting, tests, diff-gate dogfooding, and dependency hygiene via `cargo machete`.
-
-The next useful additions are:
+The existing repository CI already covers formatting, compilation, linting, tests, diff-gate dogfooding, dependency hygiene via `cargo machete`, and dependency policy/security checks via `cargo deny`.
 
 ### `cargo deny`
 
-`cargo deny` is the best fit for the repository's dependency-hygiene job because it checks the policy questions maintainers care about before shipping a release:
+`cargo deny` is now the repository's primary dependency-hygiene and policy check because it covers the questions maintainers care about before shipping a release:
 
 - RustSec advisories
 - yanked crates
@@ -37,7 +35,7 @@ The next useful additions are:
 - banned crates
 - source policy such as unexpected git dependencies or registries
 
-For this repository, `cargo deny` should be treated as the primary dependency policy check. It is a better fit than `cargo audit` alone because it covers advisories and also lets the project define license and source policy in one place.
+For this repository, `cargo deny` should be treated as the primary dependency policy check because it covers advisories and lets the project define license and source policy in one place.
 
 ### Overall coverage enforcement
 
@@ -84,18 +82,6 @@ Use bans to detect dependency drift, especially duplicate versions of the same c
 ### Sources
 
 Restrict dependencies to expected sources. For this project, allowing `crates.io` and denying unknown registries or ad hoc git sources is a reasonable default.
-
-## `cargo audit` Compared to `cargo deny`
-
-`cargo audit` is still a respectable tool, but if this repository already uses `cargo deny` for advisory checks then `cargo audit` adds more familiarity than unique assurance.
-
-That means:
-
-- `cargo deny` alone is enough to show that CI checks RustSec advisories, if it is configured clearly.
-- `cargo audit` can still be added later for extra optics or a second advisory signal.
-- `cargo audit` should not be prioritized ahead of getting `cargo deny` configured well.
-
-For most potential users, seeing a well-configured `cargo deny` check in CI will be an adequate sign that dependency security is taken seriously.
 
 ## Release Binary Validation
 
@@ -174,7 +160,7 @@ If it is added, it should be attached to release automation rather than treated 
 
 If the project wants to improve trust incrementally, the highest-signal order is:
 
-1. Add `cargo deny` to repository CI with advisories, licenses, bans, and sources configured.
+1. Keep `cargo deny` in repository CI with advisories, licenses, bans, and sources configured.
 2. Publish checksums for release assets.
 3. Make the consuming GitHub Action verify checksums and the requested version before execution.
 4. Add provenance or attestation to the release workflow and verify it in the consuming action.
