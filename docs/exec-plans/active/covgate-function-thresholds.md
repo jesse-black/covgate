@@ -109,7 +109,7 @@ This is a draft plan, so the commands below are the intended implementation path
 
     Working directory: the `covgate` repository root
 
-    Edit `src/model.rs` to add a function metric family and a function opportunity kind. Update any shared types that currently assume only regions, lines, branches, or combined metrics.
+    Edit `src/model.rs` to add a function metric family and a function opportunity kind. Update any shared types that currently assume only regions, lines, or branches.
 
     Example commands:
 

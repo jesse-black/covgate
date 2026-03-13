@@ -7,7 +7,6 @@ pub enum MetricKind {
     Region,
     Line,
     Branch,
-    Combined,
 }
 
 impl MetricKind {
@@ -16,7 +15,6 @@ impl MetricKind {
             "region" => Ok(Self::Region),
             "line" => Ok(Self::Line),
             "branch" => Ok(Self::Branch),
-            "combined" => Ok(Self::Combined),
             _ => bail!("unsupported metric kind: {value}"),
         }
     }
@@ -26,7 +24,6 @@ impl MetricKind {
             Self::Region => "region",
             Self::Line => "line",
             Self::Branch => "branch",
-            Self::Combined => "combined",
         }
     }
 
@@ -35,7 +32,6 @@ impl MetricKind {
             Self::Region => "regions",
             Self::Line => "lines",
             Self::Branch => "branches",
-            Self::Combined => "combined opportunities",
         }
     }
 }

@@ -35,7 +35,6 @@ struct GateConfig {
     fail_under_regions: Option<f64>,
     fail_under_lines: Option<f64>,
     fail_under_branches: Option<f64>,
-    combined: Option<f64>,
     fail_uncovered_regions: Option<usize>,
     fail_uncovered_lines: Option<usize>,
     fail_uncovered_branches: Option<usize>,
@@ -136,14 +135,6 @@ fn resolve_rules(args: &Args, file_config: Option<&FileConfig>) -> Result<Vec<Ga
     } else if let Some(minimum_percent) = file_config.and_then(|c| c.gates.fail_under_branches) {
         configured.push(GateRule::Percent {
             metric: MetricKind::Branch,
-            minimum_percent,
-        });
-    }
-
-    // combined percent
-    if let Some(minimum_percent) = file_config.and_then(|c| c.gates.combined) {
-        configured.push(GateRule::Percent {
-            metric: MetricKind::Combined,
             minimum_percent,
         });
     }
