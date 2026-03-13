@@ -38,3 +38,12 @@ jobs:
       - uses: taiki-e/install-action@cargo-machete
       - name: Dependency hygiene
         run: cargo machete
+
+  dependency-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@cargo-deny
+      - name: Dependency policy
+        run: cargo deny check advisories licenses sources bans

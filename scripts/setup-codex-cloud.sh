@@ -67,4 +67,11 @@ else
 	echo "setup-codex-cloud: cargo-llvm-cov already installed"
 fi
 
+if ! cargo deny --version >/dev/null 2>&1; then
+	echo "setup-codex-cloud: installing cargo-deny"
+	cargo install cargo-deny --locked
+else
+	echo "setup-codex-cloud: cargo-deny already installed"
+fi
+
 echo "setup-codex-cloud: Complete!"
