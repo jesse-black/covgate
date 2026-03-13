@@ -1,6 +1,6 @@
 # Covgate fail-uncovered gates
 
-Save this in-progress ExecPlan at `docs/exec-plans/active/covgate-fail-uncovered.md` while the work is being designed or implemented in this repository.
+This ExecPlan is complete and archived in `docs/exec-plans/completed/covgate-fail-uncovered.md` for historical traceability.
 
 This ExecPlan is a living document. The sections `Progress`, `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
@@ -31,18 +31,18 @@ and `covgate` applies both rules in the same run with explicit CLI flags still t
 ## Progress
 
 - [x] (2026-03-11 20:20Z) Create a separate ExecPlan for `--fail-uncovered-*` gates instead of folding that work into the current fail-under implementation.
-- [ ] Generalize the threshold model so one run can evaluate multiple gate rules, including minimum-percent and maximum-uncovered-count rules.
-- [ ] Extend CLI parsing and repository-local TOML loading to accept pluralized `--fail-uncovered-*` flags and matching config keys with clear precedence rules.
-- [ ] Update gate evaluation, console rendering, Markdown rendering, and integration tests so uncovered-count gates are visible, enforced, and proven in end-to-end scenarios.
-- [ ] Record validation evidence, update the living sections, and keep this plan synchronized with the implementation until the feature is complete.
+- [x] (2026-03-13 13:24Z) Generalized the threshold model so one run evaluates multiple gate rules, including minimum-percent and maximum-uncovered-count rules.
+- [x] (2026-03-13 13:24Z) Extended CLI parsing and repository-local TOML loading to accept pluralized `--fail-uncovered-*` flags and matching config keys with per-rule precedence.
+- [x] (2026-03-13 13:24Z) Updated gate evaluation, console rendering, Markdown rendering, and integration tests so uncovered-count gates are visible, enforced, and covered in end-to-end scenarios.
+- [x] (2026-03-13 13:24Z) Recorded completion evidence and synchronized living sections with the implemented feature set.
 
 ## Surprises & Discoveries
 
-- Observation: The current implementation already exposes the count needed for uncovered-count gates.
-  Evidence: `src/metrics.rs` returns `uncovered_changed_opportunities`, and `src/gate.rs` already receives the full computed metric object.
+- Observation: The merged implementation now evaluates both percentage and uncovered-count gates in one run.
+  Evidence: `src/model.rs` defines `GateRule` plus `RuleOutcome`, and `src/gate.rs` evaluates every configured rule into a unified `GateResult`.
 
-- Observation: The current implementation still assumes only one effective threshold per run.
-  Evidence: `src/config.rs` resolves exactly one `Threshold`, and `src/gate.rs` evaluates one threshold against one computed metric.
+- Observation: CLI/TOML precedence is now independent per rule family.
+  Evidence: `src/config.rs` resolves each fail-under and fail-uncovered field separately, and `tests/cli.rs` verifies a CLI override for one rule keeps the other rule from TOML active.
 
 ## Decision Log
 
@@ -64,9 +64,9 @@ and `covgate` applies both rules in the same run with explicit CLI flags still t
 
 ## Outcomes & Retrospective
 
-This plan exists before implementation, so the current outcome is a design specification rather than working behavior. The main outcome so far is a clean separation of concerns: the current `covgate` codebase already knows how many uncovered changed opportunities exist, but it does not yet have the model and reporting structure to express uncovered-count gates as first-class rules alongside percent gates. This plan is meant to add that structure without discarding the existing fail-under work.
+The `--fail-uncovered-*` feature is now fully implemented and exercised across model, configuration, gate evaluation, renderers, and CLI integration tests. `covgate` can evaluate percent and uncovered-count gates in one run, render each rule outcome explicitly, and merge CLI values with `covgate.toml` defaults independently per rule family.
 
-The main risk is solving only the CLI spelling and not the semantics. A superficial implementation could add `--fail-uncovered-regions` as another flag while still leaving the program able to represent only one threshold per run. That would not match the product direction or the cargo-llvm-cov-inspired UX. The correct implementation must therefore start by generalizing the gate model, then layer the new CLI and config surface on top.
+The remaining risk profile is operational rather than design-oriented: future rule families should continue to route through the normalized `GateRule` and `RuleOutcome` model so renderer output remains consistent as support expands to additional metric types.
 
 ## Context and Orientation
 
@@ -245,3 +245,5 @@ At the bottom of this plan, append a revision note every time the plan changes m
 Revision note: Initial standalone plan created for the `--fail-uncovered-*` feature so uncovered-count gates can be designed and implemented as a separate threshold family without overloading the current fail-under work.
 
 Revision note: Updated the intended TOML section name from `[thresholds]` to `[gates]` so the follow-up plan matches the current repository configuration vocabulary.
+
+Revision note: Marked this ExecPlan complete, updated progress and retrospective sections to reflect shipped behavior, and prepared the document for archive under `docs/exec-plans/completed/`.
