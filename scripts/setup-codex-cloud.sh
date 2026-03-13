@@ -67,6 +67,13 @@ else
 	echo "setup-codex-cloud: cargo-llvm-cov already installed"
 fi
 
+if ! cargo machete --version >/dev/null 2>&1; then
+	echo "setup-codex-cloud: installing cargo-machete"
+	cargo install cargo-machete --locked
+else
+	echo "setup-codex-cloud: cargo-machete already installed"
+fi
+
 if ! cargo deny --version >/dev/null 2>&1; then
 	echo "setup-codex-cloud: installing cargo-deny"
 	cargo install cargo-deny --locked

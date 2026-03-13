@@ -8,10 +8,5 @@
 - `src/` – Rust code for the `covgate` linter.
 
 ## Rust Workflow
-- Format Rust code with `cargo fmt`.
-- Run `cargo check` as the fast baseline compiler verification step.
-- Run `cargo deny check` for dependency and advisory policy validation.
-- Lint Rust code with `cargo clippy --all-targets --all-features -- -D warnings`.
-- Run `cargo test` for the automated test suite.
-- Run `cargo llvm-cov --summary-only` and keep coverage at or above 80% across the codebase before considering work complete.
+- Run `cargo xtask validate` before considering work complete.
 - Address bug reports and review findings with TDD: first reproduce the issue in a failing test, then fix the issue and rerun the relevant tests until they pass.
