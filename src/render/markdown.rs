@@ -11,15 +11,34 @@ pub fn render(result: &GateResult, _diff_description: &str) -> String {
     let mut out = String::new();
     out.push_str("## Covgate\n\n");
     out.push_str("### Diff Coverage\n\n");
-    out.push_str("| Result | Metric | Changed Coverage | Gate |\n");
+    out.push_str("| Result | Rule | Observed | Configured |\n");
     out.push_str("| --- | --- | ---: | ---: |\n");
-    out.push_str(&format!(
-        "| {} | {} | {:.2}% | ≥ {:.2}% |\n\n",
-        if result.passed { "PASS" } else { "FAIL" },
-        result.metric.as_str(),
-        result.percent,
-        result.threshold.minimum_percent
-    ));
+    for outcome in &result.rules {
+        let status = if outcome.passed { "PASS" } else { "FAIL" };
+        match &outcome.rule {
+            crate::model::GateRule::Percent {
+                minimum_percent, ..
+            } => {
+                out.push_str(&format!(
+                    "| {} | `{}` | {:.2}% | ≥ {:.2}% |\n",
+                    status,
+                    outcome.rule.label(),
+                    outcome.observed_percent,
+                    minimum_percent
+                ));
+            }
+            crate::model::GateRule::UncoveredCount { maximum_count, .. } => {
+                out.push_str(&format!(
+                    "| {} | `{}` | {} | ≤ {} |\n",
+                    status,
+                    outcome.rule.label(),
+                    outcome.observed_uncovered_count,
+                    maximum_count
+                ));
+            }
+        }
+    }
+    out.push('\n');
     out.push_str(&format!(
         "| File | Covered Changed {metric_label} | Changed {metric_label} | Coverage | Missed Changed Spans |\n"
     ));
@@ -103,7 +122,7 @@ fn title_case(value: &str) -> String {
 mod tests {
     use std::{collections::BTreeMap, path::PathBuf};
 
-    use crate::model::{FileTotals, GateResult, MetricKind, Threshold};
+    use crate::model::{FileTotals, GateResult, GateRule, MetricKind, RuleOutcome};
 
     use super::render;
 
@@ -114,10 +133,15 @@ mod tests {
             covered: 1,
             total: 2,
             percent: 50.0,
-            threshold: Threshold {
-                metric: MetricKind::Region,
-                minimum_percent: 90.0,
-            },
+            rules: vec![RuleOutcome {
+                rule: GateRule::Percent {
+                    metric: MetricKind::Region,
+                    minimum_percent: 90.0,
+                },
+                passed: false,
+                observed_percent: 50.0,
+                observed_uncovered_count: 1,
+            }],
             passed: false,
             uncovered_changed_opportunities: vec![crate::model::CoverageOpportunity {
                 kind: crate::model::OpportunityKind::Region,
@@ -145,8 +169,8 @@ mod tests {
         };
 
         let rendered = render(&result, "origin/main...HEAD");
-        assert!(rendered.contains("| Result | Metric | Changed Coverage | Gate |"));
-        assert!(rendered.contains("| FAIL | region | 50.00% | ≥ 90.00% |"));
+        assert!(rendered.contains("| Result | Rule | Observed | Configured |"));
+        assert!(rendered.contains("| FAIL | `fail-under-regions` | 50.00% | ≥ 90.00% |"));
         assert!(rendered.contains(
             "| File | Covered Changed Regions | Changed Regions | Coverage | Missed Changed Spans |"
         ));
@@ -163,10 +187,15 @@ mod tests {
             covered: 1,
             total: 3,
             percent: 33.33,
-            threshold: Threshold {
-                metric: MetricKind::Region,
-                minimum_percent: 90.0,
-            },
+            rules: vec![RuleOutcome {
+                rule: GateRule::Percent {
+                    metric: MetricKind::Region,
+                    minimum_percent: 90.0,
+                },
+                passed: false,
+                observed_percent: 33.33,
+                observed_uncovered_count: 2,
+            }],
             passed: false,
             uncovered_changed_opportunities: vec![
                 crate::model::CoverageOpportunity {
@@ -209,10 +238,15 @@ mod tests {
             covered: 1,
             total: 3,
             percent: 33.33,
-            threshold: Threshold {
-                metric: MetricKind::Region,
-                minimum_percent: 90.0,
-            },
+            rules: vec![RuleOutcome {
+                rule: GateRule::Percent {
+                    metric: MetricKind::Region,
+                    minimum_percent: 90.0,
+                },
+                passed: false,
+                observed_percent: 33.33,
+                observed_uncovered_count: 2,
+            }],
             passed: false,
             uncovered_changed_opportunities: vec![
                 crate::model::CoverageOpportunity {

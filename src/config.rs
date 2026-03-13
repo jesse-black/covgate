@@ -9,7 +9,7 @@ use serde::Deserialize;
 use crate::{
     cli::Args,
     diff::DiffSource,
-    model::{MetricKind, Threshold},
+    model::{GateRule, MetricKind},
 };
 
 const CONFIG_FILE_NAME: &str = "covgate.toml";
@@ -18,7 +18,7 @@ const CONFIG_FILE_NAME: &str = "covgate.toml";
 pub struct Config {
     pub coverage_json: PathBuf,
     pub diff_source: DiffSource,
-    pub threshold: Threshold,
+    pub rules: Vec<GateRule>,
     pub markdown_output: Option<PathBuf>,
 }
 
@@ -36,6 +36,9 @@ struct GateConfig {
     fail_under_lines: Option<f64>,
     fail_under_branches: Option<f64>,
     combined: Option<f64>,
+    fail_uncovered_regions: Option<usize>,
+    fail_uncovered_lines: Option<usize>,
+    fail_uncovered_branches: Option<usize>,
 }
 
 impl TryFrom<Args> for Config {
@@ -44,7 +47,7 @@ impl TryFrom<Args> for Config {
     fn try_from(args: Args) -> Result<Self> {
         let file_config = load_file_config()?;
         let diff_source = resolve_diff_source(&args, file_config.as_ref())?;
-        let threshold = resolve_threshold(&args, file_config.as_ref())?;
+        let rules = resolve_rules(&args, file_config.as_ref())?;
         let markdown_output = args
             .markdown_output
             .or_else(|| file_config.and_then(|config| config.markdown_output));
@@ -52,7 +55,7 @@ impl TryFrom<Args> for Config {
         Ok(Self {
             coverage_json: args.coverage_json,
             diff_source,
-            threshold,
+            rules,
             markdown_output,
         })
     }
@@ -95,84 +98,103 @@ fn resolve_diff_source(args: &Args, file_config: Option<&FileConfig>) -> Result<
     }
 }
 
-fn resolve_threshold(args: &Args, file_config: Option<&FileConfig>) -> Result<Threshold> {
-    if let Some(threshold) = cli_threshold(args)? {
-        return Ok(threshold);
-    }
-
-    if let Some(config) = file_config
-        && let Some(threshold) = config.gates.to_threshold()?
-    {
-        return Ok(threshold);
-    }
-
-    bail!(
-        "one of --fail-under-regions, --fail-under-lines, or --fail-under-branches is required unless {} defines a supported [gates] default",
-        CONFIG_FILE_NAME
-    )
-}
-
-fn cli_threshold(args: &Args) -> Result<Option<Threshold>> {
+fn resolve_rules(args: &Args, file_config: Option<&FileConfig>) -> Result<Vec<GateRule>> {
     let mut configured = Vec::new();
+
+    // fail_under_regions
     if let Some(minimum_percent) = args.fail_under_regions {
-        configured.push(Threshold {
+        configured.push(GateRule::Percent {
+            metric: MetricKind::Region,
+            minimum_percent,
+        });
+    } else if let Some(minimum_percent) = file_config.and_then(|c| c.gates.fail_under_regions) {
+        configured.push(GateRule::Percent {
             metric: MetricKind::Region,
             minimum_percent,
         });
     }
+
+    // fail_under_lines
     if let Some(minimum_percent) = args.fail_under_lines {
-        configured.push(Threshold {
+        configured.push(GateRule::Percent {
+            metric: MetricKind::Line,
+            minimum_percent,
+        });
+    } else if let Some(minimum_percent) = file_config.and_then(|c| c.gates.fail_under_lines) {
+        configured.push(GateRule::Percent {
             metric: MetricKind::Line,
             minimum_percent,
         });
     }
+
+    // fail_under_branches
     if let Some(minimum_percent) = args.fail_under_branches {
-        configured.push(Threshold {
+        configured.push(GateRule::Percent {
+            metric: MetricKind::Branch,
+            minimum_percent,
+        });
+    } else if let Some(minimum_percent) = file_config.and_then(|c| c.gates.fail_under_branches) {
+        configured.push(GateRule::Percent {
             metric: MetricKind::Branch,
             minimum_percent,
         });
     }
-    exactly_one_threshold(configured, "CLI flags")
-}
 
-impl GateConfig {
-    fn to_threshold(&self) -> Result<Option<Threshold>> {
-        let mut configured = Vec::new();
-        if let Some(percent) = self.fail_under_regions {
-            configured.push(Threshold {
-                metric: MetricKind::Region,
-                minimum_percent: percent,
-            });
-        }
-        if let Some(percent) = self.fail_under_lines {
-            configured.push(Threshold {
-                metric: MetricKind::Line,
-                minimum_percent: percent,
-            });
-        }
-        if let Some(percent) = self.fail_under_branches {
-            configured.push(Threshold {
-                metric: MetricKind::Branch,
-                minimum_percent: percent,
-            });
-        }
-        if let Some(percent) = self.combined {
-            configured.push(Threshold {
-                metric: MetricKind::Combined,
-                minimum_percent: percent,
-            });
-        }
-
-        exactly_one_threshold(configured, &format!("{CONFIG_FILE_NAME} [gates]"))
+    // combined percent
+    if let Some(minimum_percent) = file_config.and_then(|c| c.gates.combined) {
+        configured.push(GateRule::Percent {
+            metric: MetricKind::Combined,
+            minimum_percent,
+        });
     }
-}
 
-fn exactly_one_threshold(configured: Vec<Threshold>, source: &str) -> Result<Option<Threshold>> {
-    match configured.len() {
-        0 => Ok(None),
-        1 => Ok(configured.into_iter().next()),
-        _ => bail!("{source} may set exactly one threshold in v1"),
+    // fail_uncovered_regions
+    if let Some(maximum_count) = args.fail_uncovered_regions {
+        configured.push(GateRule::UncoveredCount {
+            metric: MetricKind::Region,
+            maximum_count,
+        });
+    } else if let Some(maximum_count) = file_config.and_then(|c| c.gates.fail_uncovered_regions) {
+        configured.push(GateRule::UncoveredCount {
+            metric: MetricKind::Region,
+            maximum_count,
+        });
     }
+
+    // fail_uncovered_lines
+    if let Some(maximum_count) = args.fail_uncovered_lines {
+        configured.push(GateRule::UncoveredCount {
+            metric: MetricKind::Line,
+            maximum_count,
+        });
+    } else if let Some(maximum_count) = file_config.and_then(|c| c.gates.fail_uncovered_lines) {
+        configured.push(GateRule::UncoveredCount {
+            metric: MetricKind::Line,
+            maximum_count,
+        });
+    }
+
+    // fail_uncovered_branches
+    if let Some(maximum_count) = args.fail_uncovered_branches {
+        configured.push(GateRule::UncoveredCount {
+            metric: MetricKind::Branch,
+            maximum_count,
+        });
+    } else if let Some(maximum_count) = file_config.and_then(|c| c.gates.fail_uncovered_branches) {
+        configured.push(GateRule::UncoveredCount {
+            metric: MetricKind::Branch,
+            maximum_count,
+        });
+    }
+
+    if configured.is_empty() {
+        bail!(
+            "at least one rule (e.g., --fail-under-regions or --fail-uncovered-regions) is required unless {} defines a supported [gates] default",
+            CONFIG_FILE_NAME
+        )
+    }
+
+    Ok(configured)
 }
 
 #[cfg(test)]
@@ -182,72 +204,50 @@ mod tests {
     use tempfile::tempdir;
 
     use super::{
-        CONFIG_FILE_NAME, FileConfig, GateConfig, cli_threshold, load_file_config_from,
-        resolve_diff_source, resolve_threshold,
+        CONFIG_FILE_NAME, FileConfig, load_file_config_from, resolve_diff_source, resolve_rules,
     };
-    use crate::{cli::Args, diff::DiffSource, model::MetricKind};
+    use crate::{
+        cli::Args,
+        diff::DiffSource,
+        model::{GateRule, MetricKind},
+    };
 
     #[test]
-    fn parses_region_cli_threshold() {
-        let threshold = cli_threshold(&Args {
-            coverage_json: "coverage.json".into(),
-            base: None,
-            diff_file: None,
-            fail_under_regions: Some(90.0),
-            fail_under_lines: None,
-            fail_under_branches: None,
-            markdown_output: None,
-        })
-        .expect("threshold should parse")
-        .expect("threshold should exist");
-        assert_eq!(threshold.metric, MetricKind::Region);
-        assert_eq!(threshold.minimum_percent, 90.0);
-    }
+    fn parses_region_cli_rules() {
+        let rules = resolve_rules(
+            &Args {
+                coverage_json: "coverage.json".into(),
+                base: None,
+                diff_file: None,
+                fail_under_regions: Some(90.0),
+                fail_under_lines: None,
+                fail_under_branches: None,
+                fail_uncovered_regions: Some(1),
+                fail_uncovered_lines: None,
+                fail_uncovered_branches: None,
+                markdown_output: None,
+            },
+            None,
+        )
+        .expect("rules should parse");
 
-    #[test]
-    fn rejects_multiple_cli_thresholds() {
-        let error = cli_threshold(&Args {
-            coverage_json: "coverage.json".into(),
-            base: None,
-            diff_file: None,
-            fail_under_regions: Some(90.0),
-            fail_under_lines: Some(80.0),
-            fail_under_branches: None,
-            markdown_output: None,
-        })
-        .expect_err("multiple thresholds should fail");
-
-        assert!(
-            error
-                .to_string()
-                .contains("CLI flags may set exactly one threshold in v1")
-        );
-    }
-
-    #[test]
-    fn config_threshold_rejects_multiple_metrics() {
-        let thresholds = GateConfig {
-            fail_under_regions: Some(90.0),
-            fail_under_lines: Some(80.0),
-            fail_under_branches: None,
-            combined: None,
-        };
-
-        let error = thresholds
-            .to_threshold()
-            .expect_err("multiple thresholds should fail");
-        assert!(
-            error
-                .to_string()
-                .contains("covgate.toml [gates] may set exactly one threshold in v1")
-        );
+        assert_eq!(rules.len(), 2);
+        assert!(rules.contains(&GateRule::Percent {
+            metric: MetricKind::Region,
+            minimum_percent: 90.0
+        }));
+        assert!(rules.contains(&GateRule::UncoveredCount {
+            metric: MetricKind::Region,
+            maximum_count: 1
+        }));
     }
 
     #[test]
     fn prefers_cli_over_config_defaults() {
-        let file_config: FileConfig =
-            toml::from_str("base = \"main\"\n[gates]\nfail_under_regions = 40\n")
-                .expect("config should parse");
+        let file_config: FileConfig = toml::from_str(
+            "base = \"main\"\n[gates]\nfail_under_regions = 40\nfail_uncovered_regions = 5\n",
+        )
+        .expect("config should parse");
 
         let args = Args {
             coverage_json: "coverage.json".into(),
@@ -256,27 +256,37 @@ mod tests {
             fail_under_regions: Some(90.0),
             fail_under_lines: None,
             fail_under_branches: None,
+            fail_uncovered_regions: None, // Will fallback to TOML
+            fail_uncovered_lines: None,
+            fail_uncovered_branches: None,
             markdown_output: None,
         };
 
         let diff_source =
             resolve_diff_source(&args, Some(&file_config)).expect("diff source should resolve");
-        let threshold =
-            resolve_threshold(&args, Some(&file_config)).expect("threshold should resolve");
+        let rules = resolve_rules(&args, Some(&file_config)).expect("rules should resolve");
 
         match diff_source {
             DiffSource::GitBase(base) => assert_eq!(base, "release"),
             DiffSource::DiffFile(_) => panic!("expected git base"),
         }
-        assert_eq!(threshold.metric, MetricKind::Region);
-        assert_eq!(threshold.minimum_percent, 90.0);
+        assert_eq!(rules.len(), 2);
+        assert!(rules.contains(&GateRule::Percent {
+            metric: MetricKind::Region,
+            minimum_percent: 90.0
+        }));
+        assert!(rules.contains(&GateRule::UncoveredCount {
+            metric: MetricKind::Region,
+            maximum_count: 5
+        }));
     }
 
     #[test]
     fn loads_defaults_from_repo_config() {
-        let file_config: FileConfig =
-            toml::from_str("base = \"main\"\n[gates]\nfail_under_regions = 75\n")
-                .expect("config should parse");
+        let file_config: FileConfig = toml::from_str(
+            "base = \"main\"\n[gates]\nfail_under_regions = 75\nfail_uncovered_lines = 2\n",
+        )
+        .expect("config should parse");
 
         let args = Args {
             coverage_json: "coverage.json".into(),
@@ -285,20 +295,29 @@ mod tests {
             fail_under_regions: None,
             fail_under_lines: None,
             fail_under_branches: None,
+            fail_uncovered_regions: None,
+            fail_uncovered_lines: None,
+            fail_uncovered_branches: None,
             markdown_output: None,
         };
 
         let diff_source =
             resolve_diff_source(&args, Some(&file_config)).expect("diff source should resolve");
-        let threshold =
-            resolve_threshold(&args, Some(&file_config)).expect("threshold should resolve");
+        let rules = resolve_rules(&args, Some(&file_config)).expect("rules should resolve");
 
         match diff_source {
             DiffSource::GitBase(base) => assert_eq!(base, "main"),
             DiffSource::DiffFile(_) => panic!("expected git base"),
         }
-        assert_eq!(threshold.metric, MetricKind::Region);
-        assert_eq!(threshold.minimum_percent, 75.0);
+        assert_eq!(rules.len(), 2);
+        assert!(rules.contains(&GateRule::Percent {
+            metric: MetricKind::Region,
+            minimum_percent: 75.0
+        }));
+        assert!(rules.contains(&GateRule::UncoveredCount {
+            metric: MetricKind::Line,
+            maximum_count: 2
+        }));
     }
 
     #[test]
@@ -306,7 +325,7 @@ mod tests {
         let temp = tempdir().expect("tempdir");
         fs::write(
             temp.path().join(CONFIG_FILE_NAME),
-            "base = \"main\"\nmarkdown_output = \"summary.md\"\n[gates]\nfail_under_regions = 80\n",
+            "base = \"main\"\nmarkdown_output = \"summary.md\"\n[gates]\nfail_under_regions = 80\nfail_uncovered_regions = 1\n",
         )
         .expect("write config");
 
@@ -320,6 +339,7 @@ mod tests {
             Some(std::path::Path::new("summary.md"))
         );
         assert_eq!(config.gates.fail_under_regions, Some(80.0));
+        assert_eq!(config.gates.fail_uncovered_regions, Some(1));
     }
 
     #[test]
@@ -327,11 +347,22 @@ mod tests {
         let config: FileConfig = toml::from_str("").expect("empty config should parse");
         assert!(config.base.is_none());
         assert!(
-            config
-                .gates
-                .to_threshold()
-                .expect("threshold parse")
-                .is_none()
+            resolve_rules(
+                &Args {
+                    coverage_json: "coverage.json".into(),
+                    base: None,
+                    diff_file: None,
+                    fail_under_regions: None,
+                    fail_under_lines: None,
+                    fail_under_branches: None,
+                    fail_uncovered_regions: None,
+                    fail_uncovered_lines: None,
+                    fail_uncovered_branches: None,
+                    markdown_output: None,
+                },
+                Some(&config)
+            )
+            .is_err()
         );
     }
 }

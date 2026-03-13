@@ -41,9 +41,39 @@ impl MetricKind {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Threshold {
-    pub metric: MetricKind,
-    pub minimum_percent: f64,
+pub enum GateRule {
+    Percent {
+        metric: MetricKind,
+        minimum_percent: f64,
+    },
+    UncoveredCount {
+        metric: MetricKind,
+        maximum_count: usize,
+    },
+}
+
+impl GateRule {
+    pub fn metric(&self) -> MetricKind {
+        match self {
+            Self::Percent { metric, .. } => *metric,
+            Self::UncoveredCount { metric, .. } => *metric,
+        }
+    }
+
+    pub fn label(&self) -> String {
+        match self {
+            Self::Percent { metric, .. } => format!("fail-under-{}", metric.label()),
+            Self::UncoveredCount { metric, .. } => format!("fail-uncovered-{}", metric.label()),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RuleOutcome {
+    pub rule: GateRule,
+    pub passed: bool,
+    pub observed_percent: f64,
+    pub observed_uncovered_count: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -124,7 +154,7 @@ pub struct GateResult {
     pub covered: usize,
     pub total: usize,
     pub percent: f64,
-    pub threshold: Threshold,
+    pub rules: Vec<RuleOutcome>,
     pub passed: bool,
     pub uncovered_changed_opportunities: Vec<CoverageOpportunity>,
     pub changed_totals_by_file: BTreeMap<PathBuf, FileTotals>,

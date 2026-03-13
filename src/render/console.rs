@@ -51,10 +51,45 @@ pub fn render(result: &GateResult, diff_description: &str) -> String {
         result.covered
     ));
     out.push_str(&format!("Coverage: {:.2}%\n", result.percent));
-    out.push_str(&format!(
-        "Gate: ≥ {:.2}%\n",
-        result.threshold.minimum_percent
-    ));
+
+    for outcome in &result.rules {
+        let status = if outcome.passed { "PASS" } else { "FAIL" };
+        match &outcome.rule {
+            crate::model::GateRule::Percent {
+                minimum_percent, ..
+            } => {
+                out.push_str(&format!(
+                    "Rule {}: {} ({:.2}% ≥ {:.2}%)\n",
+                    outcome.rule.label(),
+                    status,
+                    outcome.observed_percent,
+                    minimum_percent
+                ));
+            }
+            crate::model::GateRule::UncoveredCount { maximum_count, .. } => {
+                // E.g. Rule fail-uncovered-regions: FAIL (2 > 1)
+                // If PASS: Rule fail-uncovered-regions: PASS (0 <= 1)
+                if outcome.passed {
+                    out.push_str(&format!(
+                        "Rule {}: {} ({} <= {})\n",
+                        outcome.rule.label(),
+                        status,
+                        outcome.observed_uncovered_count,
+                        maximum_count
+                    ));
+                } else {
+                    out.push_str(&format!(
+                        "Rule {}: {} ({} > {})\n",
+                        outcome.rule.label(),
+                        status,
+                        outcome.observed_uncovered_count,
+                        maximum_count
+                    ));
+                }
+            }
+        }
+    }
+
     out.push_str("-------------");
     out
 }
@@ -102,7 +137,7 @@ fn group_spans(spans: &[&SourceSpan]) -> BTreeMap<String, FileSummary> {
 mod tests {
     use std::{collections::BTreeMap, path::PathBuf};
 
-    use crate::model::{FileTotals, GateResult, MetricKind, Threshold};
+    use crate::model::{FileTotals, GateResult, GateRule, MetricKind, RuleOutcome};
 
     use super::render;
 
@@ -113,10 +148,15 @@ mod tests {
             covered: 1,
             total: 2,
             percent: 50.0,
-            threshold: Threshold {
-                metric: MetricKind::Region,
-                minimum_percent: 90.0,
-            },
+            rules: vec![RuleOutcome {
+                rule: GateRule::Percent {
+                    metric: MetricKind::Region,
+                    minimum_percent: 90.0,
+                },
+                passed: false,
+                observed_percent: 50.0,
+                observed_uncovered_count: 1,
+            }],
             passed: false,
             uncovered_changed_opportunities: vec![crate::model::CoverageOpportunity {
                 kind: crate::model::OpportunityKind::Region,
@@ -140,7 +180,7 @@ mod tests {
         let rendered = render(&result, "origin/main...HEAD");
         assert!(rendered.contains("Diff Coverage: FAIL"));
         assert!(rendered.contains("src/lib.rs (50.00%)"));
-        assert!(rendered.contains("Gate: ≥ 90.00%"));
+        assert!(rendered.contains("Rule fail-under-regions: FAIL (50.00% ≥ 90.00%)"));
     }
 
     #[test]
@@ -150,10 +190,15 @@ mod tests {
             covered: 1,
             total: 3,
             percent: 33.33,
-            threshold: Threshold {
-                metric: MetricKind::Region,
-                minimum_percent: 90.0,
-            },
+            rules: vec![RuleOutcome {
+                rule: GateRule::Percent {
+                    metric: MetricKind::Region,
+                    minimum_percent: 90.0,
+                },
+                passed: false,
+                observed_percent: 33.33,
+                observed_uncovered_count: 2,
+            }],
             passed: false,
             uncovered_changed_opportunities: vec![
                 crate::model::CoverageOpportunity {
@@ -196,10 +241,15 @@ mod tests {
             covered: 1,
             total: 3,
             percent: 33.33,
-            threshold: Threshold {
-                metric: MetricKind::Region,
-                minimum_percent: 90.0,
-            },
+            rules: vec![RuleOutcome {
+                rule: GateRule::Percent {
+                    metric: MetricKind::Region,
+                    minimum_percent: 90.0,
+                },
+                passed: false,
+                observed_percent: 33.33,
+                observed_uncovered_count: 2,
+            }],
             passed: false,
             uncovered_changed_opportunities: vec![
                 crate::model::CoverageOpportunity {

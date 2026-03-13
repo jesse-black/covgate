@@ -14,8 +14,8 @@ use crate::config::Config;
 pub fn run(config: Config) -> Result<i32> {
     let report = coverage::llvm_json::parse_path(&config.coverage_json)?;
     let diff = diff::load_changed_lines(&config.diff_source)?;
-    let metric = metrics::compute_changed_metric(&report, &diff, config.threshold.metric)?;
-    let gate_result = gate::evaluate(metric, config.threshold.clone());
+    let metric = metrics::compute_changed_metric(&report, &diff, report.metric_kind)?;
+    let gate_result = gate::evaluate(metric, &config.rules)?;
 
     let console = render::console::render(&gate_result, &config.diff_source.describe());
     println!("{console}");
