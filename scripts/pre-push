@@ -1,0 +1,71 @@
+#!/usr/bin/env sh
+
+set -eu
+
+repo_root=$(git rev-parse --show-toplevel)
+cd "$repo_root"
+
+remote_name=${1:-origin}
+
+is_zero_sha() {
+    [ "$1" = "0000000000000000000000000000000000000000" ]
+}
+
+is_relevant_path() {
+    case "$1" in
+        src/*|tests/*|benches/*|examples/*|.cargo/*|Cargo.toml|Cargo.lock|build.rs|rust-toolchain|rust-toolchain.toml|covgate.toml)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+remote_default_ref=""
+if remote_default_ref=$(git symbolic-ref --quiet --short "refs/remotes/$remote_name/HEAD" 2>/dev/null); then
+    :
+fi
+
+should_run=0
+
+while IFS=' ' read -r local_ref local_sha remote_ref remote_sha; do
+    [ -n "${local_ref:-}" ] || continue
+
+    if is_zero_sha "$local_sha"; then
+        continue
+    fi
+
+    diff_base=$remote_sha
+    if is_zero_sha "$remote_sha"; then
+        if [ -n "$remote_default_ref" ]; then
+            diff_base=$(git merge-base "$local_sha" "$remote_default_ref")
+        else
+            diff_base=$(git rev-list --max-parents=0 "$local_sha" | tail -n 1)
+        fi
+    fi
+
+    for path in $(git diff --name-only --diff-filter=ACMR "$diff_base" "$local_sha"); do
+        if is_relevant_path "$path"; then
+            should_run=1
+            break 2
+        fi
+    done
+done
+
+if [ "$should_run" -eq 0 ]; then
+    echo "Skipping Rust pre-push checks; no code or compilation-affecting files changed."
+    exit 0
+fi
+
+coverage_json=$(mktemp "${TMPDIR:-/tmp}/covgate-pre-push-XXXXXX.json")
+trap 'rm -f "$coverage_json"' EXIT INT TERM HUP
+
+echo "Running cargo clippy --all-targets --all-features -- -D warnings"
+cargo clippy --all-targets --all-features -- -D warnings
+
+echo "Running cargo llvm-cov --json --output-path $coverage_json"
+cargo llvm-cov --json --output-path "$coverage_json"
+
+echo "Running covgate dogfood check via cargo run --bin covgate -- --coverage-json $coverage_json"
+cargo run --bin covgate -- --coverage-json "$coverage_json"

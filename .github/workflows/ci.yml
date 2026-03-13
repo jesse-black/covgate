@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  quality-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Format
+        run: cargo fmt --check
+      - name: Check
+        run: cargo check
+      - name: Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+      - name: Test
+        run: cargo llvm-cov --json --output-path coverage.json
+      - name: Coverage Summary
+        run: cargo llvm-cov report
+      - name: Dogfood covgate
+        run: cargo run -- --coverage-json coverage.json --markdown-output "$GITHUB_STEP_SUMMARY"
+
+  dependency-hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@cargo-machete
+      - name: Dependency hygiene
+        run: cargo machete

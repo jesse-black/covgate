@@ -1,0 +1,254 @@
+use crate::model::GateResult;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct SpanKey {
+    start_line: u32,
+    end_line: u32,
+}
+
+pub fn render(result: &GateResult, _diff_description: &str) -> String {
+    let metric_label = title_case(result.metric.label());
+    let mut out = String::new();
+    out.push_str("## Covgate\n\n");
+    out.push_str("### Diff Coverage\n\n");
+    out.push_str("| Result | Metric | Changed Coverage | Gate |\n");
+    out.push_str("| --- | --- | ---: | ---: |\n");
+    out.push_str(&format!(
+        "| {} | {} | {:.2}% | ≥ {:.2}% |\n\n",
+        if result.passed { "PASS" } else { "FAIL" },
+        result.metric.as_str(),
+        result.percent,
+        result.threshold.minimum_percent
+    ));
+    out.push_str(&format!(
+        "| File | Covered Changed {metric_label} | Changed {metric_label} | Coverage | Missed Changed Spans |\n"
+    ));
+    out.push_str("| --- | ---: | ---: | ---: | --- |\n");
+    let mut missed_by_file =
+        std::collections::BTreeMap::<String, std::collections::BTreeMap<SpanKey, usize>>::new();
+    for opportunity in &result.uncovered_changed_opportunities {
+        missed_by_file
+            .entry(opportunity.span.path.display().to_string())
+            .or_default()
+            .entry(SpanKey {
+                start_line: opportunity.span.start_line,
+                end_line: opportunity.span.end_line,
+            })
+            .and_modify(|count| *count += 1)
+            .or_insert(1);
+    }
+    for (path, totals) in &result.changed_totals_by_file {
+        let percent = if totals.total == 0 {
+            100.0
+        } else {
+            (totals.covered as f64 / totals.total as f64) * 100.0
+        };
+        let missed = missed_by_file
+            .get(&path.display().to_string())
+            .map(|values| {
+                values
+                    .iter()
+                    .map(|(key, count)| {
+                        let label = format!("{}-{}", key.start_line, key.end_line);
+                        if *count > 1 {
+                            format!("`{label}({count})`")
+                        } else {
+                            format!("`{label}`")
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            })
+            .unwrap_or_default();
+        out.push_str(&format!(
+            "| `{}` | {} | {} | {:.2}% | {} |\n",
+            path.display(),
+            totals.covered,
+            totals.total,
+            percent,
+            missed
+        ));
+    }
+    out.push_str("\n### Overall Coverage\n\n");
+    out.push_str(&format!(
+        "| File | Covered {metric_label} | {metric_label} | Coverage |\n"
+    ));
+    out.push_str("| --- | ---: | ---: | ---: |\n");
+    for (path, totals) in &result.totals_by_file {
+        let percent = if totals.total == 0 {
+            100.0
+        } else {
+            (totals.covered as f64 / totals.total as f64) * 100.0
+        };
+        out.push_str(&format!(
+            "| `{}` | {} | {} | {:.2}% |\n",
+            path.display(),
+            totals.covered,
+            totals.total,
+            percent
+        ));
+    }
+    out
+}
+
+fn title_case(value: &str) -> String {
+    let mut chars = value.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+        None => String::new(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{collections::BTreeMap, path::PathBuf};
+
+    use crate::model::{FileTotals, GateResult, MetricKind, Threshold};
+
+    use super::render;
+
+    #[test]
+    fn renders_markdown_tables() {
+        let result = GateResult {
+            metric: MetricKind::Region,
+            covered: 1,
+            total: 2,
+            percent: 50.0,
+            threshold: Threshold {
+                metric: MetricKind::Region,
+                minimum_percent: 90.0,
+            },
+            passed: false,
+            uncovered_changed_opportunities: vec![crate::model::CoverageOpportunity {
+                kind: crate::model::OpportunityKind::Region,
+                span: crate::model::SourceSpan {
+                    path: PathBuf::from("src/lib.rs"),
+                    start_line: 5,
+                    end_line: 6,
+                },
+                covered: false,
+            }],
+            changed_totals_by_file: BTreeMap::from([(
+                PathBuf::from("src/lib.rs"),
+                FileTotals {
+                    covered: 1,
+                    total: 2,
+                },
+            )]),
+            totals_by_file: BTreeMap::from([(
+                PathBuf::from("src/lib.rs"),
+                FileTotals {
+                    covered: 3,
+                    total: 4,
+                },
+            )]),
+        };
+
+        let rendered = render(&result, "origin/main...HEAD");
+        assert!(rendered.contains("| Result | Metric | Changed Coverage | Gate |"));
+        assert!(rendered.contains("| FAIL | region | 50.00% | ≥ 90.00% |"));
+        assert!(rendered.contains(
+            "| File | Covered Changed Regions | Changed Regions | Coverage | Missed Changed Spans |"
+        ));
+        assert!(rendered.contains("| `src/lib.rs` | 1 | 2 | 50.00% |"));
+        assert!(rendered.contains("| File | Covered Regions | Regions | Coverage |"));
+        assert!(rendered.contains("### Overall Coverage"));
+        assert!(!rendered.contains("Informational only. Does not affect the gate result in v1."));
+    }
+
+    #[test]
+    fn groups_duplicate_spans_with_counts() {
+        let result = GateResult {
+            metric: MetricKind::Region,
+            covered: 1,
+            total: 3,
+            percent: 33.33,
+            threshold: Threshold {
+                metric: MetricKind::Region,
+                minimum_percent: 90.0,
+            },
+            passed: false,
+            uncovered_changed_opportunities: vec![
+                crate::model::CoverageOpportunity {
+                    kind: crate::model::OpportunityKind::Region,
+                    span: crate::model::SourceSpan {
+                        path: PathBuf::from("src/lib.rs"),
+                        start_line: 5,
+                        end_line: 6,
+                    },
+                    covered: false,
+                },
+                crate::model::CoverageOpportunity {
+                    kind: crate::model::OpportunityKind::Region,
+                    span: crate::model::SourceSpan {
+                        path: PathBuf::from("src/lib.rs"),
+                        start_line: 5,
+                        end_line: 6,
+                    },
+                    covered: false,
+                },
+            ],
+            changed_totals_by_file: BTreeMap::from([(
+                PathBuf::from("src/lib.rs"),
+                FileTotals {
+                    covered: 1,
+                    total: 3,
+                },
+            )]),
+            totals_by_file: BTreeMap::new(),
+        };
+
+        let rendered = render(&result, "origin/main...HEAD");
+        assert!(rendered.contains("`5-6(2)`"));
+    }
+
+    #[test]
+    fn sorts_spans_numerically() {
+        let result = GateResult {
+            metric: MetricKind::Region,
+            covered: 1,
+            total: 3,
+            percent: 33.33,
+            threshold: Threshold {
+                metric: MetricKind::Region,
+                minimum_percent: 90.0,
+            },
+            passed: false,
+            uncovered_changed_opportunities: vec![
+                crate::model::CoverageOpportunity {
+                    kind: crate::model::OpportunityKind::Region,
+                    span: crate::model::SourceSpan {
+                        path: PathBuf::from("src/lib.rs"),
+                        start_line: 102,
+                        end_line: 102,
+                    },
+                    covered: false,
+                },
+                crate::model::CoverageOpportunity {
+                    kind: crate::model::OpportunityKind::Region,
+                    span: crate::model::SourceSpan {
+                        path: PathBuf::from("src/lib.rs"),
+                        start_line: 48,
+                        end_line: 48,
+                    },
+                    covered: false,
+                },
+            ],
+            changed_totals_by_file: BTreeMap::from([(
+                PathBuf::from("src/lib.rs"),
+                FileTotals {
+                    covered: 1,
+                    total: 3,
+                },
+            )]),
+            totals_by_file: BTreeMap::new(),
+        };
+
+        let rendered = render(&result, "origin/main...HEAD");
+        let row = rendered
+            .lines()
+            .find(|line| line.starts_with("| `src/lib.rs` |"))
+            .expect("file row should exist");
+        assert!(row.find("`48-48`").expect("48-48") < row.find("`102-102`").expect("102-102"));
+    }
+}
