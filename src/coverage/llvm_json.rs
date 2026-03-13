@@ -302,6 +302,41 @@ mod tests {
     }
 
     #[test]
+    fn segment_boundary_does_not_overcount_lines() {
+        // This tests the exact case reported: "a window from (1,1) to (2,1) gets counted as covering both lines 1 and 2".
+        // With the fix, an end_col <= 1 should NOT include the end_line in the derivation.
+        let input = r#"
+        {
+          "data": [
+            {
+              "files": [
+                {
+                  "filename": "src/lib.rs",
+                  "segments": [
+                    [1, 1, 1, true, false, false],
+                    [2, 1, 0, false, false, false]
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+        "#;
+
+        let report = parse_str(input).expect("llvm export should parse");
+        let line_totals = report
+            .totals_by_file
+            .get(&crate::model::MetricKind::Line)
+            .expect("line metric totals should exist")
+            .get(&std::path::PathBuf::from("src/lib.rs"))
+            .expect("file totals should exist");
+
+        // Only line 1 should be covered and counted.
+        assert_eq!(line_totals.covered, 1);
+        assert_eq!(line_totals.total, 1);
+    }
+
+    #[test]
     fn normalizes_absolute_paths_to_repo_relative() {
         let repo_root = Path::new("/workspace/covgate");
         let normalized = normalize_path("/workspace/covgate/src/lib.rs", repo_root);

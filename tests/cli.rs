@@ -300,6 +300,41 @@ fn uses_repo_config_defaults_for_base_and_threshold() {
 }
 
 #[test]
+fn line_metric_fails_when_below_threshold() {
+    let temp = tempdir().expect("tempdir should exist");
+    let worktree = setup_fixture_worktree(temp.path(), "basic-fail");
+    let diff_file = write_worktree_diff(temp.path(), &worktree);
+
+    let output = run_covgate(
+        &worktree,
+        "basic-fail",
+        &[
+            "--diff-file".to_string(),
+            diff_file.to_string_lossy().into_owned(),
+            "--fail-under-lines".to_string(),
+            "100".to_string(),
+        ],
+    );
+
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "fixture should fail the gate when line metric is not met"
+    );
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+    assert!(stdout.contains("Diff Coverage: FAIL"));
+    assert!(stdout.contains("Rule fail-under-lines: FAIL"));
+    // The diff in basic-fail covers lines 1 and 3 in the diff logic (2 lines changed),
+    // and line 1 is covered, line 3 is uncovered.
+    // Therefore, line coverage is 1 / 2 = 50.00%.
+    assert!(
+        stdout.contains("Line Coverage: 50.00%"),
+        "Actual output: {}",
+        stdout
+    );
+}
+
+#[test]
 fn mixed_cli_over_toml_precedence() {
     let temp = tempdir().expect("tempdir should exist");
     let fixture = fixture_root("basic-fail");
