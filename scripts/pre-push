@@ -13,7 +13,7 @@ is_zero_sha() {
 
 is_relevant_path() {
     case "$1" in
-        src/*|tests/*|benches/*|examples/*|.cargo/*|Cargo.toml|Cargo.lock|build.rs|rust-toolchain|rust-toolchain.toml|covgate.toml|deny.toml)
+        src/*|tests/*|benches/*|examples/*|.cargo/*|Cargo.toml|Cargo.lock|build.rs|rust-toolchain|rust-toolchain.toml|covgate.toml|deny.toml|xtask/*)
             return 0
             ;;
         *)
@@ -58,17 +58,5 @@ if [ "$should_run" -eq 0 ]; then
     exit 0
 fi
 
-coverage_json=$(mktemp "${TMPDIR:-/tmp}/covgate-pre-push-XXXXXX.json")
-trap 'rm -f "$coverage_json"' EXIT INT TERM HUP
-
-echo "Running cargo clippy --all-targets --all-features -- -D warnings"
-cargo clippy --all-targets --all-features -- -D warnings
-
-echo "Running cargo llvm-cov --json --output-path $coverage_json"
-cargo llvm-cov --json --output-path "$coverage_json"
-
-echo "Running cargo deny check advisories licenses sources bans"
-cargo deny check advisories licenses sources bans
-
-echo "Running covgate dogfood check via cargo run --bin covgate -- --coverage-json $coverage_json"
-cargo run --bin covgate -- --coverage-json "$coverage_json"
+echo "Running cargo xtask validate"
+cargo xtask validate
