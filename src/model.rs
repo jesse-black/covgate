@@ -2,12 +2,11 @@ use std::{collections::BTreeMap, path::PathBuf};
 
 use anyhow::{Result, bail};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum MetricKind {
     Region,
     Line,
     Branch,
-    Combined,
 }
 
 impl MetricKind {
@@ -16,7 +15,6 @@ impl MetricKind {
             "region" => Ok(Self::Region),
             "line" => Ok(Self::Line),
             "branch" => Ok(Self::Branch),
-            "combined" => Ok(Self::Combined),
             _ => bail!("unsupported metric kind: {value}"),
         }
     }
@@ -26,7 +24,6 @@ impl MetricKind {
             Self::Region => "region",
             Self::Line => "line",
             Self::Branch => "branch",
-            Self::Combined => "combined",
         }
     }
 
@@ -35,15 +32,52 @@ impl MetricKind {
             Self::Region => "regions",
             Self::Line => "lines",
             Self::Branch => "branches",
-            Self::Combined => "combined opportunities",
+        }
+    }
+
+    pub fn to_opportunity_kind(self) -> OpportunityKind {
+        match self {
+            Self::Region => OpportunityKind::Region,
+            Self::Line => OpportunityKind::Line,
+            Self::Branch => OpportunityKind::BranchOutcome,
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Threshold {
-    pub metric: MetricKind,
-    pub minimum_percent: f64,
+pub enum GateRule {
+    Percent {
+        metric: MetricKind,
+        minimum_percent: f64,
+    },
+    UncoveredCount {
+        metric: MetricKind,
+        maximum_count: usize,
+    },
+}
+
+impl GateRule {
+    pub fn metric(&self) -> MetricKind {
+        match self {
+            Self::Percent { metric, .. } => *metric,
+            Self::UncoveredCount { metric, .. } => *metric,
+        }
+    }
+
+    pub fn label(&self) -> String {
+        match self {
+            Self::Percent { metric, .. } => format!("fail-under-{}", metric.label()),
+            Self::UncoveredCount { metric, .. } => format!("fail-uncovered-{}", metric.label()),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RuleOutcome {
+    pub rule: GateRule,
+    pub passed: bool,
+    pub observed_percent: f64,
+    pub observed_uncovered_count: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -84,9 +118,8 @@ pub struct CoverageOpportunity {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CoverageReport {
-    pub metric_kind: MetricKind,
     pub opportunities: Vec<CoverageOpportunity>,
-    pub totals_by_file: BTreeMap<PathBuf, FileTotals>,
+    pub totals_by_file: BTreeMap<MetricKind, BTreeMap<PathBuf, FileTotals>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -120,13 +153,7 @@ pub struct ComputedMetric {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct GateResult {
-    pub metric: MetricKind,
-    pub covered: usize,
-    pub total: usize,
-    pub percent: f64,
-    pub threshold: Threshold,
+    pub metrics: Vec<ComputedMetric>,
+    pub rules: Vec<RuleOutcome>,
     pub passed: bool,
-    pub uncovered_changed_opportunities: Vec<CoverageOpportunity>,
-    pub changed_totals_by_file: BTreeMap<PathBuf, FileTotals>,
-    pub totals_by_file: BTreeMap<PathBuf, FileTotals>,
 }

@@ -26,18 +26,19 @@ pub fn parse_str(input: &str) -> Result<CoverageReport> {
 fn parse_str_with_repo_root(input: &str, repo_root: &Path) -> Result<CoverageReport> {
     let export: LlvmExport = serde_json::from_str(input).context("failed to parse llvm json")?;
     let mut opportunities = Vec::new();
-    let mut totals_by_file = BTreeMap::new();
+    let mut region_totals_by_file = BTreeMap::new();
+    let mut line_totals_by_file = BTreeMap::new();
 
     for data in export.data {
         for file in data.files {
             let path = normalize_path(&file.filename, repo_root);
-            let mut covered = 0usize;
-            let mut total = 0usize;
+            let mut region_covered = 0usize;
+            let mut region_total = 0usize;
 
             for region in file.segments_to_regions()? {
-                total += 1;
+                region_total += 1;
                 if region.covered {
-                    covered += 1;
+                    region_covered += 1;
                 }
                 opportunities.push(CoverageOpportunity {
                     kind: OpportunityKind::Region,
@@ -50,12 +51,54 @@ fn parse_str_with_repo_root(input: &str, repo_root: &Path) -> Result<CoverageRep
                 });
             }
 
-            totals_by_file.insert(path, FileTotals { covered, total });
+            region_totals_by_file.insert(
+                path.clone(),
+                FileTotals {
+                    covered: region_covered,
+                    total: region_total,
+                },
+            );
+
+            let mut line_covered = 0usize;
+            let mut line_total = 0usize;
+
+            for line in file.parse_lines()? {
+                line_total += 1;
+                if line.covered {
+                    line_covered += 1;
+                }
+                opportunities.push(CoverageOpportunity {
+                    kind: OpportunityKind::Line,
+                    span: SourceSpan {
+                        path: path.clone(),
+                        start_line: line.line_number,
+                        end_line: line.line_number,
+                    },
+                    covered: line.covered,
+                });
+            }
+
+            if line_total > 0 {
+                line_totals_by_file.insert(
+                    path,
+                    FileTotals {
+                        covered: line_covered,
+                        total: line_total,
+                    },
+                );
+            }
         }
     }
 
+    let mut totals_by_file = BTreeMap::new();
+    if !region_totals_by_file.is_empty() {
+        totals_by_file.insert(MetricKind::Region, region_totals_by_file);
+    }
+    if !line_totals_by_file.is_empty() {
+        totals_by_file.insert(MetricKind::Line, line_totals_by_file);
+    }
+
     Ok(CoverageReport {
-        metric_kind: MetricKind::Region,
         opportunities,
         totals_by_file,
     })
@@ -90,7 +133,14 @@ struct LlvmData {
 #[derive(Debug, Deserialize)]
 struct LlvmFile {
     filename: String,
+    #[serde(default)]
     segments: Vec<Vec<serde_json::Value>>,
+}
+
+#[derive(Debug)]
+struct LineRecord {
+    line_number: u32,
+    covered: bool,
 }
 
 #[derive(Debug)]
@@ -110,6 +160,7 @@ impl LlvmFile {
 
             let start_line = number_at(start, 0)?;
             let end_line = number_at(end, 0)?;
+
             if end_line < start_line {
                 continue;
             }
@@ -128,6 +179,54 @@ impl LlvmFile {
         }
 
         Ok(regions)
+    }
+
+    fn parse_lines(&self) -> Result<Vec<LineRecord>> {
+        let mut line_states: std::collections::BTreeMap<u32, bool> =
+            std::collections::BTreeMap::new();
+        for window in self.segments.windows(2) {
+            let start = &window[0];
+            let end = &window[1];
+
+            let start_line = number_at(start, 0)?;
+            let end_line = number_at(end, 0)?;
+            let end_col = number_at(end, 1)?;
+
+            if end_line < start_line {
+                continue;
+            }
+
+            let count = number_at(start, 2)?;
+            let has_count = bool_at(start, 3).unwrap_or(true);
+
+            if !has_count {
+                continue;
+            }
+
+            let covered = count > 0;
+
+            let actual_end_line = if end_col <= 1 && end_line > start_line {
+                end_line - 1
+            } else {
+                end_line
+            };
+
+            for line in start_line..=actual_end_line {
+                line_states
+                    .entry(line)
+                    .and_modify(|e| *e |= covered)
+                    .or_insert(covered);
+            }
+        }
+
+        let mut lines = Vec::new();
+        for (line_number, covered) in line_states {
+            lines.push(LineRecord {
+                line_number,
+                covered,
+            });
+        }
+        Ok(lines)
     }
 }
 
@@ -160,8 +259,13 @@ mod tests {
                   "filename": "src/lib.rs",
                   "segments": [
                     [1, 1, 1, true, false, false],
+                    [1, 2, 0, false, false, false],
+                    [2, 1, 1, true, false, false],
+                    [2, 2, 0, false, false, false],
                     [3, 1, 0, true, false, false],
-                    [5, 1, 0, true, false, false]
+                    [3, 2, 0, false, false, false],
+                    [4, 1, 0, true, false, false],
+                    [4, 2, 0, false, false, false]
                   ]
                 }
               ]
@@ -171,20 +275,65 @@ mod tests {
         "#;
 
         let report = parse_str(input).expect("llvm export should parse");
-        assert_eq!(report.opportunities.len(), 2);
-        assert!(report.opportunities[0].covered);
-        assert!(!report.opportunities[1].covered);
-        let totals = report
+        assert_eq!(report.opportunities.len(), 8); // 4 regions + 4 lines
+
+        let region_totals = report
             .totals_by_file
+            .get(&crate::model::MetricKind::Region)
+            .expect("region metric totals should exist")
             .get(&std::path::PathBuf::from("src/lib.rs"))
             .expect("file totals should exist");
-        assert_eq!(totals.covered, 1);
-        assert_eq!(totals.total, 2);
+        assert_eq!(region_totals.covered, 2);
+        assert_eq!(region_totals.total, 4);
+
+        let line_totals = report
+            .totals_by_file
+            .get(&crate::model::MetricKind::Line)
+            .expect("line metric totals should exist")
+            .get(&std::path::PathBuf::from("src/lib.rs"))
+            .expect("file totals should exist");
+        assert_eq!(line_totals.covered, 2);
+        assert_eq!(line_totals.total, 4);
     }
 
     #[test]
     fn rejects_invalid_json() {
         assert!(parse_str("{").is_err());
+    }
+
+    #[test]
+    fn segment_boundary_does_not_overcount_lines() {
+        // This tests the exact case reported: "a window from (1,1) to (2,1) gets counted as covering both lines 1 and 2".
+        // With the fix, an end_col <= 1 should NOT include the end_line in the derivation.
+        let input = r#"
+        {
+          "data": [
+            {
+              "files": [
+                {
+                  "filename": "src/lib.rs",
+                  "segments": [
+                    [1, 1, 1, true, false, false],
+                    [2, 1, 0, false, false, false]
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+        "#;
+
+        let report = parse_str(input).expect("llvm export should parse");
+        let line_totals = report
+            .totals_by_file
+            .get(&crate::model::MetricKind::Line)
+            .expect("line metric totals should exist")
+            .get(&std::path::PathBuf::from("src/lib.rs"))
+            .expect("file totals should exist");
+
+        // Only line 1 should be covered and counted.
+        assert_eq!(line_totals.covered, 1);
+        assert_eq!(line_totals.total, 1);
     }
 
     #[test]

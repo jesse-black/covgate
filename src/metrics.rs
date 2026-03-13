@@ -7,18 +7,23 @@ pub fn compute_changed_metric(
     diff: &[ChangedFile],
     metric: MetricKind,
 ) -> anyhow::Result<ComputedMetric> {
-    anyhow::ensure!(
-        metric == report.metric_kind,
-        "requested metric {} is not available in the report",
-        metric.as_str()
-    );
+    let totals_by_file = report.totals_by_file.get(&metric).ok_or_else(|| {
+        anyhow::anyhow!(
+            "requested metric {} is not available in the report",
+            metric.as_str()
+        )
+    })?;
 
     let mut covered = 0usize;
     let mut total = 0usize;
     let mut uncovered = Vec::new();
     let mut changed_totals_by_file: BTreeMap<PathBuf, FileTotals> = BTreeMap::new();
 
+    let target_kind = metric.to_opportunity_kind();
     for opportunity in &report.opportunities {
+        if opportunity.kind != target_kind {
+            continue;
+        }
         let changed = diff.iter().any(|file| {
             file.path == opportunity.span.path
                 && file
@@ -58,7 +63,7 @@ pub fn compute_changed_metric(
         percent,
         uncovered_changed_opportunities: uncovered,
         changed_totals_by_file,
-        totals_by_file: report.totals_by_file.clone(),
+        totals_by_file: totals_by_file.clone(),
     })
 }
 
@@ -76,7 +81,6 @@ mod tests {
     #[test]
     fn computes_changed_region_metric() {
         let report = CoverageReport {
-            metric_kind: MetricKind::Region,
             opportunities: vec![
                 CoverageOpportunity {
                     kind: OpportunityKind::Region,
@@ -98,11 +102,14 @@ mod tests {
                 },
             ],
             totals_by_file: BTreeMap::from([(
-                PathBuf::from("src/lib.rs"),
-                FileTotals {
-                    covered: 1,
-                    total: 2,
-                },
+                MetricKind::Region,
+                BTreeMap::from([(
+                    PathBuf::from("src/lib.rs"),
+                    FileTotals {
+                        covered: 1,
+                        total: 2,
+                    },
+                )]),
             )]),
         };
         let diff = vec![ChangedFile {

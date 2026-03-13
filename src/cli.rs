@@ -5,7 +5,7 @@ use std::path::PathBuf;
 #[command(
     name = "covgate",
     about = "Diff-focused coverage gate",
-    after_help = "Repository-local defaults may be read from ./covgate.toml.\nCLI flags override config values. Supported defaults in v1:\n  base = \"origin/main\"\n  [gates]\n  fail_under_regions = 90"
+    after_help = "Repository-local defaults may be read from ./covgate.toml.\nCLI flags override config values. Supported defaults in v1:\n  base = \"origin/main\"\n  [gates]\n  fail_under_regions = 90\n  fail_uncovered_regions = 1"
 )]
 pub struct Args {
     #[arg(long)]
@@ -25,6 +25,15 @@ pub struct Args {
 
     #[arg(long = "fail-under-branches", value_name = "MIN")]
     pub fail_under_branches: Option<f64>,
+
+    #[arg(long = "fail-uncovered-regions", value_name = "MAX")]
+    pub fail_uncovered_regions: Option<usize>,
+
+    #[arg(long = "fail-uncovered-lines", value_name = "MAX")]
+    pub fail_uncovered_lines: Option<usize>,
+
+    #[arg(long = "fail-uncovered-branches", value_name = "MAX")]
+    pub fail_uncovered_branches: Option<usize>,
 
     #[arg(long)]
     pub markdown_output: Option<PathBuf>,

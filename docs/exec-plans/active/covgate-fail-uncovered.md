@@ -190,7 +190,7 @@ CLI integration tests must cover at least:
 
 Acceptance is not complete if the output only reports the existing percent threshold and leaves the uncovered-count rule implicit. A user must be able to see the uncovered-count rule and the measured uncovered count directly in the output.
 
-Acceptance is not complete if the implementation keeps the current one-threshold-per-run assumption. This feature exists to support combined gating, so a design that forces separate invocations for percent and uncovered-count rules does not satisfy the plan.
+Acceptance is not complete if the implementation keeps the current one-threshold-per-run assumption. This feature exists to support gating multiple rules at once, so a design that forces separate invocations for percent and uncovered-count rules does not satisfy the plan.
 
 ## Idempotence and Recovery
 
