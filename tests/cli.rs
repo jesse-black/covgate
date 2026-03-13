@@ -335,6 +335,86 @@ fn line_metric_fails_when_below_threshold() {
 }
 
 #[test]
+fn uncovered_line_budget_fails_when_exceeded() {
+    let temp = tempdir().expect("tempdir should exist");
+    let worktree = setup_fixture_worktree(temp.path(), "basic-fail");
+    let diff_file = write_worktree_diff(temp.path(), &worktree);
+
+    let output = run_covgate(
+        &worktree,
+        "basic-fail",
+        &[
+            "--diff-file".to_string(),
+            diff_file.to_string_lossy().into_owned(),
+            "--fail-uncovered-lines".to_string(),
+            "0".to_string(),
+        ],
+    );
+
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "fixture should fail when uncovered changed lines exceed the configured budget"
+    );
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+    assert!(stdout.contains("Diff Coverage: FAIL"));
+    assert!(stdout.contains("Line Coverage: 50.00%"));
+    assert!(stdout.contains("Rule fail-uncovered-lines: FAIL (1 > 0)"));
+}
+
+#[test]
+fn branch_threshold_switch_reports_metric_not_available() {
+    let temp = tempdir().expect("tempdir should exist");
+    let worktree = setup_fixture_worktree(temp.path(), "basic-fail");
+    let diff_file = write_worktree_diff(temp.path(), &worktree);
+
+    let output = run_covgate(
+        &worktree,
+        "basic-fail",
+        &[
+            "--diff-file".to_string(),
+            diff_file.to_string_lossy().into_owned(),
+            "--fail-under-branches".to_string(),
+            "100".to_string(),
+        ],
+    );
+
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "branch threshold should fail against fixtures that do not expose branch metrics"
+    );
+    let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
+    assert!(stderr.contains("requested metric branch is not available in the report"));
+}
+
+#[test]
+fn uncovered_branch_budget_switch_reports_metric_not_available() {
+    let temp = tempdir().expect("tempdir should exist");
+    let worktree = setup_fixture_worktree(temp.path(), "basic-fail");
+    let diff_file = write_worktree_diff(temp.path(), &worktree);
+
+    let output = run_covgate(
+        &worktree,
+        "basic-fail",
+        &[
+            "--diff-file".to_string(),
+            diff_file.to_string_lossy().into_owned(),
+            "--fail-uncovered-branches".to_string(),
+            "0".to_string(),
+        ],
+    );
+
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "branch uncovered budget should fail against fixtures that do not expose branch metrics"
+    );
+    let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
+    assert!(stderr.contains("requested metric branch is not available in the report"));
+}
+
+#[test]
 fn mixed_cli_over_toml_precedence() {
     let temp = tempdir().expect("tempdir should exist");
     let fixture = fixture_root("basic-fail");

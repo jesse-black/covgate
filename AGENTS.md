@@ -10,6 +10,7 @@
 ## Rust Workflow
 - Format Rust code with `cargo fmt`.
 - Run `cargo check` as the fast baseline compiler verification step.
+- Run `cargo deny check` for dependency and advisory policy validation.
 - Lint Rust code with `cargo clippy --all-targets --all-features -- -D warnings`.
 - Run `cargo test` for the automated test suite.
 - Run `cargo llvm-cov --summary-only` and keep coverage at or above 80% across the codebase before considering work complete.
