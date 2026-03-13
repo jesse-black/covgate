@@ -7,12 +7,16 @@ pub fn compute_changed_metric(
     diff: &[ChangedFile],
     metric: MetricKind,
 ) -> anyhow::Result<ComputedMetric> {
-    let totals_by_file = report.totals_by_file.get(&metric).ok_or_else(|| {
-        anyhow::anyhow!(
-            "requested metric {} is not available in the report",
-            metric.as_str()
-        )
-    })?;
+    let totals_by_file = report
+        .totals_by_file
+        .get(&metric)
+        .filter(|totals| totals.values().any(|file_totals| file_totals.total > 0))
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "requested metric {} is not available in the report",
+                metric.as_str()
+            )
+        })?;
 
     let mut covered = 0usize;
     let mut total = 0usize;
@@ -128,5 +132,30 @@ mod tests {
             .expect("changed totals by file");
         assert_eq!(file_totals.covered, 1);
         assert_eq!(file_totals.total, 2);
+    }
+
+    #[test]
+    fn metric_with_only_zero_totals_is_treated_as_unavailable() {
+        let report = CoverageReport {
+            opportunities: Vec::new(),
+            totals_by_file: BTreeMap::from([(
+                MetricKind::Branch,
+                BTreeMap::from([(
+                    PathBuf::from("src/lib.rs"),
+                    FileTotals {
+                        covered: 0,
+                        total: 0,
+                    },
+                )]),
+            )]),
+        };
+
+        let error = compute_changed_metric(&report, &[], MetricKind::Branch)
+            .expect_err("branch metric with only zero totals should be unavailable");
+
+        assert_eq!(
+            error.to_string(),
+            "requested metric branch is not available in the report"
+        );
     }
 }
