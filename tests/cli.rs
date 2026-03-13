@@ -14,6 +14,29 @@ fn fixture_root(name: &str) -> PathBuf {
         .join(name)
 }
 
+fn assert_fixture_has_no_branch_coverage(fixture_name: &str) {
+    fn contains_non_empty_branches(value: &serde_json::Value) -> bool {
+        match value {
+            serde_json::Value::Object(map) => map.iter().any(|(key, nested)| {
+                (key == "branches" && nested.as_array().is_some_and(|items| !items.is_empty()))
+                    || contains_non_empty_branches(nested)
+            }),
+            serde_json::Value::Array(values) => values.iter().any(contains_non_empty_branches),
+            _ => false,
+        }
+    }
+
+    let coverage_json = fixture_root(fixture_name).join("coverage.json");
+    let parsed: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(coverage_json).expect("coverage fixture should be readable"),
+    )
+    .expect("coverage fixture should parse as json");
+    assert!(
+        !contains_non_empty_branches(&parsed),
+        "fixture should not include non-empty branch coverage data"
+    );
+}
+
 #[test]
 fn basic_fail_rust_fixture() {
     let temp = tempdir().expect("tempdir should exist");
@@ -364,6 +387,7 @@ fn uncovered_line_budget_fails_when_exceeded() {
 
 #[test]
 fn branch_threshold_switch_reports_metric_not_available() {
+    assert_fixture_has_no_branch_coverage("basic-fail");
     let temp = tempdir().expect("tempdir should exist");
     let worktree = setup_fixture_worktree(temp.path(), "basic-fail");
     let diff_file = write_worktree_diff(temp.path(), &worktree);
@@ -390,6 +414,7 @@ fn branch_threshold_switch_reports_metric_not_available() {
 
 #[test]
 fn uncovered_branch_budget_switch_reports_metric_not_available() {
+    assert_fixture_has_no_branch_coverage("basic-fail");
     let temp = tempdir().expect("tempdir should exist");
     let worktree = setup_fixture_worktree(temp.path(), "basic-fail");
     let diff_file = write_worktree_diff(temp.path(), &worktree);
