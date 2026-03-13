@@ -1,19 +1,21 @@
-use anyhow::{Result, bail};
+use anyhow::Result;
 
 use crate::model::{ComputedMetric, GateResult, GateRule, RuleOutcome};
 
-pub fn evaluate(metric: ComputedMetric, rules: &[GateRule]) -> Result<GateResult> {
+pub fn evaluate(metrics: Vec<ComputedMetric>, rules: &[GateRule]) -> Result<GateResult> {
     let mut outcomes = Vec::new();
     let mut all_passed = true;
 
     for rule in rules {
-        if rule.metric() != metric.metric {
-            bail!(
-                "configured rule for {} is not supported by the loaded report which provides {}",
-                rule.metric().as_str(),
-                metric.metric.as_str()
-            );
-        }
+        let metric = metrics
+            .iter()
+            .find(|m| m.metric == rule.metric())
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "configured rule for {} is not supported by the loaded report",
+                    rule.metric().as_str()
+                )
+            })?;
 
         let rule_passed = match rule {
             GateRule::Percent {
@@ -37,15 +39,9 @@ pub fn evaluate(metric: ComputedMetric, rules: &[GateRule]) -> Result<GateResult
     }
 
     Ok(GateResult {
-        metric: metric.metric,
-        covered: metric.covered,
-        total: metric.total,
-        percent: metric.percent,
+        metrics,
         rules: outcomes,
         passed: all_passed,
-        uncovered_changed_opportunities: metric.uncovered_changed_opportunities,
-        changed_totals_by_file: metric.changed_totals_by_file,
-        totals_by_file: metric.totals_by_file,
     })
 }
 
@@ -60,7 +56,7 @@ mod tests {
     #[test]
     fn fails_below_percent_threshold() {
         let result = evaluate(
-            ComputedMetric {
+            vec![ComputedMetric {
                 metric: MetricKind::Region,
                 covered: 1,
                 total: 2,
@@ -74,7 +70,7 @@ mod tests {
                         total: 2,
                     },
                 )]),
-            },
+            }],
             &[GateRule::Percent {
                 metric: MetricKind::Region,
                 minimum_percent: 90.0,
@@ -89,7 +85,7 @@ mod tests {
     #[test]
     fn fails_above_uncovered_count_threshold() {
         let result = evaluate(
-            ComputedMetric {
+            vec![ComputedMetric {
                 metric: MetricKind::Region,
                 covered: 1,
                 total: 3,
@@ -116,7 +112,7 @@ mod tests {
                 ],
                 changed_totals_by_file: BTreeMap::new(),
                 totals_by_file: BTreeMap::new(),
-            },
+            }],
             &[GateRule::UncoveredCount {
                 metric: MetricKind::Region,
                 maximum_count: 1,
@@ -131,7 +127,7 @@ mod tests {
     #[test]
     fn multiple_rules_fail_if_any_fails() {
         let result = evaluate(
-            ComputedMetric {
+            vec![ComputedMetric {
                 metric: MetricKind::Region,
                 covered: 9,
                 total: 10,
@@ -147,7 +143,7 @@ mod tests {
                 }],
                 changed_totals_by_file: BTreeMap::new(),
                 totals_by_file: BTreeMap::new(),
-            },
+            }],
             &[
                 GateRule::Percent {
                     metric: MetricKind::Region,
@@ -169,7 +165,7 @@ mod tests {
     #[test]
     fn mismatched_metric_returns_error() {
         let error = evaluate(
-            ComputedMetric {
+            vec![ComputedMetric {
                 metric: MetricKind::Region,
                 covered: 1,
                 total: 2,
@@ -177,7 +173,7 @@ mod tests {
                 uncovered_changed_opportunities: Vec::new(),
                 changed_totals_by_file: BTreeMap::new(),
                 totals_by_file: BTreeMap::new(),
-            },
+            }],
             &[GateRule::Percent {
                 metric: MetricKind::Line,
                 minimum_percent: 90.0,

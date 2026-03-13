@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, path::PathBuf};
 
 use anyhow::{Result, bail};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum MetricKind {
     Region,
     Line,
@@ -32,6 +32,14 @@ impl MetricKind {
             Self::Region => "regions",
             Self::Line => "lines",
             Self::Branch => "branches",
+        }
+    }
+
+    pub fn to_opportunity_kind(self) -> OpportunityKind {
+        match self {
+            Self::Region => OpportunityKind::Region,
+            Self::Line => OpportunityKind::Line,
+            Self::Branch => OpportunityKind::BranchOutcome,
         }
     }
 }
@@ -110,9 +118,8 @@ pub struct CoverageOpportunity {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CoverageReport {
-    pub metric_kind: MetricKind,
     pub opportunities: Vec<CoverageOpportunity>,
-    pub totals_by_file: BTreeMap<PathBuf, FileTotals>,
+    pub totals_by_file: BTreeMap<MetricKind, BTreeMap<PathBuf, FileTotals>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -146,13 +153,7 @@ pub struct ComputedMetric {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct GateResult {
-    pub metric: MetricKind,
-    pub covered: usize,
-    pub total: usize,
-    pub percent: f64,
+    pub metrics: Vec<ComputedMetric>,
     pub rules: Vec<RuleOutcome>,
     pub passed: bool,
-    pub uncovered_changed_opportunities: Vec<CoverageOpportunity>,
-    pub changed_totals_by_file: BTreeMap<PathBuf, FileTotals>,
-    pub totals_by_file: BTreeMap<PathBuf, FileTotals>,
 }

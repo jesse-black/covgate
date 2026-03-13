@@ -26,7 +26,7 @@ pub fn parse_str(input: &str) -> Result<CoverageReport> {
 fn parse_str_with_repo_root(input: &str, repo_root: &Path) -> Result<CoverageReport> {
     let export: LlvmExport = serde_json::from_str(input).context("failed to parse llvm json")?;
     let mut opportunities = Vec::new();
-    let mut totals_by_file = BTreeMap::new();
+    let mut region_totals_by_file = BTreeMap::new();
 
     for data in export.data {
         for file in data.files {
@@ -50,12 +50,14 @@ fn parse_str_with_repo_root(input: &str, repo_root: &Path) -> Result<CoverageRep
                 });
             }
 
-            totals_by_file.insert(path, FileTotals { covered, total });
+            region_totals_by_file.insert(path, FileTotals { covered, total });
         }
     }
 
+    let mut totals_by_file = BTreeMap::new();
+    totals_by_file.insert(MetricKind::Region, region_totals_by_file);
+
     Ok(CoverageReport {
-        metric_kind: MetricKind::Region,
         opportunities,
         totals_by_file,
     })
@@ -176,6 +178,8 @@ mod tests {
         assert!(!report.opportunities[1].covered);
         let totals = report
             .totals_by_file
+            .get(&crate::model::MetricKind::Region)
+            .expect("region metric totals should exist")
             .get(&std::path::PathBuf::from("src/lib.rs"))
             .expect("file totals should exist");
         assert_eq!(totals.covered, 1);
