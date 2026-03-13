@@ -160,6 +160,7 @@ impl LlvmFile {
 
             let start_line = number_at(start, 0)?;
             let end_line = number_at(end, 0)?;
+
             if end_line < start_line {
                 continue;
             }
@@ -189,6 +190,8 @@ impl LlvmFile {
 
             let start_line = number_at(start, 0)?;
             let end_line = number_at(end, 0)?;
+            let end_col = number_at(end, 1)?;
+
             if end_line < start_line {
                 continue;
             }
@@ -202,7 +205,13 @@ impl LlvmFile {
 
             let covered = count > 0;
 
-            for line in start_line..=end_line {
+            let actual_end_line = if end_col <= 1 && end_line > start_line {
+                end_line - 1
+            } else {
+                end_line
+            };
+
+            for line in start_line..=actual_end_line {
                 line_states
                     .entry(line)
                     .and_modify(|e| *e |= covered)
