@@ -229,7 +229,7 @@ fn uncovered_branch_budget_passes_for_branch_capable_fixtures() {
 }
 
 #[test]
-fn uncovered_branch_budget_evaluates_for_branch_capable_fixtures() {
+fn uncovered_branch_budget_fails_for_branch_capable_fixtures() {
     for fixture in branch_capable_fail_fixtures() {
         let temp = tempdir().expect("tempdir should exist");
         let worktree = setup_fixture_worktree(temp.path(), fixture);
@@ -246,9 +246,9 @@ fn uncovered_branch_budget_evaluates_for_branch_capable_fixtures() {
             ],
         );
 
-        assert_eq!(output.status.code(), Some(0), "fixture={}", fixture.id());
+        assert_eq!(output.status.code(), Some(1), "fixture={}", fixture.id());
         let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-        assert!(stdout.contains("Rule fail-uncovered-branches: PASS"));
+        assert!(stdout.contains("Rule fail-uncovered-branches: FAIL"));
     }
 }
 

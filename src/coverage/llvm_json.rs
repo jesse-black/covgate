@@ -274,12 +274,26 @@ impl LlvmFile {
         let mut branches = Vec::new();
         for branch in &self.branches {
             let line_number = number_at(branch, 0)?;
+
+            if branch.len() >= 6 {
+                let true_count = number_at(branch, 4)?;
+                let false_count = number_at(branch, 5)?;
+                branches.push(BranchRecord {
+                    line_number,
+                    covered: true_count > 0,
+                });
+                branches.push(BranchRecord {
+                    line_number,
+                    covered: false_count > 0,
+                });
+                continue;
+            }
+
             let count = number_at(branch, 2)?;
             let has_count = bool_at(branch, 3).unwrap_or(true);
             if !has_count {
                 continue;
             }
-
             branches.push(BranchRecord {
                 line_number,
                 covered: count > 0,
@@ -398,6 +412,42 @@ mod tests {
             .filter(|op| op.kind == crate::model::OpportunityKind::BranchOutcome)
             .collect();
         assert_eq!(branch_opportunities.len(), 2);
+    }
+
+    #[test]
+    fn parses_llvm_branch_tuples_using_true_false_counts() {
+        let input = r#"
+        {
+          "data": [
+            {
+              "files": [
+                {
+                  "filename": "src/lib.rs",
+                  "segments": [
+                    [1, 1, 1, true, false, false],
+                    [2, 1, 0, false, false, false]
+                  ],
+                  "branches": [
+                    [2, 5, 2, 10, 1, 0, 0, 0, 4]
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+        "#;
+
+        let report = parse_str(input).expect("llvm export should parse");
+
+        let branch_totals = report
+            .totals_by_file
+            .get(&crate::model::MetricKind::Branch)
+            .expect("branch totals should be present");
+        let file_totals = branch_totals
+            .get(&PathBuf::from("src/lib.rs"))
+            .expect("branch file totals should be present");
+        assert_eq!(file_totals.covered, 1);
+        assert_eq!(file_totals.total, 2);
     }
 
     #[test]
