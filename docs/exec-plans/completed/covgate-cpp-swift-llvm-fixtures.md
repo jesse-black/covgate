@@ -62,9 +62,9 @@ and see metric-oriented cases reuse Rust, C/C++, and Swift fixtures wherever the
 
 ## Outcomes & Retrospective
 
-At this stage the outcome is a concrete execution plan and an explicit testing philosophy update, not yet implemented fixture code. The important product direction is now documented: language-agnostic LLVM support must be proven with live C/C++ and Swift fixtures, and future CLI test structure should separate metric-matrix coverage from interface-only behavior.
+This plan is now fully implemented and ready to close. The repository now includes live Rust/C++/Swift LLVM fixtures, split CLI integration suites for metric semantics versus command-surface behavior, native-toolchain xtasks for per-fixture and bulk coverage regeneration, and LLVM branch tuple parsing that correctly evaluates branch-gate outcomes.
 
-The main implementation risk is fixture maintenance cost. Live multi-language fixtures can become noisy if every test rebuilds its own language-specific command pipeline independently. This plan reduces that risk by requiring shared helpers, language-specific fixture metadata, and a deliberate split between tests that must iterate across fixtures and tests that should stay single-purpose.
+The remaining maintenance risk is fixture drift as language toolchains evolve. The mitigation in place is to keep checked-in artifacts deterministic and regenerate them deliberately with `cargo xtask regen-fixture-coverage <language>/<scenario>` or `cargo xtask regen-fixture-coverage-all`, followed by `cargo xtask validate` before merging changes.
 
 ## Context and Orientation
 
