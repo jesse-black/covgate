@@ -89,11 +89,11 @@ pub fn pass_fixtures_with_regions() -> Vec<Fixture> {
 }
 
 pub fn branch_capable_fail_fixtures() -> Vec<Fixture> {
-    vec![cpp_basic_fail_fixture(), swift_basic_fail_fixture()]
+    vec![cpp_basic_fail_fixture()]
 }
 
 pub fn branch_capable_pass_fixtures() -> Vec<Fixture> {
-    vec![cpp_basic_pass_fixture(), swift_basic_pass_fixture()]
+    vec![cpp_basic_pass_fixture()]
 }
 
 pub fn assert_fixture_has_no_branch_coverage(fixture: Fixture) {

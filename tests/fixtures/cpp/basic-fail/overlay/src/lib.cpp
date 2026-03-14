@@ -1,4 +1,6 @@
 int add(int a, int b) {
-    int sum = a + b;
-    return sum;
+    if (a > 0) {
+        return a + b;
+    }
+    return a - b;
 }

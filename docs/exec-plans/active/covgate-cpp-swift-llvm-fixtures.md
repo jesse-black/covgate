@@ -246,3 +246,5 @@ Revision note: Updated the plan to make checked-in `coverage.json` artifacts the
 Revision note: Implemented the fixture matrix by adding checked-in C/C++ and Swift LLVM fixtures, splitting CLI integration tests into metric and interface suites with shared helpers, and extending LLVM parsing to ingest branch outcomes so positive branch gating scenarios can run across branch-capable fixtures.
 
 Revision note: Expanded the plan to require xtask-based fixture coverage regeneration for each individual fixture plus a bulk regeneration task, then implemented those xtasks and documented the workflow in `docs/TESTING.md`.
+
+Revision note: Replaced synthetic xtask JSON writing with native-toolchain fixture coverage regeneration that compiles/runs fixture drivers and exports LLVM JSON via `llvm-cov export` for every fixture scenario.

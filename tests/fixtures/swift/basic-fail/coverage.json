@@ -3,19 +3,216 @@
     {
       "files": [
         {
+          "branches": [],
+          "expansions": [],
           "filename": "Sources/CovgateDemo/CovgateDemo.swift",
+          "mcdc_records": [],
           "segments": [
-            [1, 1, 1, true, false, false],
-            [3, 1, 0, true, false, false],
-            [5, 1, 0, true, false, false],
-            [6, 1, 0, false, false, false]
+            [
+              1,
+              44,
+              0,
+              true,
+              true,
+              false
+            ],
+            [
+              2,
+              8,
+              0,
+              true,
+              true,
+              false
+            ],
+            [
+              2,
+              13,
+              0,
+              true,
+              false,
+              false
+            ],
+            [
+              2,
+              14,
+              0,
+              true,
+              true,
+              false
+            ],
+            [
+              4,
+              6,
+              0,
+              true,
+              true,
+              false
+            ],
+            [
+              5,
+              17,
+              0,
+              true,
+              false,
+              false
+            ],
+            [
+              6,
+              2,
+              0,
+              false,
+              false,
+              false
+            ]
           ],
-          "branches": [
-            [1, 8, 1, true],
-            [3, 8, 0, true]
+          "summary": {
+            "branches": {
+              "count": 0,
+              "covered": 0,
+              "notcovered": 0,
+              "percent": 0
+            },
+            "functions": {
+              "count": 1,
+              "covered": 0,
+              "percent": 0
+            },
+            "instantiations": {
+              "count": 1,
+              "covered": 0,
+              "percent": 0
+            },
+            "lines": {
+              "count": 6,
+              "covered": 0,
+              "percent": 0
+            },
+            "mcdc": {
+              "count": 0,
+              "covered": 0,
+              "notcovered": 0,
+              "percent": 0
+            },
+            "regions": {
+              "count": 4,
+              "covered": 0,
+              "notcovered": 4,
+              "percent": 0
+            }
+          }
+        }
+      ],
+      "functions": [
+        {
+          "branches": [],
+          "count": 0,
+          "filenames": [
+            "/workspace/covgate/tests/fixtures/swift/basic-fail/overlay/Sources/CovgateDemo/CovgateDemo.swift"
+          ],
+          "mcdc_records": [],
+          "name": "$s4main3addyS2i_SitF",
+          "regions": [
+            [
+              1,
+              44,
+              6,
+              2,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              2,
+              8,
+              2,
+              13,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              2,
+              14,
+              4,
+              6,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              4,
+              6,
+              5,
+              17,
+              0,
+              0,
+              0,
+              0
+            ]
+          ]
+        },
+        {
+          "branches": [],
+          "count": 1,
+          "filenames": [
+            "/tmp/covgate-xtask-fixture-swift-basic-fail-1773521016994/fixture-bin.swift"
+          ],
+          "mcdc_records": [],
+          "name": "$s4main6RunnerVAAyyFZ",
+          "regions": [
+            [
+              3,
+              24,
+              4,
+              6,
+              1,
+              0,
+              0,
+              0
+            ]
           ]
         }
-      ]
+      ],
+      "totals": {
+        "branches": {
+          "count": 0,
+          "covered": 0,
+          "notcovered": 0,
+          "percent": 0
+        },
+        "functions": {
+          "count": 1,
+          "covered": 0,
+          "percent": 0
+        },
+        "instantiations": {
+          "count": 1,
+          "covered": 0,
+          "percent": 0
+        },
+        "lines": {
+          "count": 6,
+          "covered": 0,
+          "percent": 0
+        },
+        "mcdc": {
+          "count": 0,
+          "covered": 0,
+          "notcovered": 0,
+          "percent": 0
+        },
+        "regions": {
+          "count": 4,
+          "covered": 0,
+          "notcovered": 4,
+          "percent": 0
+        }
+      }
     }
-  ]
+  ],
+  "type": "llvm.coverage.json.export",
+  "version": "2.0.1"
 }

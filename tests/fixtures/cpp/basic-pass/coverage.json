@@ -3,19 +3,276 @@
     {
       "files": [
         {
-          "filename": "src/lib.cpp",
-          "segments": [
-            [1, 1, 1, true, false, false],
-            [3, 1, 1, true, false, false],
-            [5, 1, 0, true, false, false],
-            [6, 1, 0, false, false, false]
-          ],
           "branches": [
-            [1, 5, 1, true],
-            [3, 5, 1, true]
+            [
+              2,
+              9,
+              2,
+              14,
+              1,
+              1,
+              0,
+              0,
+              4
+            ]
+          ],
+          "expansions": [],
+          "filename": "src/lib.cpp",
+          "mcdc_records": [],
+          "segments": [
+            [
+              1,
+              23,
+              2,
+              true,
+              true,
+              false
+            ],
+            [
+              2,
+              9,
+              2,
+              true,
+              true,
+              false
+            ],
+            [
+              2,
+              14,
+              2,
+              true,
+              false,
+              false
+            ],
+            [
+              2,
+              15,
+              1,
+              true,
+              false,
+              true
+            ],
+            [
+              2,
+              16,
+              1,
+              true,
+              true,
+              false
+            ],
+            [
+              4,
+              6,
+              1,
+              true,
+              false,
+              true
+            ],
+            [
+              5,
+              5,
+              1,
+              true,
+              true,
+              false
+            ],
+            [
+              5,
+              17,
+              2,
+              true,
+              false,
+              false
+            ],
+            [
+              6,
+              2,
+              0,
+              false,
+              false,
+              false
+            ]
+          ],
+          "summary": {
+            "branches": {
+              "count": 2,
+              "covered": 2,
+              "notcovered": 0,
+              "percent": 100
+            },
+            "functions": {
+              "count": 1,
+              "covered": 1,
+              "percent": 100
+            },
+            "instantiations": {
+              "count": 1,
+              "covered": 1,
+              "percent": 100
+            },
+            "lines": {
+              "count": 6,
+              "covered": 6,
+              "percent": 100
+            },
+            "mcdc": {
+              "count": 0,
+              "covered": 0,
+              "notcovered": 0,
+              "percent": 0
+            },
+            "regions": {
+              "count": 4,
+              "covered": 4,
+              "notcovered": 0,
+              "percent": 100
+            }
+          }
+        }
+      ],
+      "functions": [
+        {
+          "branches": [
+            [
+              2,
+              9,
+              2,
+              14,
+              1,
+              1,
+              0,
+              0,
+              4
+            ]
+          ],
+          "count": 2,
+          "filenames": [
+            "/workspace/covgate/tests/fixtures/cpp/basic-pass/overlay/src/lib.cpp"
+          ],
+          "mcdc_records": [],
+          "name": "_Z3addii",
+          "regions": [
+            [
+              1,
+              23,
+              6,
+              2,
+              2,
+              0,
+              0,
+              0
+            ],
+            [
+              2,
+              9,
+              2,
+              14,
+              2,
+              0,
+              0,
+              0
+            ],
+            [
+              2,
+              15,
+              2,
+              16,
+              1,
+              0,
+              0,
+              3
+            ],
+            [
+              2,
+              16,
+              4,
+              6,
+              1,
+              0,
+              0,
+              0
+            ],
+            [
+              4,
+              6,
+              5,
+              5,
+              1,
+              0,
+              0,
+              3
+            ],
+            [
+              5,
+              5,
+              5,
+              17,
+              1,
+              0,
+              0,
+              0
+            ]
+          ]
+        },
+        {
+          "branches": [],
+          "count": 1,
+          "filenames": [
+            "/tmp/covgate-xtask-fixture-cpp-basic-pass-1773521016568/fixture-bin.cpp"
+          ],
+          "mcdc_records": [],
+          "name": "main",
+          "regions": [
+            [
+              3,
+              12,
+              7,
+              2,
+              1,
+              0,
+              0,
+              0
+            ]
           ]
         }
-      ]
+      ],
+      "totals": {
+        "branches": {
+          "count": 2,
+          "covered": 2,
+          "notcovered": 0,
+          "percent": 100
+        },
+        "functions": {
+          "count": 1,
+          "covered": 1,
+          "percent": 100
+        },
+        "instantiations": {
+          "count": 1,
+          "covered": 1,
+          "percent": 100
+        },
+        "lines": {
+          "count": 6,
+          "covered": 6,
+          "percent": 100
+        },
+        "mcdc": {
+          "count": 0,
+          "covered": 0,
+          "notcovered": 0,
+          "percent": 0
+        },
+        "regions": {
+          "count": 4,
+          "covered": 4,
+          "notcovered": 0,
+          "percent": 100
+        }
+      }
     }
-  ]
+  ],
+  "type": "llvm.coverage.json.export",
+  "version": "2.0.1"
 }
