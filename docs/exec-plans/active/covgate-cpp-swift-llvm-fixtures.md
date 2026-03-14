@@ -27,6 +27,9 @@ and see metric-oriented cases reuse Rust, C/C++, and Swift fixtures wherever the
 - [x] (2026-03-14 18:05Z) Refactor the current monolithic `tests/cli.rs` coverage into separate metric-focused and interface-focused integration test files with shared helpers.
 - [x] (2026-03-14 18:05Z) Add positive branch-threshold and uncovered-branch-budget CLI tests using the new branch-capable fixtures.
 - [x] (2026-03-14 18:05Z) Re-run the full repository validation stack and confirm the new fixture matrix is stable and documented.
+- [x] (2026-03-14 19:43Z) Update this ExecPlan to require fixture-coverage regeneration xtasks per fixture plus an aggregate xtask for all fixtures.
+- [x] (2026-03-14 19:43Z) Implement xtasks to regenerate `coverage.json` for each individual Rust/C++/Swift fixture and a convenience task that regenerates all fixture coverage artifacts.
+- [x] (2026-03-14 19:43Z) Update `docs/TESTING.md` to document fixture coverage regeneration via xtasks.
 
 ## Surprises & Discoveries
 
@@ -241,3 +244,5 @@ Revision note: Initial plan created to add real C/C++ and Swift LLVM JSON fixtur
 Revision note: Updated the plan to make checked-in `coverage.json` artifacts the default for routine test runs, with regeneration treated as a deliberate fixture-maintenance workflow for speed and determinism.
 
 Revision note: Implemented the fixture matrix by adding checked-in C/C++ and Swift LLVM fixtures, splitting CLI integration tests into metric and interface suites with shared helpers, and extending LLVM parsing to ingest branch outcomes so positive branch gating scenarios can run across branch-capable fixtures.
+
+Revision note: Expanded the plan to require xtask-based fixture coverage regeneration for each individual fixture plus a bulk regeneration task, then implemented those xtasks and documented the workflow in `docs/TESTING.md`.
