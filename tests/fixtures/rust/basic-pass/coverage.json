@@ -3,15 +3,270 @@
     {
       "files": [
         {
+          "branches": [],
+          "expansions": [],
           "filename": "src/lib.rs",
+          "mcdc_records": [],
           "segments": [
-            [1, 1, 1, true, false, false],
-            [3, 1, 1, true, false, false],
-            [5, 1, 0, true, false, false],
-            [6, 1, 0, false, false, false]
+            [
+              1,
+              1,
+              1,
+              true,
+              true,
+              false
+            ],
+            [
+              1,
+              34,
+              0,
+              false,
+              false,
+              false
+            ],
+            [
+              2,
+              9,
+              1,
+              true,
+              true,
+              false
+            ],
+            [
+              2,
+              12,
+              0,
+              false,
+              false,
+              false
+            ],
+            [
+              2,
+              15,
+              1,
+              true,
+              true,
+              false
+            ],
+            [
+              2,
+              20,
+              0,
+              false,
+              false,
+              false
+            ],
+            [
+              3,
+              5,
+              1,
+              true,
+              true,
+              false
+            ],
+            [
+              3,
+              8,
+              0,
+              false,
+              false,
+              false
+            ],
+            [
+              4,
+              1,
+              1,
+              true,
+              true,
+              false
+            ],
+            [
+              4,
+              2,
+              0,
+              false,
+              false,
+              false
+            ]
+          ],
+          "summary": {
+            "branches": {
+              "count": 0,
+              "covered": 0,
+              "notcovered": 0,
+              "percent": 0
+            },
+            "functions": {
+              "count": 1,
+              "covered": 1,
+              "percent": 100
+            },
+            "instantiations": {
+              "count": 1,
+              "covered": 1,
+              "percent": 100
+            },
+            "lines": {
+              "count": 4,
+              "covered": 4,
+              "percent": 100
+            },
+            "mcdc": {
+              "count": 0,
+              "covered": 0,
+              "notcovered": 0,
+              "percent": 0
+            },
+            "regions": {
+              "count": 5,
+              "covered": 5,
+              "notcovered": 0,
+              "percent": 100
+            }
+          }
+        }
+      ],
+      "functions": [
+        {
+          "branches": [],
+          "count": 1,
+          "filenames": [
+            "/tmp/covgate-xtask-fixture-rust-basic-pass-1773521015607/fixture-bin.rs"
+          ],
+          "mcdc_records": [],
+          "name": "_RNvCshL1edWnrYPx_11fixture_bin4main",
+          "regions": [
+            [
+              5,
+              1,
+              5,
+              10,
+              1,
+              0,
+              0,
+              0
+            ],
+            [
+              6,
+              13,
+              6,
+              35,
+              1,
+              0,
+              0,
+              0
+            ],
+            [
+              7,
+              1,
+              7,
+              2,
+              1,
+              0,
+              0,
+              0
+            ]
+          ]
+        },
+        {
+          "branches": [],
+          "count": 1,
+          "filenames": [
+            "/workspace/covgate/tests/fixtures/rust/basic-pass/overlay/src/lib.rs"
+          ],
+          "mcdc_records": [],
+          "name": "_RNvNtCshL1edWnrYPx_11fixture_bin11fixture_lib3add",
+          "regions": [
+            [
+              1,
+              1,
+              1,
+              34,
+              1,
+              0,
+              0,
+              0
+            ],
+            [
+              2,
+              9,
+              2,
+              12,
+              1,
+              0,
+              0,
+              0
+            ],
+            [
+              2,
+              15,
+              2,
+              20,
+              1,
+              0,
+              0,
+              0
+            ],
+            [
+              3,
+              5,
+              3,
+              8,
+              1,
+              0,
+              0,
+              0
+            ],
+            [
+              4,
+              1,
+              4,
+              2,
+              1,
+              0,
+              0,
+              0
+            ]
           ]
         }
-      ]
+      ],
+      "totals": {
+        "branches": {
+          "count": 0,
+          "covered": 0,
+          "notcovered": 0,
+          "percent": 0
+        },
+        "functions": {
+          "count": 1,
+          "covered": 1,
+          "percent": 100
+        },
+        "instantiations": {
+          "count": 1,
+          "covered": 1,
+          "percent": 100
+        },
+        "lines": {
+          "count": 4,
+          "covered": 4,
+          "percent": 100
+        },
+        "mcdc": {
+          "count": 0,
+          "covered": 0,
+          "notcovered": 0,
+          "percent": 0
+        },
+        "regions": {
+          "count": 5,
+          "covered": 5,
+          "notcovered": 0,
+          "percent": 100
+        }
+      }
     }
-  ]
+  ],
+  "type": "llvm.coverage.json.export",
+  "version": "2.0.1"
 }

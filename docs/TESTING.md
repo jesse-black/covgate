@@ -30,6 +30,10 @@ Always test each feature against **live scenarios** in addition to unit tests.
   - JS/TS: `vitest run --coverage`
 - Prefer copied-fixture integration tests that assert both CLI behavior and repository state invariants (diff shape, file normalization, and idempotent reruns).
 - Prefer checking generated coverage artifacts such as `coverage.json` into the fixture directory for normal test runs. Regenerate them deliberately when the fixture project or expected report shape changes, but do not require every `cargo test` run to rebuild every language fixture from scratch.
+- Regenerate fixture coverage artifacts through xtasks so fixture JSON shape stays consistent across languages. These xtasks must invoke native language toolchains (`rustc`/LLVM tools, `clang++`, and `swiftc`) and `llvm-cov export`; they must not hand-author coverage JSON payloads.
+  - Individual fixture: `cargo xtask regen-fixture-coverage <language>/<scenario>` (examples: `rust/basic-fail`, `cpp/basic-pass`, `swift/basic-fail`)
+  - All fixtures: `cargo xtask regen-fixture-coverage-all`
+  - After regenerating fixture artifacts, rerun the affected integration test file(s) and then `cargo xtask validate`.
 
 ## CLI Coverage Requirement
 

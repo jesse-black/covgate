@@ -5,28 +5,12 @@
         {
           "branches": [],
           "expansions": [],
-          "filename": "src/lib.rs",
+          "filename": "Sources/CovgateDemo/CovgateDemo.swift",
           "mcdc_records": [],
           "segments": [
             [
               1,
-              1,
-              0,
-              true,
-              true,
-              false
-            ],
-            [
-              1,
-              34,
-              0,
-              false,
-              false,
-              false
-            ],
-            [
-              2,
-              9,
+              44,
               0,
               true,
               true,
@@ -34,47 +18,23 @@
             ],
             [
               2,
-              12,
-              0,
-              false,
-              false,
-              false
-            ],
-            [
-              2,
-              15,
-              0,
-              true,
-              true,
-              false
-            ],
-            [
-              2,
-              20,
-              0,
-              false,
-              false,
-              false
-            ],
-            [
-              3,
-              5,
-              0,
-              true,
-              true,
-              false
-            ],
-            [
-              3,
               8,
               0,
-              false,
+              true,
+              true,
+              false
+            ],
+            [
+              2,
+              13,
+              0,
+              true,
               false,
               false
             ],
             [
-              4,
-              1,
+              2,
+              14,
               0,
               true,
               true,
@@ -82,6 +42,22 @@
             ],
             [
               4,
+              6,
+              0,
+              true,
+              true,
+              false
+            ],
+            [
+              5,
+              17,
+              0,
+              true,
+              false,
+              false
+            ],
+            [
+              6,
               2,
               0,
               false,
@@ -107,7 +83,7 @@
               "percent": 0
             },
             "lines": {
-              "count": 4,
+              "count": 6,
               "covered": 0,
               "percent": 0
             },
@@ -118,9 +94,9 @@
               "percent": 0
             },
             "regions": {
-              "count": 5,
+              "count": 4,
               "covered": 0,
-              "notcovered": 5,
+              "notcovered": 4,
               "percent": 0
             }
           }
@@ -129,29 +105,49 @@
       "functions": [
         {
           "branches": [],
-          "count": 1,
+          "count": 0,
           "filenames": [
-            "/tmp/covgate-xtask-fixture-rust-basic-fail-1773521015047/fixture-bin.rs"
+            "/workspace/covgate/tests/fixtures/swift/basic-fail/overlay/Sources/CovgateDemo/CovgateDemo.swift"
           ],
           "mcdc_records": [],
-          "name": "_RNvCshL1edWnrYPx_11fixture_bin4main",
+          "name": "$s4main3addyS2i_SitF",
           "regions": [
             [
-              5,
               1,
-              5,
-              10,
-              1,
+              44,
+              6,
+              2,
+              0,
               0,
               0,
               0
             ],
             [
-              6,
-              1,
-              6,
               2,
-              1,
+              8,
+              2,
+              13,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              2,
+              14,
+              4,
+              6,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              4,
+              6,
+              5,
+              17,
+              0,
               0,
               0,
               0
@@ -160,59 +156,19 @@
         },
         {
           "branches": [],
-          "count": 0,
+          "count": 1,
           "filenames": [
-            "/workspace/covgate/tests/fixtures/rust/basic-fail/overlay/src/lib.rs"
+            "/tmp/covgate-xtask-fixture-swift-basic-fail-1773521016994/fixture-bin.swift"
           ],
           "mcdc_records": [],
-          "name": "_RNvNtCshL1edWnrYPx_11fixture_bin11fixture_lib3add",
+          "name": "$s4main6RunnerVAAyyFZ",
           "regions": [
             [
-              1,
-              1,
-              1,
-              34,
-              0,
-              0,
-              0,
-              0
-            ],
-            [
-              2,
-              9,
-              2,
-              12,
-              0,
-              0,
-              0,
-              0
-            ],
-            [
-              2,
-              15,
-              2,
-              20,
-              0,
-              0,
-              0,
-              0
-            ],
-            [
               3,
-              5,
-              3,
-              8,
-              0,
-              0,
-              0,
-              0
-            ],
-            [
+              24,
               4,
+              6,
               1,
-              4,
-              2,
-              0,
               0,
               0,
               0
@@ -238,7 +194,7 @@
           "percent": 0
         },
         "lines": {
-          "count": 4,
+          "count": 6,
           "covered": 0,
           "percent": 0
         },
@@ -249,9 +205,9 @@
           "percent": 0
         },
         "regions": {
-          "count": 5,
+          "count": 4,
           "covered": 0,
-          "notcovered": 5,
+          "notcovered": 4,
           "percent": 0
         }
       }

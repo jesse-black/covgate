@@ -28,6 +28,7 @@ fn parse_str_with_repo_root(input: &str, repo_root: &Path) -> Result<CoverageRep
     let mut opportunities = Vec::new();
     let mut region_totals_by_file = BTreeMap::new();
     let mut line_totals_by_file = BTreeMap::new();
+    let mut branch_totals_by_file = BTreeMap::new();
 
     for data in export.data {
         for file in data.files {
@@ -80,10 +81,39 @@ fn parse_str_with_repo_root(input: &str, repo_root: &Path) -> Result<CoverageRep
 
             if line_total > 0 {
                 line_totals_by_file.insert(
-                    path,
+                    path.clone(),
                     FileTotals {
                         covered: line_covered,
                         total: line_total,
+                    },
+                );
+            }
+
+            let mut branch_covered = 0usize;
+            let mut branch_total = 0usize;
+
+            for branch in file.parse_branches()? {
+                branch_total += 1;
+                if branch.covered {
+                    branch_covered += 1;
+                }
+                opportunities.push(CoverageOpportunity {
+                    kind: OpportunityKind::BranchOutcome,
+                    span: SourceSpan {
+                        path: path.clone(),
+                        start_line: branch.line_number,
+                        end_line: branch.line_number,
+                    },
+                    covered: branch.covered,
+                });
+            }
+
+            if branch_total > 0 {
+                branch_totals_by_file.insert(
+                    path,
+                    FileTotals {
+                        covered: branch_covered,
+                        total: branch_total,
                     },
                 );
             }
@@ -96,6 +126,9 @@ fn parse_str_with_repo_root(input: &str, repo_root: &Path) -> Result<CoverageRep
     }
     if !line_totals_by_file.is_empty() {
         totals_by_file.insert(MetricKind::Line, line_totals_by_file);
+    }
+    if !branch_totals_by_file.is_empty() {
+        totals_by_file.insert(MetricKind::Branch, branch_totals_by_file);
     }
 
     Ok(CoverageReport {
@@ -135,6 +168,8 @@ struct LlvmFile {
     filename: String,
     #[serde(default)]
     segments: Vec<Vec<serde_json::Value>>,
+    #[serde(default)]
+    branches: Vec<Vec<serde_json::Value>>,
 }
 
 #[derive(Debug)]
@@ -147,6 +182,12 @@ struct LineRecord {
 struct RegionRecord {
     start_line: u32,
     end_line: u32,
+    covered: bool,
+}
+
+#[derive(Debug)]
+struct BranchRecord {
+    line_number: u32,
     covered: bool,
 }
 
@@ -228,6 +269,39 @@ impl LlvmFile {
         }
         Ok(lines)
     }
+
+    fn parse_branches(&self) -> Result<Vec<BranchRecord>> {
+        let mut branches = Vec::new();
+        for branch in &self.branches {
+            let line_number = number_at(branch, 0)?;
+
+            if branch.len() >= 6 {
+                let true_count = number_at(branch, 4)?;
+                let false_count = number_at(branch, 5)?;
+                branches.push(BranchRecord {
+                    line_number,
+                    covered: true_count > 0,
+                });
+                branches.push(BranchRecord {
+                    line_number,
+                    covered: false_count > 0,
+                });
+                continue;
+            }
+
+            let count = number_at(branch, 2)?;
+            let has_count = bool_at(branch, 3).unwrap_or(true);
+            if !has_count {
+                continue;
+            }
+            branches.push(BranchRecord {
+                line_number,
+                covered: count > 0,
+            });
+        }
+
+        Ok(branches)
+    }
 }
 
 fn number_at(values: &[serde_json::Value], index: usize) -> Result<u32> {
@@ -294,6 +368,125 @@ mod tests {
             .expect("file totals should exist");
         assert_eq!(line_totals.covered, 2);
         assert_eq!(line_totals.total, 4);
+    }
+
+    #[test]
+    fn parses_branch_metrics_when_branches_are_present() {
+        let input = r#"
+        {
+          "data": [
+            {
+              "files": [
+                {
+                  "filename": "src/lib.rs",
+                  "segments": [
+                    [1, 1, 1, true, false, false],
+                    [2, 1, 0, false, false, false]
+                  ],
+                  "branches": [
+                    [1, 1, 1, true],
+                    [1, 5, 0, true]
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+        "#;
+
+        let report = parse_str(input).expect("llvm export should parse");
+
+        let branch_totals = report
+            .totals_by_file
+            .get(&crate::model::MetricKind::Branch)
+            .expect("branch totals should be present");
+        let file_totals = branch_totals
+            .get(&PathBuf::from("src/lib.rs"))
+            .expect("branch file totals should be present");
+        assert_eq!(file_totals.covered, 1);
+        assert_eq!(file_totals.total, 2);
+
+        let branch_opportunities: Vec<_> = report
+            .opportunities
+            .iter()
+            .filter(|op| op.kind == crate::model::OpportunityKind::BranchOutcome)
+            .collect();
+        assert_eq!(branch_opportunities.len(), 2);
+    }
+
+    #[test]
+    fn parses_llvm_branch_tuples_using_true_false_counts() {
+        let input = r#"
+        {
+          "data": [
+            {
+              "files": [
+                {
+                  "filename": "src/lib.rs",
+                  "segments": [
+                    [1, 1, 1, true, false, false],
+                    [2, 1, 0, false, false, false]
+                  ],
+                  "branches": [
+                    [2, 5, 2, 10, 1, 0, 0, 0, 4]
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+        "#;
+
+        let report = parse_str(input).expect("llvm export should parse");
+
+        let branch_totals = report
+            .totals_by_file
+            .get(&crate::model::MetricKind::Branch)
+            .expect("branch totals should be present");
+        let file_totals = branch_totals
+            .get(&PathBuf::from("src/lib.rs"))
+            .expect("branch file totals should be present");
+        assert_eq!(file_totals.covered, 1);
+        assert_eq!(file_totals.total, 2);
+    }
+
+    #[test]
+    fn parses_legacy_branch_entries_and_skips_has_count_false() {
+        let input = r#"
+        {
+          "data": [
+            {
+              "files": [
+                {
+                  "filename": "src/lib.rs",
+                  "segments": [
+                    [1, 1, 1, true, false, false],
+                    [2, 1, 0, false, false, false]
+                  ],
+                  "branches": [
+                    [2, 1, 0, false],
+                    [3, 1, 1, true]
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+        "#;
+
+        let report = parse_str(input).expect("llvm export should parse");
+
+        let branch_totals = report
+            .totals_by_file
+            .get(&crate::model::MetricKind::Branch)
+            .expect("branch totals should be present");
+        let file_totals = branch_totals
+            .get(&PathBuf::from("src/lib.rs"))
+            .expect("branch file totals should be present");
+
+        // The first legacy entry is skipped because has_count=false.
+        assert_eq!(file_totals.covered, 1);
+        assert_eq!(file_totals.total, 1);
     }
 
     #[test]
