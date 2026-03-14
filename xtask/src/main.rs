@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::process::Stdio;
 
 use anyhow::{Context, Result, bail};
 
@@ -54,20 +55,25 @@ fn validate() -> Result<()> {
         ],
     )?;
 
-    let base_ref = resolve_base_ref()?;
-    run(
-        "cargo",
-        &[
-            "run",
-            "--bin",
-            "covgate",
-            "--",
-            "--coverage-json",
-            coverage_json_str,
-            "--base",
-            &base_ref,
-        ],
-    )?;
+    if let Some(base_ref) = resolve_base_ref() {
+        run(
+            "cargo",
+            &[
+                "run",
+                "--bin",
+                "covgate",
+                "--",
+                "--coverage-json",
+                coverage_json_str,
+                "--base",
+                &base_ref,
+            ],
+        )?;
+    } else {
+        eprintln!(
+            "warning: skipping covgate dogfooding step; no suitable git base ref was found in this environment"
+        );
+    }
 
     run("cargo-machete", &["."])?;
     run("cargo-deny", &["check"])?;
@@ -537,14 +543,51 @@ fn project_root() -> Result<PathBuf> {
     Ok(root.to_path_buf())
 }
 
-fn resolve_base_ref() -> Result<String> {
-    for candidate in ["origin/main", "origin/master", "main", "master", "HEAD~1"] {
+fn resolve_base_ref() -> Option<String> {
+    for candidate in ["origin/main", "origin/master", "main", "master"] {
         if git_ref_exists(candidate) {
-            return Ok(candidate.to_owned());
+            return Some(candidate.to_owned());
         }
     }
 
-    bail!("unable to resolve a usable git base reference for covgate dogfooding")
+    fetch_probable_default_branches();
+
+    for candidate in [
+        "origin/main",
+        "origin/master",
+        "refs/remotes/origin/main",
+        "refs/remotes/origin/master",
+        "main",
+        "master",
+    ] {
+        if git_ref_exists(candidate) {
+            return Some(candidate.to_owned());
+        }
+    }
+
+    None
+}
+
+fn fetch_probable_default_branches() {
+    for branch in ["main", "master"] {
+        let _ = Command::new("git")
+            .args([
+                "fetch",
+                "--no-tags",
+                "--depth=200",
+                "origin",
+                &format!("{branch}:refs/remotes/origin/{branch}"),
+            ])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
+
+    let _ = Command::new("git")
+        .args(["fetch", "--no-tags", "--depth=200", "origin"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
 }
 
 fn git_ref_exists(reference: &str) -> bool {
