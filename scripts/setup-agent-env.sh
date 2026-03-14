@@ -25,6 +25,41 @@ need_cmd() {
 	! command -v "$cmd" >/dev/null 2>&1
 }
 
+linux_id_version() {
+	if [[ -r /etc/os-release ]]; then
+		# shellcheck disable=SC1091
+		. /etc/os-release
+		if [[ -n "${ID:-}" && -n "${VERSION_ID:-}" ]]; then
+			echo "$ID:$VERSION_ID"
+			return 0
+		fi
+	fi
+
+	return 1
+}
+
+microsoft_prod_deb_url() {
+	local id version
+	local id_version
+	id_version="$(linux_id_version || true)"
+
+	if [[ -z "$id_version" ]]; then
+		return 1
+	fi
+
+	id="${id_version%%:*}"
+	version="${id_version##*:}"
+
+	case "$id" in
+	ubuntu | debian)
+		echo "https://packages.microsoft.com/config/${id}/${version}/packages-microsoft-prod.deb"
+		return 0
+		;;
+	esac
+
+	return 1
+}
+
 ensure_fd_command() {
 	if need_cmd fd && ! need_cmd fdfind; then
 		local fdfind_path
@@ -46,9 +81,15 @@ ensure_cargo_tool() {
 	fi
 }
 
+has_pkg() {
+	local pkg="$1"
+	printf '%s\n' "${APT_PACKAGES[@]}" | grep -qx "$pkg"
+}
+
 APT_PACKAGES=()
 
 # Useful agentic tooling
+need_cmd dotnet && APT_PACKAGES+=(dotnet-sdk-10.0)
 need_cmd jq && APT_PACKAGES+=(jq)
 need_cmd rg && APT_PACKAGES+=(ripgrep)
 need_cmd yq && APT_PACKAGES+=(yq)
@@ -58,6 +99,23 @@ need_cmd shellcheck && APT_PACKAGES+=(shellcheck)
 need_cmd shfmt && APT_PACKAGES+=(shfmt)
 
 if ((${#APT_PACKAGES[@]} > 0)); then
+	$SUDO mkdir -p /etc/apt/keyrings
+
+	if has_pkg dotnet-sdk-10.0; then
+		if [[ ! -f /etc/apt/sources.list.d/microsoft-prod.list ]]; then
+			local_ms_prod_url="$(microsoft_prod_deb_url || true)"
+			if [[ -z "${local_ms_prod_url}" ]]; then
+				echo "Unable to derive Microsoft package bootstrap URL for this distro." >&2
+				exit 1
+			fi
+
+			tmp_deb="$(mktemp)"
+			curl -fsSL "${local_ms_prod_url}" -o "${tmp_deb}"
+			$SUDO dpkg -i "${tmp_deb}"
+			rm -f "${tmp_deb}"
+		fi
+	fi
+
 	$SUDO apt-get update
 	$SUDO apt-get install -y --no-install-recommends "${APT_PACKAGES[@]}"
 	echo "${SETUP_LABEL}: installed apt packages: ${APT_PACKAGES[*]}"

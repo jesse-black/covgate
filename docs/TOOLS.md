@@ -10,6 +10,7 @@ See `docs/reference/environment-execution-contexts.md` for deeper rationale, sou
 
 - Core CLI/build tools: `jq`, `ripgrep`, `yq`, `fd` (via `fd-find` + symlink), `eza`
 - Shell tooling: `shellcheck`, `shfmt`
+- .NET workflows: `dotnet` SDK
 - Rust workflows: `cargo llvm-cov`, `cargo-machete`, `cargo-deny` (plus `llvm-tools-preview` via `rustup component add` when `rustup` is present)
 
 ### Available in devcontainer

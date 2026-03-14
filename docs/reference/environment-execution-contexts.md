@@ -33,6 +33,7 @@ Tooling included in the shared setup implementation behind `scripts/setup-codex-
 The setup scripts should only include tools that are needed for covgate workflows and are not already reliably provided by Codex Cloud or Jules integrations, or their respective base images.
 They should also prefer distribution-derived values (for example, codename detection from `/etc/os-release`) over hardcoded repository codenames so the bootstrap remains portable as base images evolve.
 The repository now keeps a single setup implementation with thin per-environment wrappers so both environments stay in sync while preserving distinct entrypoints for platform configuration.
+That shared setup now also bootstraps the Microsoft apt feed when needed so `.NET` SDK installation remains portable across supported Debian/Ubuntu images.
 
 ## Tool-selection rationale by environment
 
