@@ -88,6 +88,15 @@ has_pkg() {
 
 APT_PACKAGES=()
 
+# Build and coverage tooling for fixture projects.
+need_cmd cc && APT_PACKAGES+=(build-essential)
+need_cmd c++ && ! has_pkg build-essential && APT_PACKAGES+=(build-essential)
+need_cmd cmake && APT_PACKAGES+=(cmake)
+need_cmd ninja && APT_PACKAGES+=(ninja-build)
+need_cmd clang && APT_PACKAGES+=(clang)
+need_cmd llvm-cov && APT_PACKAGES+=(llvm)
+need_cmd llvm-profdata && ! has_pkg llvm && APT_PACKAGES+=(llvm)
+
 # Useful agentic tooling
 need_cmd dotnet && APT_PACKAGES+=(dotnet-sdk-10.0)
 need_cmd jq && APT_PACKAGES+=(jq)

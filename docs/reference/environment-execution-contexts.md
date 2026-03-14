@@ -34,6 +34,7 @@ The setup scripts should only include tools that are needed for covgate workflow
 They should also prefer distribution-derived values (for example, codename detection from `/etc/os-release`) over hardcoded repository codenames so the bootstrap remains portable as base images evolve.
 The repository now keeps a single setup implementation with thin per-environment wrappers so both environments stay in sync while preserving distinct entrypoints for platform configuration.
 That shared setup now also bootstraps the Microsoft apt feed when needed so `.NET` SDK installation remains portable across supported Debian/Ubuntu images.
+It also explicitly installs the Clang and LLVM command-line tools needed to generate LLVM coverage JSON for future C/C++ fixtures instead of assuming those binaries are present in the base image.
 
 ## Tool-selection rationale by environment
 

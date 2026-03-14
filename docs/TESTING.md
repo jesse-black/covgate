@@ -23,6 +23,7 @@ Always test each feature against **live scenarios** in addition to unit tests.
 - Use temporary directories and initialize/manipulate real Git repositories during tests.
 - Use real language projects under `tests/fixtures/` as scenario inputs rather than synthetic-only mocks.
 - Generate live coverage artifacts with each ecosystem's native tooling, for example:
+  - C/C++: compile and test with Clang source-based coverage, merge with `llvm-profdata`, export with `llvm-cov export`
   - .NET: `dotnet test --collect:"XPlat Code Coverage"`
   - Rust: `cargo llvm-cov`
   - JS/TS: `vitest run --coverage`
