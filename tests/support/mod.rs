@@ -72,6 +72,20 @@ pub fn swift_basic_pass_fixture() -> Fixture {
     }
 }
 
+pub fn dotnet_basic_fail_fixture() -> Fixture {
+    Fixture {
+        language: "dotnet",
+        name: "basic-fail",
+    }
+}
+
+pub fn dotnet_basic_pass_fixture() -> Fixture {
+    Fixture {
+        language: "dotnet",
+        name: "basic-pass",
+    }
+}
+
 pub fn fail_fixtures_with_regions() -> Vec<Fixture> {
     vec![
         rust_basic_fail_fixture(),
@@ -89,11 +103,23 @@ pub fn pass_fixtures_with_regions() -> Vec<Fixture> {
 }
 
 pub fn branch_capable_fail_fixtures() -> Vec<Fixture> {
-    vec![cpp_basic_fail_fixture()]
+    vec![cpp_basic_fail_fixture(), dotnet_basic_fail_fixture()]
 }
 
 pub fn branch_capable_pass_fixtures() -> Vec<Fixture> {
-    vec![cpp_basic_pass_fixture()]
+    vec![cpp_basic_pass_fixture(), dotnet_basic_pass_fixture()]
+}
+
+pub fn fail_fixtures_with_lines() -> Vec<Fixture> {
+    let mut fixtures = fail_fixtures_with_regions();
+    fixtures.push(dotnet_basic_fail_fixture());
+    fixtures
+}
+
+pub fn pass_fixtures_with_lines() -> Vec<Fixture> {
+    let mut fixtures = pass_fixtures_with_regions();
+    fixtures.push(dotnet_basic_pass_fixture());
+    fixtures
 }
 
 pub fn assert_fixture_has_no_branch_coverage(fixture: Fixture) {
@@ -163,6 +189,7 @@ pub fn write_absolute_path_coverage_fixture(fixture: Fixture, worktree: &Path, d
     let template = fixture.coverage_json();
     let relative_source = match fixture.language {
         "swift" => "Sources/CovgateDemo/CovgateDemo.swift",
+        "dotnet" => "src/CovgateDemo/MathOps.cs",
         _ => "src/lib.rs",
     };
     let absolute_source_path = worktree.join(relative_source);

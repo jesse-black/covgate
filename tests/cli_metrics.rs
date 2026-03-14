@@ -4,8 +4,9 @@ use tempfile::tempdir;
 
 use crate::support::{
     assert_fixture_has_no_branch_coverage, branch_capable_fail_fixtures,
-    branch_capable_pass_fixtures, fail_fixtures_with_regions, pass_fixtures_with_regions,
-    run_covgate, rust_basic_fail_fixture, setup_fixture_worktree, write_worktree_diff,
+    branch_capable_pass_fixtures, fail_fixtures_with_lines, fail_fixtures_with_regions,
+    pass_fixtures_with_lines, pass_fixtures_with_regions, run_covgate, rust_basic_fail_fixture,
+    setup_fixture_worktree, write_worktree_diff,
 };
 
 #[test]
@@ -107,7 +108,7 @@ fn uncovered_regions_budget_fails_when_exceeded() {
 
 #[test]
 fn line_threshold_fails_when_below_threshold() {
-    for fixture in fail_fixtures_with_regions() {
+    for fixture in fail_fixtures_with_lines() {
         let temp = tempdir().expect("tempdir should exist");
         let worktree = setup_fixture_worktree(temp.path(), fixture);
         let diff_file = write_worktree_diff(temp.path(), &worktree);
@@ -132,7 +133,7 @@ fn line_threshold_fails_when_below_threshold() {
 
 #[test]
 fn uncovered_line_budget_fails_when_exceeded() {
-    for fixture in fail_fixtures_with_regions() {
+    for fixture in fail_fixtures_with_lines() {
         let temp = tempdir().expect("tempdir should exist");
         let worktree = setup_fixture_worktree(temp.path(), fixture);
         let diff_file = write_worktree_diff(temp.path(), &worktree);
@@ -151,6 +152,30 @@ fn uncovered_line_budget_fails_when_exceeded() {
         assert_eq!(output.status.code(), Some(1), "fixture={}", fixture.id());
         let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
         assert!(stdout.contains("Rule fail-uncovered-lines: FAIL"));
+    }
+}
+
+#[test]
+fn line_threshold_passes_for_all_pass_fixtures() {
+    for fixture in pass_fixtures_with_lines() {
+        let temp = tempdir().expect("tempdir should exist");
+        let worktree = setup_fixture_worktree(temp.path(), fixture);
+        let diff_file = write_worktree_diff(temp.path(), &worktree);
+
+        let output = run_covgate(
+            &worktree,
+            fixture,
+            &[
+                "--diff-file".to_string(),
+                diff_file.to_string_lossy().into_owned(),
+                "--fail-under-lines".to_string(),
+                "90".to_string(),
+            ],
+        );
+
+        assert_eq!(output.status.code(), Some(0), "fixture={}", fixture.id());
+        let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+        assert!(stdout.contains("Rule fail-under-lines: PASS"));
     }
 }
 

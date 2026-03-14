@@ -81,6 +81,7 @@ enum FixtureToolchain {
     Rust,
     Cpp,
     Swift,
+    Dotnet,
 }
 
 #[derive(Clone, Copy)]
@@ -135,6 +136,18 @@ const FIXTURE_COVERAGE_SPECS: &[FixtureCoverageSpec] = &[
         toolchain: FixtureToolchain::Swift,
         run_mode: RunMode::PositiveAndNegative,
     },
+    FixtureCoverageSpec {
+        id: "dotnet/basic-fail",
+        source_file: "src/CovgateDemo/MathOps.cs",
+        toolchain: FixtureToolchain::Dotnet,
+        run_mode: RunMode::NoCalls,
+    },
+    FixtureCoverageSpec {
+        id: "dotnet/basic-pass",
+        source_file: "src/CovgateDemo/MathOps.cs",
+        toolchain: FixtureToolchain::Dotnet,
+        run_mode: RunMode::NoCalls,
+    },
 ];
 
 fn regen_fixture_coverage(fixture_id: &str) -> Result<()> {
@@ -153,6 +166,10 @@ fn regen_fixture_coverage_all() -> Result<()> {
 }
 
 fn write_fixture_coverage(spec: &FixtureCoverageSpec) -> Result<()> {
+    if matches!(spec.toolchain, FixtureToolchain::Dotnet) {
+        return write_dotnet_fixture_coverage(spec);
+    }
+
     let repo_root = project_root()?;
     let source_path = repo_root
         .join("tests")
@@ -244,7 +261,48 @@ fn build_fixture_binary(
         FixtureToolchain::Rust => build_rust_fixture_binary(spec, source_path, binary_path),
         FixtureToolchain::Cpp => build_cpp_fixture_binary(spec, source_path, binary_path),
         FixtureToolchain::Swift => build_swift_fixture_binary(spec, source_path, binary_path),
+        FixtureToolchain::Dotnet => {
+            bail!("dotnet fixtures do not support llvm fixture binary generation")
+        }
     }
+}
+
+fn write_dotnet_fixture_coverage(spec: &FixtureCoverageSpec) -> Result<()> {
+    let repo_root = project_root()?;
+    let fixture_root = repo_root.join("tests").join("fixtures").join(spec.id);
+    let temp_dir = std::env::temp_dir().join(format!(
+        "covgate-xtask-fixture-{}-{}",
+        spec.id.replace('/', "-"),
+        chrono_like_timestamp()
+    ));
+    std::fs::create_dir_all(&temp_dir)
+        .with_context(|| format!("failed to create temp dir: {}", temp_dir.display()))?;
+
+    copy_tree(&fixture_root.join("repo"), &temp_dir)?;
+    copy_tree(&fixture_root.join("overlay"), &temp_dir)?;
+
+    let test_project = temp_dir
+        .join("tests")
+        .join("CovgateDemo.Tests")
+        .join("CovgateDemo.Tests.csproj");
+    run(
+        "dotnet",
+        &[
+            "test",
+            test_project
+                .to_str()
+                .context("dotnet test project path contained non-utf8 characters")?,
+            "--collect:XPlat Code Coverage;Format=json",
+        ],
+    )?;
+
+    let raw_coverage = find_coverage_json(&temp_dir)?;
+    let output_path = fixture_root.join("coverage.json");
+    normalize_coverlet_coverage(&raw_coverage, spec.source_file, &output_path)?;
+
+    std::fs::remove_dir_all(&temp_dir).ok();
+    eprintln!("updated {}", output_path.display());
+    Ok(())
 }
 
 fn build_rust_fixture_binary(
@@ -391,6 +449,84 @@ fn normalize_exported_coverage(exported: &Path, source_file: &str, output: &Path
     let pretty = serde_json::to_string_pretty(&value).context("failed to format json")?;
     std::fs::write(output, format!("{pretty}\n"))
         .with_context(|| format!("failed to write fixture coverage: {}", output.display()))
+}
+
+fn normalize_coverlet_coverage(raw: &Path, source_file: &str, output: &Path) -> Result<()> {
+    let text = std::fs::read_to_string(raw)
+        .with_context(|| format!("failed to read raw coverlet json: {}", raw.display()))?;
+    let mut modules: serde_json::Map<String, serde_json::Value> =
+        serde_json::from_str(&text).context("failed to parse coverlet json")?;
+
+    for module in modules.values_mut() {
+        let Some(files) = module.as_object_mut() else {
+            continue;
+        };
+        let mut rewritten = serde_json::Map::new();
+        for (file, value) in std::mem::take(files) {
+            let normalized = file.replace('\\', "/");
+            let key = if normalized.ends_with(source_file) {
+                source_file.to_string()
+            } else {
+                normalized
+            };
+            rewritten.insert(key, value);
+        }
+        *files = rewritten;
+    }
+
+    let pretty = serde_json::to_string_pretty(&modules).context("failed to format json")?;
+    std::fs::write(output, format!("{pretty}\n"))
+        .with_context(|| format!("failed to write fixture coverage: {}", output.display()))
+}
+
+fn find_coverage_json(root: &Path) -> Result<PathBuf> {
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        for entry in std::fs::read_dir(&dir)
+            .with_context(|| format!("failed to read directory: {}", dir.display()))?
+        {
+            let entry = entry?;
+            let path = entry.path();
+            if entry.file_type()?.is_dir() {
+                stack.push(path);
+            } else if path.file_name().is_some_and(|file| file == "coverage.json")
+                && path
+                    .components()
+                    .any(|component| component.as_os_str() == "TestResults")
+            {
+                return Ok(path);
+            }
+        }
+    }
+
+    bail!(
+        "failed to locate coverlet coverage.json under {}",
+        root.display()
+    )
+}
+
+fn copy_tree(source: &Path, destination: &Path) -> Result<()> {
+    std::fs::create_dir_all(destination)
+        .with_context(|| format!("failed to create directory: {}", destination.display()))?;
+    for entry in std::fs::read_dir(source)
+        .with_context(|| format!("failed to read directory: {}", source.display()))?
+    {
+        let entry = entry?;
+        let file_type = entry.file_type()?;
+        let dest = destination.join(entry.file_name());
+        if file_type.is_dir() {
+            copy_tree(&entry.path(), &dest)?;
+        } else {
+            std::fs::copy(entry.path(), &dest).with_context(|| {
+                format!(
+                    "failed to copy {} -> {}",
+                    entry.path().display(),
+                    dest.display()
+                )
+            })?;
+        }
+    }
+    Ok(())
 }
 
 fn project_root() -> Result<PathBuf> {

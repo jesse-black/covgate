@@ -19,11 +19,11 @@ A second product decision is included here: whether `covgate` should continue to
 ## Progress
 
 - [x] (2026-03-14 00:00Z) Reviewed `docs/TESTING.md` and the completed LLVM fixture ExecPlan to align this plan with fixture-generation, live-scenario, and CLI matrix expectations.
-- [ ] Define fixture layout for a checked-in .NET scenario under `tests/fixtures/dotnet/` with `repo/`, `overlay/`, and committed native coverage artifact.
-- [ ] Specify xtask workflow to regenerate the .NET fixture coverage artifact with native .NET tooling (`dotnet test --collect:"XPlat Code Coverage"`) and normalize it into the checked-in fixture path.
-- [ ] Implement parser support for Coverlet-native JSON and map it onto `covgate`’s internal model (`lines`, `branches`, and any representable region/function opportunities).
-- [ ] Add integration tests that run shared metric semantics against both LLVM and Coverlet fixture families where capability overlap exists.
-- [ ] Resolve and document parser selection strategy (explicit format flag, JSON autodetect, or hybrid) and update CLI/config docs accordingly.
+- [x] (2026-03-14 23:40Z) Define fixture layout for checked-in .NET scenarios under `tests/fixtures/dotnet/` with `repo/`, `overlay/`, and committed native coverage artifacts.
+- [x] (2026-03-14 23:40Z) Implement xtask workflow to regenerate .NET fixture coverage with native tooling (`dotnet test --collect:"XPlat Code Coverage;Format=json"`) and normalize it into fixture paths.
+- [x] (2026-03-14 23:40Z) Implement parser support for Coverlet-native JSON and map it onto `covgate` line/branch internal metrics with explicit metric availability semantics.
+- [x] (2026-03-14 23:40Z) Add integration tests that run shared line and branch metric semantics against LLVM and .NET fixtures where capability overlap exists.
+- [x] (2026-03-14 23:40Z) Resolve parser selection with default JSON autodetect for LLVM vs Coverlet under the existing `--coverage-json` switch.
 - [ ] Validate with full repository quality gates (`cargo xtask validate`) and update this plan’s retrospective with outcomes.
 
 ## Surprises & Discoveries
@@ -211,3 +211,5 @@ where `covgate` auto-detects LLVM JSON vs Coverlet-native JSON based on shape pr
 At the bottom of this plan, append a revision note every time the plan changes materially, describing what changed and why.
 
 Revision note: Initial plan created to add native .NET Coverlet fixture generation, parser support, and parser autodetect strategy aligned with the repository’s live-fixture testing philosophy.
+
+Revision note: Implemented the first end-to-end increment by adding dotnet basic pass/fail fixtures, native Coverlet parser support, JSON format autodetect dispatch, and xtask coverage regeneration for dotnet fixtures.
