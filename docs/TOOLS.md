@@ -6,11 +6,14 @@ See `docs/reference/environment-execution-contexts.md` for deeper rationale, sou
 
 ## Repo-relevant tooling summary
 
-### Installed by `scripts/setup-codex-cloud.sh` and `scripts/setup-jules.sh` when missing
+### Installed by the shared agent setup used by `scripts/setup-codex-cloud.sh` and `scripts/setup-jules.sh` when missing
 
 - Core CLI/build tools: `jq`, `ripgrep`, `yq`, `fd` (via `fd-find` + symlink), `eza`
 - Shell tooling: `shellcheck`, `shfmt`
-- Rust workflows: `cargo llvm-cov` (plus `llvm-tools-preview` via `rustup component add` when `rustup` is present)
+- C/C++ workflows: `build-essential`, `cmake`, `ninja`, `clang`, `llvm-cov`, `llvm-profdata`
+- Swift workflows: Swift via `swiftly`
+- .NET workflows: `dotnet` SDK
+- Rust workflows: `cargo llvm-cov`, `cargo-machete`, `cargo-deny` (plus `llvm-tools-preview` via `rustup component add` when `rustup` is present)
 
 ### Available in devcontainer
 

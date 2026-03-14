@@ -23,7 +23,7 @@ Environment setup follows the repository knowledge philosophy of progressive dis
 
 ## Decision inputs for `scripts/setup-codex-cloud.sh` and `scripts/setup-jules.sh`
 
-Tooling included in `scripts/setup-codex-cloud.sh` and `scripts/setup-jules.sh` is determined by cross-referencing these sources:
+Tooling included in the shared setup implementation behind `scripts/setup-codex-cloud.sh` and `scripts/setup-jules.sh` is determined by cross-referencing these sources:
 
 - Devcontainer toolchain baseline: `.devcontainer/Dockerfile`
 - Codex Cloud universal image baseline: <https://raw.githubusercontent.com/openai/codex-universal/refs/heads/main/Dockerfile>
@@ -32,6 +32,10 @@ Tooling included in `scripts/setup-codex-cloud.sh` and `scripts/setup-jules.sh` 
 
 The setup scripts should only include tools that are needed for covgate workflows and are not already reliably provided by Codex Cloud or Jules integrations, or their respective base images.
 They should also prefer distribution-derived values (for example, codename detection from `/etc/os-release`) over hardcoded repository codenames so the bootstrap remains portable as base images evolve.
+The repository now keeps a single setup implementation with thin per-environment wrappers so both environments stay in sync while preserving distinct entrypoints for platform configuration.
+That shared setup now also bootstraps the Microsoft apt feed when needed so `.NET` SDK installation remains portable across supported Debian/Ubuntu images.
+It also explicitly installs the Clang and LLVM command-line tools needed to generate LLVM coverage JSON for future C/C++ fixtures instead of assuming those binaries are present in the base image.
+Swift is bootstrapped through Swift.org's supported `swiftly` installer so Linux agent environments can build Swift fixtures and emit LLVM-based coverage data without depending on distro package availability.
 
 ## Tool-selection rationale by environment
 
