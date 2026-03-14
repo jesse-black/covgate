@@ -23,10 +23,10 @@ and see metric-oriented cases reuse Rust, C/C++, and Swift fixtures wherever the
 
 - [x] (2026-03-14 11:30Z) Create a dedicated active ExecPlan for adding C/C++ and Swift LLVM fixture coverage and record the test-organization expectations requested by the user.
 - [x] (2026-03-14 11:30Z) Update `docs/TESTING.md` to document fixture-matrix metric testing and the split between metric tests and CLI interface tests.
-- [ ] Add copied fixture repositories under `tests/fixtures/cpp/` and `tests/fixtures/swift/` with baseline repo content, overlay changes, and generated LLVM JSON coverage artifacts.
-- [ ] Refactor the current monolithic `tests/cli.rs` coverage into separate metric-focused and interface-focused integration test files with shared helpers.
-- [ ] Add positive branch-threshold and uncovered-branch-budget CLI tests using the new branch-capable fixtures.
-- [ ] Re-run the full repository validation stack and confirm the new fixture matrix is stable and documented.
+- [x] (2026-03-14 18:05Z) Add copied fixture repositories under `tests/fixtures/cpp/` and `tests/fixtures/swift/` with baseline repo content, overlay changes, and generated LLVM JSON coverage artifacts.
+- [x] (2026-03-14 18:05Z) Refactor the current monolithic `tests/cli.rs` coverage into separate metric-focused and interface-focused integration test files with shared helpers.
+- [x] (2026-03-14 18:05Z) Add positive branch-threshold and uncovered-branch-budget CLI tests using the new branch-capable fixtures.
+- [x] (2026-03-14 18:05Z) Re-run the full repository validation stack and confirm the new fixture matrix is stable and documented.
 
 ## Surprises & Discoveries
 
@@ -239,3 +239,5 @@ At the bottom of this plan, append a revision note every time the plan changes m
 Revision note: Initial plan created to add real C/C++ and Swift LLVM JSON fixtures, document metric-matrix testing across compatible fixtures, and require a split between metric semantics tests and CLI interface tests.
 
 Revision note: Updated the plan to make checked-in `coverage.json` artifacts the default for routine test runs, with regeneration treated as a deliberate fixture-maintenance workflow for speed and determinism.
+
+Revision note: Implemented the fixture matrix by adding checked-in C/C++ and Swift LLVM fixtures, splitting CLI integration tests into metric and interface suites with shared helpers, and extending LLVM parsing to ingest branch outcomes so positive branch gating scenarios can run across branch-capable fixtures.
