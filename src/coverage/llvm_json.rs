@@ -451,6 +451,45 @@ mod tests {
     }
 
     #[test]
+    fn parses_legacy_branch_entries_and_skips_has_count_false() {
+        let input = r#"
+        {
+          "data": [
+            {
+              "files": [
+                {
+                  "filename": "src/lib.rs",
+                  "segments": [
+                    [1, 1, 1, true, false, false],
+                    [2, 1, 0, false, false, false]
+                  ],
+                  "branches": [
+                    [2, 1, 0, false],
+                    [3, 1, 1, true]
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+        "#;
+
+        let report = parse_str(input).expect("llvm export should parse");
+
+        let branch_totals = report
+            .totals_by_file
+            .get(&crate::model::MetricKind::Branch)
+            .expect("branch totals should be present");
+        let file_totals = branch_totals
+            .get(&PathBuf::from("src/lib.rs"))
+            .expect("branch file totals should be present");
+
+        // The first legacy entry is skipped because has_count=false.
+        assert_eq!(file_totals.covered, 1);
+        assert_eq!(file_totals.total, 1);
+    }
+
+    #[test]
     fn rejects_invalid_json() {
         assert!(parse_str("{").is_err());
     }
