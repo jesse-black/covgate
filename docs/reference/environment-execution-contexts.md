@@ -35,6 +35,7 @@ They should also prefer distribution-derived values (for example, codename detec
 The repository now keeps a single setup implementation with thin per-environment wrappers so both environments stay in sync while preserving distinct entrypoints for platform configuration.
 That shared setup now also bootstraps the Microsoft apt feed when needed so `.NET` SDK installation remains portable across supported Debian/Ubuntu images.
 It also explicitly installs the Clang and LLVM command-line tools needed to generate LLVM coverage JSON for future C/C++ fixtures instead of assuming those binaries are present in the base image.
+Swift is bootstrapped through Swift.org's supported `swiftly` installer so Linux agent environments can build Swift fixtures and emit LLVM-based coverage data without depending on distro package availability.
 
 ## Tool-selection rationale by environment
 

@@ -26,6 +26,7 @@ Always test each feature against **live scenarios** in addition to unit tests.
   - C/C++: compile and test with Clang source-based coverage, merge with `llvm-profdata`, export with `llvm-cov export`
   - .NET: `dotnet test --collect:"XPlat Code Coverage"`
   - Rust: `cargo llvm-cov`
+  - Swift: `swift test --enable-code-coverage`, then export with `llvm-cov export`
   - JS/TS: `vitest run --coverage`
 - Prefer copied-fixture integration tests that assert both CLI behavior and repository state invariants (diff shape, file normalization, and idempotent reruns).
 

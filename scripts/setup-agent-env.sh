@@ -19,6 +19,8 @@ if ! command -v apt-get >/dev/null 2>&1; then
 fi
 
 export DEBIAN_FRONTEND=noninteractive
+SWIFTLY_HOME_DIR="${SWIFTLY_HOME_DIR:-$HOME/.local/share/swiftly}"
+SWIFTLY_BIN_DIR="${SWIFTLY_BIN_DIR:-$HOME/.local/share/swiftly/bin}"
 
 need_cmd() {
 	local cmd="$1"
@@ -86,6 +88,46 @@ has_pkg() {
 	printf '%s\n' "${APT_PACKAGES[@]}" | grep -qx "$pkg"
 }
 
+load_swiftly_env() {
+	if [[ -r "${SWIFTLY_HOME_DIR}/env.sh" ]]; then
+		# shellcheck disable=SC1090,SC1091
+		. "${SWIFTLY_HOME_DIR}/env.sh"
+		hash -r
+	fi
+}
+
+ensure_swift_toolchain() {
+	if ! need_cmd swift; then
+		echo "${SETUP_LABEL}: swift already installed"
+		return 0
+	fi
+
+	local tmp_dir arch tarball
+	arch="$(uname -m)"
+	tmp_dir="$(mktemp -d)"
+	tarball="${tmp_dir}/swiftly-${arch}.tar.gz"
+
+	echo "${SETUP_LABEL}: installing Swift via swiftly"
+	curl -fsSL "https://download.swift.org/swiftly/linux/swiftly-${arch}.tar.gz" -o "${tarball}"
+	tar -xzf "${tarball}" -C "${tmp_dir}"
+	(
+		cd "${tmp_dir}"
+		SWIFTLY_HOME_DIR="${SWIFTLY_HOME_DIR}" SWIFTLY_BIN_DIR="${SWIFTLY_BIN_DIR}" ./swiftly init --quiet-shell-followup
+	)
+
+	load_swiftly_env
+
+	if need_cmd swift; then
+		echo "${SETUP_LABEL}: swift installation did not place \`swift\` on PATH" >&2
+		exit 1
+	fi
+
+	rm -rf "${tmp_dir}"
+	echo "${SETUP_LABEL}: installed Swift toolchain"
+}
+
+load_swiftly_env
+
 APT_PACKAGES=()
 
 # Build and coverage tooling for fixture projects.
@@ -98,6 +140,7 @@ need_cmd llvm-cov && APT_PACKAGES+=(llvm)
 need_cmd llvm-profdata && ! has_pkg llvm && APT_PACKAGES+=(llvm)
 
 # Useful agentic tooling
+need_cmd curl && APT_PACKAGES+=(curl)
 need_cmd dotnet && APT_PACKAGES+=(dotnet-sdk-10.0)
 need_cmd jq && APT_PACKAGES+=(jq)
 need_cmd rg && APT_PACKAGES+=(ripgrep)
@@ -133,6 +176,7 @@ else
 fi
 
 ensure_fd_command
+ensure_swift_toolchain
 
 # Rust workflow tools used by cargo xtask validate.
 if need_cmd rustup; then
