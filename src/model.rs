@@ -163,3 +163,23 @@ pub struct GateResult {
     pub rules: Vec<RuleOutcome>,
     pub passed: bool,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{MetricKind, OpportunityKind};
+
+    #[test]
+    fn parses_function_metric_kind() {
+        let metric = MetricKind::parse("function").expect("function should parse");
+        assert_eq!(metric, MetricKind::Function);
+        assert_eq!(metric.as_str(), "function");
+        assert_eq!(metric.label(), "functions");
+        assert_eq!(metric.to_opportunity_kind(), OpportunityKind::Function);
+    }
+
+    #[test]
+    fn rejects_unknown_metric_kind() {
+        let error = MetricKind::parse("callable").expect_err("unknown metric should fail");
+        assert!(error.to_string().contains("unsupported metric kind"));
+    }
+}

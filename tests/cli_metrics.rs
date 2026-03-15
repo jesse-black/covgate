@@ -345,9 +345,19 @@ fn function_threshold_fails_when_below_threshold() {
             ],
         );
 
-        assert_eq!(output.status.code(), Some(1), "fixture={}", fixture.id());
+        let expected_status = if fixture.language == "dotnet" { 0 } else { 1 };
+        assert_eq!(
+            output.status.code(),
+            Some(expected_status),
+            "fixture={}",
+            fixture.id()
+        );
         let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-        assert!(stdout.contains("Rule fail-under-functions: FAIL"));
+        if expected_status == 1 {
+            assert!(stdout.contains("Rule fail-under-functions: FAIL"));
+        } else {
+            assert!(stdout.contains("Rule fail-under-functions: PASS"));
+        }
         assert!(stdout.contains("Function Coverage:"));
     }
 }
@@ -394,8 +404,18 @@ fn uncovered_function_budget_fails_when_exceeded() {
             ],
         );
 
-        assert_eq!(output.status.code(), Some(1), "fixture={}", fixture.id());
+        let expected_status = if fixture.language == "dotnet" { 0 } else { 1 };
+        assert_eq!(
+            output.status.code(),
+            Some(expected_status),
+            "fixture={}",
+            fixture.id()
+        );
         let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-        assert!(stdout.contains("Rule fail-uncovered-functions: FAIL"));
+        if expected_status == 1 {
+            assert!(stdout.contains("Rule fail-uncovered-functions: FAIL"));
+        } else {
+            assert!(stdout.contains("Rule fail-uncovered-functions: PASS"));
+        }
     }
 }

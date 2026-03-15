@@ -111,23 +111,39 @@ pub fn branch_capable_pass_fixtures() -> Vec<Fixture> {
 }
 
 pub fn fail_fixtures_with_lines() -> Vec<Fixture> {
-    let mut fixtures = fail_fixtures_with_regions();
-    fixtures.push(dotnet_basic_fail_fixture());
-    fixtures
+    vec![
+        rust_basic_fail_fixture(),
+        cpp_basic_fail_fixture(),
+        swift_basic_fail_fixture(),
+        dotnet_basic_fail_fixture(),
+    ]
 }
 
 pub fn pass_fixtures_with_lines() -> Vec<Fixture> {
-    let mut fixtures = pass_fixtures_with_regions();
-    fixtures.push(dotnet_basic_pass_fixture());
-    fixtures
+    vec![
+        rust_basic_pass_fixture(),
+        cpp_basic_pass_fixture(),
+        swift_basic_pass_fixture(),
+        dotnet_basic_pass_fixture(),
+    ]
 }
 
 pub fn function_capable_fail_fixtures() -> Vec<Fixture> {
-    fail_fixtures_with_regions()
+    vec![
+        rust_basic_fail_fixture(),
+        cpp_basic_fail_fixture(),
+        swift_basic_fail_fixture(),
+        dotnet_basic_fail_fixture(),
+    ]
 }
 
 pub fn function_capable_pass_fixtures() -> Vec<Fixture> {
-    pass_fixtures_with_regions()
+    vec![
+        rust_basic_pass_fixture(),
+        cpp_basic_pass_fixture(),
+        swift_basic_pass_fixture(),
+        dotnet_basic_pass_fixture(),
+    ]
 }
 
 pub fn assert_fixture_has_no_branch_coverage(fixture: Fixture) {

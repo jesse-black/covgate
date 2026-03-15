@@ -677,4 +677,75 @@ mod tests {
         let normalized = normalize_path("/workspace/covgate/src/lib.rs", repo_root);
         assert_eq!(normalized, PathBuf::from("src/lib.rs"));
     }
+
+    #[test]
+    fn skips_function_entries_without_filenames_or_regions() {
+        let input = r#"
+        {
+          "data": [
+            {
+              "functions": [
+                {
+                  "count": 1,
+                  "filenames": [],
+                  "regions": [[1,1,2,1,1,0,0,0]]
+                },
+                {
+                  "count": 1,
+                  "filenames": ["src/lib.rs"],
+                  "regions": []
+                }
+              ],
+              "files": [
+                {
+                  "filename": "src/lib.rs",
+                  "segments": [
+                    [1, 1, 1, true, false, false],
+                    [2, 1, 0, false, false, false]
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+        "#;
+
+        let report = parse_str(input).expect("llvm export should parse");
+        assert!(
+            !report
+                .totals_by_file
+                .contains_key(&crate::model::MetricKind::Function)
+        );
+    }
+
+    #[test]
+    fn rejects_negative_function_region_fields() {
+        let input = r#"
+        {
+          "data": [
+            {
+              "functions": [
+                {
+                  "count": 1,
+                  "filenames": ["src/lib.rs"],
+                  "regions": [[-1,1,2,1,1,0,0,0]]
+                }
+              ],
+              "files": [
+                {
+                  "filename": "src/lib.rs",
+                  "segments": [
+                    [1, 1, 1, true, false, false],
+                    [2, 1, 0, false, false, false]
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+        "#;
+
+        let error = parse_str(input).expect_err("negative line should fail parsing");
+        assert!(error.to_string().contains("failed to parse llvm json"));
+    }
 }

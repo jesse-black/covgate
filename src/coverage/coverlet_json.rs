@@ -400,4 +400,24 @@ mod tests {
         let normalized = normalize_path("/tmp/other/src/lib.cs", repo_root);
         assert_eq!(normalized, PathBuf::from("/tmp/other/src/lib.cs"));
     }
+
+    #[test]
+    fn skips_function_metric_when_method_has_no_lines() {
+        let input = r#"
+        {
+          "Demo.dll": {
+            "src/lib.cs": {
+              "Demo.MathOps": {
+                "NoLines": {"Lines": {}, "Branches": []}
+              }
+            }
+          }
+        }
+        "#;
+
+        let report = parse_str_with_repo_root(input, Path::new("/workspace/covgate"))
+            .expect("coverlet json should parse");
+
+        assert!(!report.totals_by_file.contains_key(&MetricKind::Function));
+    }
 }

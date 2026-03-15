@@ -346,6 +346,83 @@ mod tests {
     }
 
     #[test]
+    fn loads_function_rules_from_repo_config() {
+        let file_config: FileConfig = toml::from_str(
+            "base = \"main\"\n[gates]\nfail_under_functions = 100\nfail_uncovered_functions = 0\n",
+        )
+        .expect("config should parse");
+
+        let args = Args {
+            coverage_json: "coverage.json".into(),
+            base: None,
+            diff_file: None,
+            fail_under_regions: None,
+            fail_under_lines: None,
+            fail_under_branches: None,
+            fail_under_functions: None,
+            fail_uncovered_regions: None,
+            fail_uncovered_lines: None,
+            fail_uncovered_branches: None,
+            fail_uncovered_functions: None,
+            markdown_output: None,
+        };
+
+        let rules = resolve_rules(&args, Some(&file_config)).expect("rules should resolve");
+
+        assert_eq!(rules.len(), 2);
+        assert!(rules.contains(&GateRule::Percent {
+            metric: MetricKind::Function,
+            minimum_percent: 100.0
+        }));
+        assert!(rules.contains(&GateRule::UncoveredCount {
+            metric: MetricKind::Function,
+            maximum_count: 0
+        }));
+    }
+
+    #[test]
+    fn cli_function_rules_override_repo_config_defaults() {
+        let file_config: FileConfig = toml::from_str(
+            "base = \"main\"\n[gates]\nfail_under_functions = 100\nfail_uncovered_functions = 0\n",
+        )
+        .expect("config should parse");
+
+        let args = Args {
+            coverage_json: "coverage.json".into(),
+            base: None,
+            diff_file: Some("scenario.diff".into()),
+            fail_under_regions: None,
+            fail_under_lines: None,
+            fail_under_branches: None,
+            fail_under_functions: Some(80.0),
+            fail_uncovered_regions: None,
+            fail_uncovered_lines: None,
+            fail_uncovered_branches: None,
+            fail_uncovered_functions: Some(2),
+            markdown_output: None,
+        };
+
+        let rules = resolve_rules(&args, Some(&file_config)).expect("rules should resolve");
+
+        assert!(rules.contains(&GateRule::Percent {
+            metric: MetricKind::Function,
+            minimum_percent: 80.0
+        }));
+        assert!(rules.contains(&GateRule::UncoveredCount {
+            metric: MetricKind::Function,
+            maximum_count: 2
+        }));
+        assert!(!rules.contains(&GateRule::Percent {
+            metric: MetricKind::Function,
+            minimum_percent: 100.0
+        }));
+        assert!(!rules.contains(&GateRule::UncoveredCount {
+            metric: MetricKind::Function,
+            maximum_count: 0
+        }));
+    }
+
+    #[test]
     fn loads_repo_config_file_when_present() {
         let temp = tempdir().expect("tempdir");
         fs::write(
