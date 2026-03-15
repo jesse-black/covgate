@@ -189,6 +189,13 @@ mod tests {
     }
 
     #[test]
+    fn rejects_array_json_for_istanbul_detection() {
+        let value = serde_json::json!([{"statementMap": {}, "fnMap": {}, "branchMap": {}, "s": {}, "f": {}, "b": {}}]);
+        let err = detect_format(&value).expect_err("array root should be unsupported");
+        assert!(err.to_string().contains("unsupported coverage format"));
+    }
+
+    #[test]
     fn rejects_unknown_format() {
         let value = serde_json::json!({"foo": "bar"});
         let err = detect_format(&value).expect_err("format should be unsupported");

@@ -280,4 +280,92 @@ mod tests {
         assert_eq!(function_totals.covered, 1);
         assert_eq!(function_totals.total, 1);
     }
+
+    #[test]
+    fn parse_rejects_invalid_json() {
+        let error = parse_str_with_repo_root("{", Path::new("/workspace/covgate"))
+            .expect_err("invalid json should fail");
+        assert!(error.to_string().contains("failed to parse istanbul json"));
+    }
+
+    #[test]
+    fn merges_overlapping_statement_lines_as_covered_when_any_statement_hits() {
+        let input = r#"
+        {
+          "src/math.js": {
+            "statementMap": {
+              "0": {"start": {"line": 2}, "end": {"line": 2}},
+              "1": {"start": {"line": 2}, "end": {"line": 2}}
+            },
+            "s": {"0": 0, "1": 1},
+            "branchMap": {},
+            "b": {},
+            "fnMap": {},
+            "f": {}
+          }
+        }
+        "#;
+
+        let report = parse_str_with_repo_root(input, Path::new("/workspace/covgate"))
+            .expect("istanbul json should parse");
+
+        let line_totals = report
+            .totals_by_file
+            .get(&MetricKind::Line)
+            .expect("line totals should exist")
+            .get(&PathBuf::from("src/math.js"))
+            .expect("file totals should exist");
+        assert_eq!(line_totals.covered, 1);
+        assert_eq!(line_totals.total, 1);
+
+        assert!(!report.totals_by_file.contains_key(&MetricKind::Branch));
+        assert!(!report.totals_by_file.contains_key(&MetricKind::Function));
+    }
+
+    #[test]
+    fn normalizes_repo_prefixed_and_absolute_paths() {
+        let prefixed = parse_str_with_repo_root(
+            r#"{
+              "/workspace/covgate/src/math.js": {
+                "statementMap": {"0": {"start": {"line": 1}, "end": {"line": 1}}},
+                "s": {"0": 1},
+                "branchMap": {},
+                "b": {},
+                "fnMap": {},
+                "f": {}
+              }
+            }"#,
+            Path::new("/workspace/covgate"),
+        )
+        .expect("prefixed path should parse");
+        assert!(
+            prefixed
+                .totals_by_file
+                .get(&MetricKind::Line)
+                .expect("line totals should exist")
+                .contains_key(&PathBuf::from("src/math.js"))
+        );
+
+        let absolute_outside = parse_str_with_repo_root(
+            r#"{
+              "/opt/other/math.js": {
+                "statementMap": {"0": {"start": {"line": 1}, "end": {"line": 1}}},
+                "s": {"0": 1},
+                "branchMap": {},
+                "b": {},
+                "fnMap": {},
+                "f": {}
+              }
+            }"#,
+            Path::new("/workspace/covgate"),
+        )
+        .expect("absolute outside path should parse");
+        assert!(
+            absolute_outside
+                .totals_by_file
+                .get(&MetricKind::Line)
+                .expect("line totals should exist")
+                .contains_key(&PathBuf::from("/opt/other/math.js"))
+        );
+    }
 }
