@@ -1,0 +1,12 @@
+{
+  "name": "covgate-vitest-fixture",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run --coverage"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.4",
+    "@vitest/coverage-v8": "^3.2.4"
+  }
+}

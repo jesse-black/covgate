@@ -88,6 +88,7 @@ enum FixtureToolchain {
     Cpp,
     Swift,
     Dotnet,
+    Vitest,
 }
 
 #[derive(Clone, Copy)]
@@ -154,6 +155,18 @@ const FIXTURE_COVERAGE_SPECS: &[FixtureCoverageSpec] = &[
         toolchain: FixtureToolchain::Dotnet,
         run_mode: RunMode::NoCalls,
     },
+    FixtureCoverageSpec {
+        id: "vitest/basic-fail",
+        source_file: "src/math.js",
+        toolchain: FixtureToolchain::Vitest,
+        run_mode: RunMode::NoCalls,
+    },
+    FixtureCoverageSpec {
+        id: "vitest/basic-pass",
+        source_file: "src/math.js",
+        toolchain: FixtureToolchain::Vitest,
+        run_mode: RunMode::NoCalls,
+    },
 ];
 
 fn regen_fixture_coverage(fixture_id: &str) -> Result<()> {
@@ -172,10 +185,16 @@ fn regen_fixture_coverage_all() -> Result<()> {
 }
 
 fn write_fixture_coverage(spec: &FixtureCoverageSpec) -> Result<()> {
-    if matches!(spec.toolchain, FixtureToolchain::Dotnet) {
-        return write_dotnet_fixture_coverage(spec);
+    match spec.toolchain {
+        FixtureToolchain::Dotnet => write_dotnet_fixture_coverage(spec),
+        FixtureToolchain::Vitest => write_vitest_fixture_coverage(spec),
+        FixtureToolchain::Rust | FixtureToolchain::Cpp | FixtureToolchain::Swift => {
+            write_llvm_fixture_coverage(spec)
+        }
     }
+}
 
+fn write_llvm_fixture_coverage(spec: &FixtureCoverageSpec) -> Result<()> {
     let repo_root = project_root()?;
     let source_path = repo_root
         .join("tests")
@@ -267,10 +286,37 @@ fn build_fixture_binary(
         FixtureToolchain::Rust => build_rust_fixture_binary(spec, source_path, binary_path),
         FixtureToolchain::Cpp => build_cpp_fixture_binary(spec, source_path, binary_path),
         FixtureToolchain::Swift => build_swift_fixture_binary(spec, source_path, binary_path),
-        FixtureToolchain::Dotnet => {
-            bail!("dotnet fixtures do not support llvm fixture binary generation")
-        }
+        _ => bail!(
+            "fixture toolchain `{}` does not support llvm fixture binary generation",
+            spec.id
+        ),
     }
+}
+
+fn write_vitest_fixture_coverage(spec: &FixtureCoverageSpec) -> Result<()> {
+    let repo_root = project_root()?;
+    let fixture_root = repo_root.join("tests").join("fixtures").join(spec.id);
+    let temp_dir = std::env::temp_dir().join(format!(
+        "covgate-xtask-fixture-{}-{}",
+        spec.id.replace('/', "-"),
+        chrono_like_timestamp()
+    ));
+    std::fs::create_dir_all(&temp_dir)
+        .with_context(|| format!("failed to create temp dir: {}", temp_dir.display()))?;
+
+    copy_tree(&fixture_root.join("repo"), &temp_dir)?;
+    copy_tree(&fixture_root.join("overlay"), &temp_dir)?;
+
+    run_in_dir("npm", &["install"], &temp_dir)?;
+    run_in_dir("npx", &["vitest", "run", "--coverage"], &temp_dir)?;
+
+    let raw_coverage = temp_dir.join("coverage").join("coverage-final.json");
+    let output_path = fixture_root.join("coverage.json");
+    normalize_istanbul_coverage(&raw_coverage, spec.source_file, &output_path)?;
+
+    std::fs::remove_dir_all(&temp_dir).ok();
+    eprintln!("updated {}", output_path.display());
+    Ok(())
 }
 
 fn write_dotnet_fixture_coverage(spec: &FixtureCoverageSpec) -> Result<()> {
@@ -485,6 +531,28 @@ fn normalize_coverlet_coverage(raw: &Path, source_file: &str, output: &Path) -> 
         .with_context(|| format!("failed to write fixture coverage: {}", output.display()))
 }
 
+fn normalize_istanbul_coverage(raw: &Path, source_file: &str, output: &Path) -> Result<()> {
+    let text = std::fs::read_to_string(raw)
+        .with_context(|| format!("failed to read raw istanbul json: {}", raw.display()))?;
+    let mut files: serde_json::Map<String, serde_json::Value> =
+        serde_json::from_str(&text).context("failed to parse istanbul json")?;
+
+    let mut rewritten = serde_json::Map::new();
+    for (file, value) in std::mem::take(&mut files) {
+        let normalized = file.replace('\\', "/");
+        let key = if normalized.ends_with(source_file) {
+            source_file.to_string()
+        } else {
+            normalized
+        };
+        rewritten.insert(key, value);
+    }
+
+    let pretty = serde_json::to_string_pretty(&rewritten).context("failed to format json")?;
+    std::fs::write(output, format!("{pretty}\n"))
+        .with_context(|| format!("failed to write fixture coverage: {}", output.display()))
+}
+
 fn find_coverage_json(root: &Path) -> Result<PathBuf> {
     let mut stack = vec![root.to_path_buf()];
     while let Some(dir) = stack.pop() {
@@ -610,6 +678,24 @@ fn run(program: &str, args: &[&str]) -> Result<()> {
     eprintln!("> {} {}", program, args.join(" "));
     let status = Command::new(program)
         .args(args)
+        .status()
+        .with_context(|| format!("failed to execute `{program}`"))?;
+
+    if !status.success() {
+        bail!(
+            "command `{program} {}` failed with status {status}",
+            args.join(" ")
+        );
+    }
+
+    Ok(())
+}
+
+fn run_in_dir(program: &str, args: &[&str], working_dir: &Path) -> Result<()> {
+    eprintln!("> {} {}", program, args.join(" "));
+    let status = Command::new(program)
+        .args(args)
+        .current_dir(working_dir)
         .status()
         .with_context(|| format!("failed to execute `{program}`"))?;
 

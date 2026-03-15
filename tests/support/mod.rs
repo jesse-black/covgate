@@ -86,6 +86,20 @@ pub fn dotnet_basic_pass_fixture() -> Fixture {
     }
 }
 
+pub fn vitest_basic_fail_fixture() -> Fixture {
+    Fixture {
+        language: "vitest",
+        name: "basic-fail",
+    }
+}
+
+pub fn vitest_basic_pass_fixture() -> Fixture {
+    Fixture {
+        language: "vitest",
+        name: "basic-pass",
+    }
+}
+
 pub fn fail_fixtures_with_regions() -> Vec<Fixture> {
     vec![
         rust_basic_fail_fixture(),
@@ -103,11 +117,19 @@ pub fn pass_fixtures_with_regions() -> Vec<Fixture> {
 }
 
 pub fn branch_capable_fail_fixtures() -> Vec<Fixture> {
-    vec![cpp_basic_fail_fixture(), dotnet_basic_fail_fixture()]
+    vec![
+        cpp_basic_fail_fixture(),
+        dotnet_basic_fail_fixture(),
+        vitest_basic_fail_fixture(),
+    ]
 }
 
 pub fn branch_capable_pass_fixtures() -> Vec<Fixture> {
-    vec![cpp_basic_pass_fixture(), dotnet_basic_pass_fixture()]
+    vec![
+        cpp_basic_pass_fixture(),
+        dotnet_basic_pass_fixture(),
+        vitest_basic_pass_fixture(),
+    ]
 }
 
 pub fn fail_fixtures_with_lines() -> Vec<Fixture> {
@@ -116,6 +138,7 @@ pub fn fail_fixtures_with_lines() -> Vec<Fixture> {
         cpp_basic_fail_fixture(),
         swift_basic_fail_fixture(),
         dotnet_basic_fail_fixture(),
+        vitest_basic_fail_fixture(),
     ]
 }
 
@@ -125,6 +148,7 @@ pub fn pass_fixtures_with_lines() -> Vec<Fixture> {
         cpp_basic_pass_fixture(),
         swift_basic_pass_fixture(),
         dotnet_basic_pass_fixture(),
+        vitest_basic_pass_fixture(),
     ]
 }
 
@@ -134,6 +158,7 @@ pub fn function_capable_fail_fixtures() -> Vec<Fixture> {
         cpp_basic_fail_fixture(),
         swift_basic_fail_fixture(),
         dotnet_basic_fail_fixture(),
+        vitest_basic_fail_fixture(),
     ]
 }
 
@@ -143,6 +168,7 @@ pub fn function_capable_pass_fixtures() -> Vec<Fixture> {
         cpp_basic_pass_fixture(),
         swift_basic_pass_fixture(),
         dotnet_basic_pass_fixture(),
+        vitest_basic_pass_fixture(),
     ]
 }
 
@@ -150,7 +176,11 @@ pub fn assert_fixture_has_no_branch_coverage(fixture: Fixture) {
     fn contains_non_empty_branches(value: &serde_json::Value) -> bool {
         match value {
             serde_json::Value::Object(map) => map.iter().any(|(key, nested)| {
-                (key == "branches" && nested.as_array().is_some_and(|items| !items.is_empty()))
+                ((key == "branches" && nested.as_array().is_some_and(|items| !items.is_empty()))
+                    || (key == "branchMap"
+                        && nested
+                            .as_object()
+                            .is_some_and(|entries| !entries.is_empty())))
                     || contains_non_empty_branches(nested)
             }),
             serde_json::Value::Array(values) => values.iter().any(contains_non_empty_branches),
@@ -214,6 +244,7 @@ pub fn write_absolute_path_coverage_fixture(fixture: Fixture, worktree: &Path, d
     let relative_source = match fixture.language {
         "swift" => "Sources/CovgateDemo/CovgateDemo.swift",
         "dotnet" => "src/CovgateDemo/MathOps.cs",
+        "vitest" => "src/math.js",
         _ => "src/lib.rs",
     };
     let absolute_source_path = worktree.join(relative_source);

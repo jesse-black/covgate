@@ -6,6 +6,7 @@ use serde_json::Value;
 use crate::model::CoverageReport;
 
 pub mod coverlet_json;
+pub mod istanbul_json;
 pub mod llvm_json;
 
 pub fn parse_path(path: &Path) -> Result<CoverageReport> {
@@ -24,6 +25,7 @@ pub fn parse_str(input: &str) -> Result<CoverageReport> {
     match format {
         CoverageFormat::Llvm => llvm_json::parse_str_with_repo_root(input, &repo_root),
         CoverageFormat::Coverlet => coverlet_json::parse_str_with_repo_root(input, &repo_root),
+        CoverageFormat::Istanbul => istanbul_json::parse_str_with_repo_root(input, &repo_root),
     }
 }
 
@@ -31,6 +33,7 @@ pub fn parse_str(input: &str) -> Result<CoverageReport> {
 enum CoverageFormat {
     Llvm,
     Coverlet,
+    Istanbul,
 }
 
 fn detect_format(value: &Value) -> Result<CoverageFormat> {
@@ -39,16 +42,20 @@ fn detect_format(value: &Value) -> Result<CoverageFormat> {
         .and_then(|obj| obj.get("data"))
         .is_some_and(Value::is_array);
     let coverlet = contains_coverlet_markers(value);
+    let istanbul = contains_istanbul_markers(value);
 
-    match (llvm, coverlet) {
-        (true, false) => Ok(CoverageFormat::Llvm),
-        (false, true) => Ok(CoverageFormat::Coverlet),
-        (true, true) => {
-            bail!("coverage format is ambiguous; both LLVM and Coverlet markers were detected")
+    match (llvm, coverlet, istanbul) {
+        (true, false, false) => Ok(CoverageFormat::Llvm),
+        (false, true, false) => Ok(CoverageFormat::Coverlet),
+        (false, false, true) => Ok(CoverageFormat::Istanbul),
+        (false, false, false) => {
+            bail!(
+                "unsupported coverage format: expected LLVM JSON export, Coverlet native JSON, or Istanbul native JSON"
+            )
         }
-        (false, false) => {
-            bail!("unsupported coverage format: expected LLVM JSON export or Coverlet native JSON")
-        }
+        _ => bail!(
+            "coverage format is ambiguous; multiple supported coverage format markers were detected"
+        ),
     }
 }
 
@@ -61,6 +68,23 @@ fn contains_coverlet_markers(value: &Value) -> bool {
         Value::Array(values) => values.iter().any(contains_coverlet_markers),
         _ => false,
     }
+}
+
+fn contains_istanbul_markers(value: &Value) -> bool {
+    let Some(files) = value.as_object() else {
+        return false;
+    };
+
+    files.values().any(|entry| {
+        entry.as_object().is_some_and(|object| {
+            object.contains_key("statementMap")
+                && object.contains_key("fnMap")
+                && object.contains_key("branchMap")
+                && object.contains_key("s")
+                && object.contains_key("f")
+                && object.contains_key("b")
+        })
+    })
 }
 
 #[cfg(test)]
@@ -101,6 +125,24 @@ mod tests {
     }
 
     #[test]
+    fn detects_istanbul_json() {
+        let value = serde_json::json!({
+            "src/math.js": {
+                "statementMap": {},
+                "fnMap": {},
+                "branchMap": {},
+                "s": {},
+                "f": {},
+                "b": {}
+            }
+        });
+        assert_eq!(
+            detect_format(&value).expect("format should detect"),
+            CoverageFormat::Istanbul
+        );
+    }
+
+    #[test]
     fn rejects_ambiguous_format() {
         let value = serde_json::json!({
             "data": [],
@@ -117,6 +159,40 @@ mod tests {
 
         let err = detect_format(&value).expect_err("format should be ambiguous");
         assert!(err.to_string().contains("ambiguous"));
+    }
+
+    #[test]
+    fn rejects_ambiguous_coverlet_and_istanbul_format() {
+        let value = serde_json::json!({
+            "Demo.dll": {
+                "src/lib.cs": {
+                    "Demo.Math": {
+                        "m": {
+                            "Lines": {"1": 1},
+                            "Branches": []
+                        }
+                    }
+                }
+            },
+            "src/math.js": {
+                "statementMap": {},
+                "fnMap": {},
+                "branchMap": {},
+                "s": {},
+                "f": {},
+                "b": {}
+            }
+        });
+
+        let err = detect_format(&value).expect_err("format should be ambiguous");
+        assert!(err.to_string().contains("ambiguous"));
+    }
+
+    #[test]
+    fn rejects_array_json_for_istanbul_detection() {
+        let value = serde_json::json!([{"statementMap": {}, "fnMap": {}, "branchMap": {}, "s": {}, "f": {}, "b": {}}]);
+        let err = detect_format(&value).expect_err("array root should be unsupported");
+        assert!(err.to_string().contains("unsupported coverage format"));
     }
 
     #[test]
@@ -144,10 +220,10 @@ mod tests {
                   "Demo.Math": {
                     "System.Int32 Demo.Math::Add()": {
                       "Lines": {"1": 1},
-                      "Branches": []
+                    "Branches": []
                     }
-                  }
                 }
+              }
               }
             }"#,
         )
