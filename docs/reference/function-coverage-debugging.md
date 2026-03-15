@@ -71,3 +71,22 @@ This confirms that post-fix function totals seen by our quick validation are con
 ## Practical takeaway
 
 The low function coverage was not caused by diff intersection rules in the gate engine. It was caused by parser normalization edge cases in LLVM callable records (covered-state derivation and duplicate span handling). After normalization fixes, function counts are materially more stable and better aligned with region-based expectations.
+
+## Cross-tool policy decision: include anonymous/unnamed callable units
+
+As of the Istanbul + Coverlet expansion, `covgate` intentionally keeps function-threshold semantics aligned with upstream tool outputs instead of trying to infer a narrower “named functions only” model.
+
+Rationale:
+
+- `cargo llvm-cov` function thresholds count LLVM function records, which can include callable units that are not source-level named functions.
+- Coverlet method thresholds are based on reported method records; they are not restricted to only user-authored named methods in every compiler/toolchain scenario.
+- Istanbul function metrics are based on `fnMap` entries and can include anonymous/inline callable units (for example arrow functions and callbacks).
+
+Decision:
+
+- `covgate` function gates (`--fail-under-functions`, `--fail-uncovered-functions`) should continue to count the callable opportunities reported by each native coverage format adapter, including anonymous/unnamed units where present.
+- We prefer parity and predictability versus ecosystem-native thresholds over tool-specific filtering heuristics that might hide real coverage-tool behavior.
+
+Implication for users:
+
+- If your policy intent is strictly “no uncovered named functions/methods,” configure exclusions upstream in the coverage producer where available, and treat `covgate` function gates as enforcing the broader callable-unit definition emitted by the report format.
