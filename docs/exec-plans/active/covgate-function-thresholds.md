@@ -30,9 +30,10 @@ and `covgate` explains those function-oriented rules directly in console output 
 
 - [x] (2026-03-11 20:35Z) Create a separate draft ExecPlan for function or method thresholds so the idea is captured without prematurely expanding the current implementation milestone.
 - [ ] Define how `covgate` will normalize Istanbul functions and Coverlet methods into one shared internal opportunity kind.
-- [ ] Define the public CLI and TOML surface for function-based fail-under and fail-uncovered gates.
-- [ ] Specify diff intersection rules for changed functions or methods, especially when only part of a function body changed.
-- [ ] Record validation expectations for Istanbul and Coverlet fixture scenarios once those parser plans are active.
+- [x] (2026-03-16 00:15Z) Implement shared internal callable-unit normalization for currently supported parsers (LLVM functions and Coverlet methods) into `MetricKind::Function` / `OpportunityKind::Function`, including parser edge-case deduplication and covered-state fixes discovered during dogfooding.
+- [x] (2026-03-16 00:15Z) Define the public CLI and TOML surface for function-based fail-under and fail-uncovered gates (`--fail-under-functions`, `--fail-uncovered-functions`, `fail_under_functions`, `fail_uncovered_functions`).
+- [x] (2026-03-16 00:15Z) Specify and implement diff intersection rules for changed functions: callable spans are normalized to source line ranges and selected with the same line-overlap logic used by other metrics in `compute_changed_metric`.
+- [ ] Record validation expectations for Istanbul fixture scenarios once Istanbul parser support lands (Coverlet/LLVM scenarios are now covered in parser + CLI metric tests).
 - [x] (2026-03-15 16:05Z) Align function-threshold integration-test expectations with `docs/TESTING.md`: metric semantics belong in `tests/cli_metrics.rs`, should execute across a compatible fixture list, and should stay separate from CLI interface-only coverage in `tests/cli_interface.rs`.
 
 ## Current evaluation after .NET Coverlet landing
@@ -259,3 +260,5 @@ Revision note: Updated the intended TOML section name from `[thresholds]` to `[g
 Revision note: Re-evaluated this plan after native .NET Coverlet support landed; documented that current parser support is line/branch only, confirmed method-shaped data is available in Coverlet fixtures, and reaffirmed `functions` as the single public term with parser-level method normalization.
 
 Revision note: Updated test-planning guidance to match `docs/TESTING.md`: function-threshold scenarios are metric tests in `tests/cli_metrics.rs`, should use compatible fixture matrices for shared semantics, and should be validated with `cargo xtask validate` as part of completion criteria.
+
+Revision note: Documented completed milestones (CLI/TOML surface and diff-overlap behavior), clarified that Istanbul validation remains pending parser support, and captured that function normalization is implemented for currently supported parsers with additional dogfooding-driven parser fixes.
