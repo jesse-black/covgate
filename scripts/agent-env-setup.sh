@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SETUP_LABEL="${1:-setup-agent-env}"
+SETUP_LABEL="${1:-agent-env-setup}"
 
 if [[ "${CODEX_DEBUG:-}" == "1" || "${CODEX_SETUP_DEBUG:-}" == "1" || "${JULES_DEBUG:-}" == "1" || "${JULES_SETUP_DEBUG:-}" == "1" ]]; then
 	set -x
@@ -80,24 +80,6 @@ ensure_cargo_tool() {
 		cargo install "${package_name}" --locked
 	else
 		echo "${SETUP_LABEL}: ${package_name} already installed"
-	fi
-}
-
-ensure_origin_main_ref() {
-	if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-		echo "${SETUP_LABEL}: not a git worktree; skipping origin/main bootstrap"
-		return 0
-	fi
-
-	if ! git remote get-url origin >/dev/null 2>&1; then
-		echo "${SETUP_LABEL}: origin remote missing; skipping origin/main bootstrap"
-		return 0
-	fi
-
-	if git fetch --no-tags --depth=1 origin +refs/heads/main:refs/remotes/origin/main >/dev/null 2>&1; then
-		echo "${SETUP_LABEL}: fetched origin/main (depth=1)"
-	else
-		echo "${SETUP_LABEL}: failed to fetch origin/main (depth=1); continuing" >&2
 	fi
 }
 
@@ -206,6 +188,5 @@ fi
 ensure_cargo_tool "llvm-cov" "cargo-llvm-cov"
 ensure_cargo_tool "machete" "cargo-machete"
 ensure_cargo_tool "deny" "cargo-deny"
-ensure_origin_main_ref
 
 echo "${SETUP_LABEL}: Complete!"
