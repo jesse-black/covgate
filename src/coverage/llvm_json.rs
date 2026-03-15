@@ -212,7 +212,14 @@ fn normalize_function_path(value: &str, repo_root: &Path, known_file_paths: &[Pa
     let normalized_string = normalized.to_string_lossy();
     if let Some(candidate) = known_file_paths
         .iter()
-        .find(|candidate| normalized_string.ends_with(&candidate.to_string_lossy().to_string()))
+        .filter(|candidate| {
+            let candidate_string = candidate.to_string_lossy();
+            normalized_string == candidate_string
+                || normalized_string
+                    .strip_suffix(candidate_string.as_ref())
+                    .is_some_and(|prefix| prefix.ends_with('/'))
+        })
+        .max_by_key(|candidate| candidate.to_string_lossy().len())
     {
         return candidate.clone();
     }
@@ -747,5 +754,50 @@ mod tests {
 
         let error = parse_str(input).expect_err("negative line should fail parsing");
         assert!(error.to_string().contains("failed to parse llvm json"));
+    }
+
+    #[test]
+    fn prefers_longest_suffix_for_function_file_mapping() {
+        let input = r#"
+        {
+          "data": [
+            {
+              "functions": [
+                {
+                  "count": 0,
+                  "filenames": ["/tmp/build/pkg/src/lib.rs"],
+                  "regions": [[10,1,10,5,0,0,0,0]]
+                }
+              ],
+              "files": [
+                {
+                  "filename": "src/lib.rs",
+                  "segments": [[1,1,1,true,false,false],[2,1,0,false,false,false]]
+                },
+                {
+                  "filename": "pkg/src/lib.rs",
+                  "segments": [[1,1,1,true,false,false],[2,1,0,false,false,false]]
+                }
+              ]
+            }
+          ]
+        }
+        "#;
+
+        let report = parse_str(input).expect("llvm export should parse");
+        let function_totals = report
+            .totals_by_file
+            .get(&crate::model::MetricKind::Function)
+            .expect("function totals should exist");
+
+        assert!(
+            !function_totals.contains_key(&PathBuf::from("src/lib.rs")),
+            "function should not map to less specific suffix"
+        );
+        let mapped = function_totals
+            .get(&PathBuf::from("pkg/src/lib.rs"))
+            .expect("function should map to longest matching suffix");
+        assert_eq!(mapped.covered, 0);
+        assert_eq!(mapped.total, 1);
     }
 }
