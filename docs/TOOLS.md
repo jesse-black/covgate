@@ -15,6 +15,12 @@ See `docs/reference/environment-execution-contexts.md` for deeper rationale, sou
 - .NET workflows: `dotnet` SDK
 - Rust workflows: `cargo llvm-cov`, `cargo-machete`, `cargo-deny` (plus `llvm-tools-preview` via `rustup component add` when `rustup` is present)
 
+### Git bootstrap for dogfooding in cloud agents
+
+- `scripts/setup-agent-env.sh` now performs a best-effort `origin/main` bootstrap at the end of setup using a shallow fetch (`--depth=1`) so `cargo xtask validate` can resolve `--base origin/main` in PR environments.
+- `scripts/setup-agent-maintenance.sh` is the lightweight maintenance script for subsequent environment loads; it refreshes `origin/main` using the same shallow fetch.
+- Codex Cloud maintenance wrapper: `scripts/setup-codex-cloud-maintenance.sh`.
+
 ### Available in devcontainer
 
 - Core CLI/build tools: `git`, `curl`, `jq`, `ripgrep`, `fd`, `zip/unzip`, `build-essential`

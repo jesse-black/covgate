@@ -544,22 +544,15 @@ fn project_root() -> Result<PathBuf> {
 }
 
 fn resolve_base_ref() -> Option<String> {
-    for candidate in ["origin/main", "origin/master", "main", "master"] {
+    for candidate in ["origin/main", "main"] {
         if git_ref_exists(candidate) {
             return Some(candidate.to_owned());
         }
     }
 
-    fetch_probable_default_branches();
+    fetch_main_branch();
 
-    for candidate in [
-        "origin/main",
-        "origin/master",
-        "refs/remotes/origin/main",
-        "refs/remotes/origin/master",
-        "main",
-        "master",
-    ] {
+    for candidate in ["origin/main", "refs/remotes/origin/main", "main"] {
         if git_ref_exists(candidate) {
             return Some(candidate.to_owned());
         }
@@ -568,23 +561,21 @@ fn resolve_base_ref() -> Option<String> {
     None
 }
 
-fn fetch_probable_default_branches() {
-    for branch in ["main", "master"] {
-        let _ = Command::new("git")
-            .args([
-                "fetch",
-                "--no-tags",
-                "--depth=200",
-                "origin",
-                &format!("{branch}:refs/remotes/origin/{branch}"),
-            ])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status();
-    }
+fn fetch_main_branch() {
+    let _ = Command::new("git")
+        .args([
+            "fetch",
+            "--no-tags",
+            "--depth=1",
+            "origin",
+            "+refs/heads/main:refs/remotes/origin/main",
+        ])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
 
     let _ = Command::new("git")
-        .args(["fetch", "--no-tags", "--depth=200", "origin"])
+        .args(["fetch", "--no-tags", "--depth=1", "origin", "main"])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status();

@@ -21,7 +21,7 @@ Environment setup follows the repository knowledge philosophy of progressive dis
 3. **Repo-specific parity target**: parity is defined by tools needed for covgate workflows, not by mirroring every language/runtime in universal images.
 4. **Avoid redundant tooling in cloud**: do not bootstrap tools that duplicate native platform integrations (for example, GitHub CLI in Codex Cloud).
 
-## Decision inputs for `scripts/setup-codex-cloud.sh` and `scripts/setup-jules.sh`
+## Decision inputs for `scripts/setup-codex-cloud.sh`, `scripts/setup-jules.sh`, and maintenance setup scripts
 
 Tooling included in the shared setup implementation behind `scripts/setup-codex-cloud.sh` and `scripts/setup-jules.sh` is determined by cross-referencing these sources:
 
@@ -36,6 +36,8 @@ The repository now keeps a single setup implementation with thin per-environment
 That shared setup now also bootstraps the Microsoft apt feed when needed so `.NET` SDK installation remains portable across supported Debian/Ubuntu images.
 It also explicitly installs the Clang and LLVM command-line tools needed to generate LLVM coverage JSON for future C/C++ fixtures instead of assuming those binaries are present in the base image.
 Swift is bootstrapped through Swift.org's supported `swiftly` installer so Linux agent environments can build Swift fixtures and emit LLVM-based coverage data without depending on distro package availability.
+At the end of setup, the script performs a best-effort shallow fetch (`--depth=1`) of `origin/main` into `refs/remotes/origin/main` so `cargo xtask validate` can run the dogfooding gate in PR worktrees that initially lack a local main branch.
+A lightweight maintenance entrypoint (`scripts/setup-agent-maintenance.sh`) and Codex Cloud wrapper (`scripts/setup-codex-cloud-maintenance.sh`) repeat that same `origin/main` bootstrap on subsequent environment loads.
 
 ## Tool-selection rationale by environment
 
@@ -47,8 +49,9 @@ Codex Cloud and Jules setup is narrower and should include only tooling required
 
 1. Update setup script and docs in a branch.
 2. Configure Codex Cloud setup command to call `scripts/setup-codex-cloud.sh` and Jules setup command to call `scripts/setup-jules.sh`.
-3. Validate required tool availability and task execution from that branch.
-4. Merge after validation.
+3. Configure Codex Cloud maintenance command to call `scripts/setup-codex-cloud-maintenance.sh`.
+4. Validate required tool availability and task execution from that branch.
+5. Merge after validation.
 
 ## Network allowlist considerations
 
