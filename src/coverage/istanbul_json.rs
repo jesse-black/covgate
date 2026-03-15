@@ -134,12 +134,12 @@ fn normalize_path(value: &str, repo_root: &Path) -> PathBuf {
     let normalized_value = value.replace('\\', "/");
     let repo_root_string = repo_root.to_string_lossy().replace('\\', "/");
 
-    if let Some(stripped) = normalized_value
-        .strip_prefix(&format!("{repo_root_string}/"))
-        .or_else(|| normalized_value.strip_prefix(&repo_root_string))
-    {
-        let trimmed = stripped.trim_start_matches('/');
-        return lexical_normalize(Path::new(trimmed));
+    if normalized_value == repo_root_string {
+        return PathBuf::new();
+    }
+
+    if let Some(stripped) = normalized_value.strip_prefix(&format!("{repo_root_string}/")) {
+        return lexical_normalize(Path::new(stripped));
     }
 
     let path = lexical_normalize(Path::new(&normalized_value));
@@ -366,6 +366,39 @@ mod tests {
                 .get(&MetricKind::Line)
                 .expect("line totals should exist")
                 .contains_key(&PathBuf::from("/opt/other/math.js"))
+        );
+    }
+
+    #[test]
+    fn does_not_strip_repo_root_text_prefix_when_not_path_boundary() {
+        let report = parse_str_with_repo_root(
+            r#"{
+              "/workspace/covgate-old/src/math.js": {
+                "statementMap": {"0": {"start": {"line": 1}, "end": {"line": 1}}},
+                "s": {"0": 1},
+                "branchMap": {},
+                "b": {},
+                "fnMap": {},
+                "f": {}
+              }
+            }"#,
+            Path::new("/workspace/covgate"),
+        )
+        .expect("path should parse");
+
+        assert!(
+            report
+                .totals_by_file
+                .get(&MetricKind::Line)
+                .expect("line totals should exist")
+                .contains_key(&PathBuf::from("/workspace/covgate-old/src/math.js"))
+        );
+        assert!(
+            !report
+                .totals_by_file
+                .get(&MetricKind::Line)
+                .expect("line totals should exist")
+                .contains_key(&PathBuf::from("-old/src/math.js"))
         );
     }
 }
