@@ -34,6 +34,17 @@ and `covgate` explains those function-oriented rules directly in console output 
 - [ ] Specify diff intersection rules for changed functions or methods, especially when only part of a function body changed.
 - [ ] Record validation expectations for Istanbul and Coverlet fixture scenarios once those parser plans are active.
 
+## Current evaluation after .NET Coverlet landing
+
+- Status: .NET coverage support is now present, but only for line and branch metrics.
+  Evidence: `src/coverage/coverlet_json.rs` deserializes method-shaped Coverlet entries but emits only `OpportunityKind::Line` and `OpportunityKind::BranchOutcome` opportunities and only `MetricKind::Line`/`MetricKind::Branch` totals.
+
+- Status: Coverlet output does include method-level records that are viable inputs for callable-unit gating.
+  Evidence: fixture artifacts under `tests/fixtures/dotnet/**/coverage.json` use method-signature keys (for example `System.Int32 CovgateDemo.MathOps::Add(System.Int32,System.Int32)`) beneath class nodes.
+
+- Product implication: public naming should remain `functions` as the canonical gate vocabulary, while documentation explicitly states that Coverlet methods are normalized into that shared function metric when function-threshold support is implemented.
+  Rationale: one stable cross-format term in CLI/config keeps UX predictable; adding duplicate user-facing gate names (`functions` and `methods`) would increase config/API surface without adding distinct behavior.
+
 ## Surprises & Discoveries
 
 - Observation: “Function coverage” is not one universal raw concept across the planned formats, but both near-term target ecosystems do expose a callable-unit signal that users can reason about.
@@ -239,3 +250,5 @@ At the bottom of this plan, append a revision note every time the plan changes m
 Revision note: Initial draft plan created for future function or method thresholds because Istanbul and Coverlet are the next intended coverage formats and both expose a callable-unit signal worth gating.
 
 Revision note: Updated the intended TOML section name from `[thresholds]` to `[gates]` so this draft matches the current repository configuration vocabulary.
+
+Revision note: Re-evaluated this plan after native .NET Coverlet support landed; documented that current parser support is line/branch only, confirmed method-shaped data is available in Coverlet fixtures, and reaffirmed `functions` as the single public term with parser-level method normalization.
