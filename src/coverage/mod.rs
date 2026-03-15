@@ -65,7 +65,11 @@ fn contains_coverlet_markers(value: &Value) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{CoverageFormat, detect_format};
+    use std::fs;
+
+    use tempfile::tempdir;
+
+    use super::{CoverageFormat, detect_format, parse_path, parse_str};
 
     #[test]
     fn detects_llvm_json() {
@@ -94,5 +98,62 @@ mod tests {
             detect_format(&value).expect("format should detect"),
             CoverageFormat::Coverlet
         );
+    }
+
+    #[test]
+    fn rejects_ambiguous_format() {
+        let value = serde_json::json!({
+            "data": [],
+            "Demo.dll": {
+                "src/lib.cs": {
+                    "Demo.Math": {
+                        "m": {
+                            "Lines": {"1": 1}
+                        }
+                    }
+                }
+            }
+        });
+
+        let err = detect_format(&value).expect_err("format should be ambiguous");
+        assert!(err.to_string().contains("ambiguous"));
+    }
+
+    #[test]
+    fn rejects_unknown_format() {
+        let value = serde_json::json!({"foo": "bar"});
+        let err = detect_format(&value).expect_err("format should be unsupported");
+        assert!(err.to_string().contains("unsupported coverage format"));
+    }
+
+    #[test]
+    fn parse_str_rejects_invalid_json() {
+        let err = parse_str("{").expect_err("parse should fail");
+        assert!(err.to_string().contains("failed to parse coverage json"));
+    }
+
+    #[test]
+    fn parse_path_reads_file_and_dispatches() {
+        let temp = tempdir().expect("temp dir should exist");
+        let path = temp.path().join("coverage.json");
+        fs::write(
+            &path,
+            r#"{
+              "Demo.dll": {
+                "src/lib.cs": {
+                  "Demo.Math": {
+                    "System.Int32 Demo.Math::Add()": {
+                      "Lines": {"1": 1},
+                      "Branches": []
+                    }
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("coverage file should be written");
+
+        let report = parse_path(&path).expect("coverage file should parse");
+        assert!(!report.opportunities.is_empty());
     }
 }

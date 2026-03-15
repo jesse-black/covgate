@@ -169,7 +169,7 @@ where
 mod tests {
     use std::path::{Path, PathBuf};
 
-    use crate::model::MetricKind;
+    use crate::model::{MetricKind, OpportunityKind};
 
     use super::{normalize_path, parse_str_with_repo_root};
 
@@ -223,5 +223,93 @@ mod tests {
         let repo_root = Path::new("C:/workspace/covgate");
         let normalized = normalize_path("C:\\workspace\\covgate\\src\\lib.cs", repo_root);
         assert_eq!(normalized, PathBuf::from("src/lib.cs"));
+    }
+
+    #[test]
+    fn merges_duplicate_lines_across_methods() {
+        let input = r#"
+        {
+          "Demo.dll": {
+            "src/lib.cs": {
+              "Demo.MathOps": {
+                "M1": {"Lines": {"10": 0, "11": 1}, "Branches": []},
+                "M2": {"Lines": {"10": 2}, "Branches": []}
+              }
+            }
+          }
+        }
+        "#;
+
+        let report = parse_str_with_repo_root(input, Path::new("/workspace/covgate"))
+            .expect("coverlet json should parse");
+
+        let line_totals = report
+            .totals_by_file
+            .get(&MetricKind::Line)
+            .expect("line totals should exist")
+            .get(&PathBuf::from("src/lib.cs"))
+            .expect("file totals should exist");
+        assert_eq!(line_totals.total, 2);
+        assert_eq!(line_totals.covered, 2);
+    }
+
+    #[test]
+    fn skips_non_object_class_or_method_entries() {
+        let input = r#"
+        {
+          "Demo.dll": {
+            "src/lib.cs": {
+              "IgnoredClass": 5,
+              "Demo.MathOps": {
+                "IgnoredMethod": 3,
+                "RealMethod": {"Lines": {"5": 1}, "Branches": []}
+              }
+            }
+          }
+        }
+        "#;
+
+        let report = parse_str_with_repo_root(input, Path::new("/workspace/covgate"))
+            .expect("coverlet json should parse");
+        let lines: Vec<_> = report
+            .opportunities
+            .iter()
+            .filter(|op| op.kind == OpportunityKind::Line)
+            .collect();
+        assert_eq!(lines.len(), 1);
+    }
+
+    #[test]
+    fn invalid_line_key_method_is_ignored() {
+        let input = r#"
+        {
+          "Demo.dll": {
+            "src/lib.cs": {
+              "Demo.MathOps": {
+                "BadMethod": {"Lines": {"not-a-line": 1}, "Branches": []},
+                "GoodMethod": {"Lines": {"7": 1}, "Branches": []}
+              }
+            }
+          }
+        }
+        "#;
+
+        let report = parse_str_with_repo_root(input, Path::new("/workspace/covgate"))
+            .expect("coverlet json should parse");
+        let line_totals = report
+            .totals_by_file
+            .get(&MetricKind::Line)
+            .expect("line totals should exist")
+            .get(&PathBuf::from("src/lib.cs"))
+            .expect("file totals should exist");
+        assert_eq!(line_totals.total, 1);
+        assert_eq!(line_totals.covered, 1);
+    }
+
+    #[test]
+    fn keeps_absolute_paths_outside_repo_as_absolute() {
+        let repo_root = Path::new("/workspace/covgate");
+        let normalized = normalize_path("/tmp/other/src/lib.cs", repo_root);
+        assert_eq!(normalized, PathBuf::from("/tmp/other/src/lib.cs"));
     }
 }
