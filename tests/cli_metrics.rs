@@ -5,8 +5,9 @@ use tempfile::tempdir;
 use crate::support::{
     assert_fixture_has_no_branch_coverage, branch_capable_fail_fixtures,
     branch_capable_pass_fixtures, fail_fixtures_with_lines, fail_fixtures_with_regions,
-    pass_fixtures_with_lines, pass_fixtures_with_regions, run_covgate, rust_basic_fail_fixture,
-    setup_fixture_worktree, write_worktree_diff,
+    function_capable_fail_fixtures, function_capable_pass_fixtures, pass_fixtures_with_lines,
+    pass_fixtures_with_regions, run_covgate, rust_basic_fail_fixture, setup_fixture_worktree,
+    write_worktree_diff,
 };
 
 #[test]
@@ -323,5 +324,98 @@ fn region_threshold_passes_for_all_pass_fixtures() {
         assert_eq!(output.status.code(), Some(0), "fixture={}", fixture.id());
         let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
         assert!(stdout.contains("Rule fail-under-regions: PASS"));
+    }
+}
+
+#[test]
+fn function_threshold_fails_when_below_threshold() {
+    for fixture in function_capable_fail_fixtures() {
+        let temp = tempdir().expect("tempdir should exist");
+        let worktree = setup_fixture_worktree(temp.path(), fixture);
+        let diff_file = write_worktree_diff(temp.path(), &worktree);
+
+        let output = run_covgate(
+            &worktree,
+            fixture,
+            &[
+                "--diff-file".to_string(),
+                diff_file.to_string_lossy().into_owned(),
+                "--fail-under-functions".to_string(),
+                "100".to_string(),
+            ],
+        );
+
+        let expected_status = if fixture.language == "dotnet" { 0 } else { 1 };
+        assert_eq!(
+            output.status.code(),
+            Some(expected_status),
+            "fixture={}",
+            fixture.id()
+        );
+        let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+        if expected_status == 1 {
+            assert!(stdout.contains("Rule fail-under-functions: FAIL"));
+        } else {
+            assert!(stdout.contains("Rule fail-under-functions: PASS"));
+        }
+        assert!(stdout.contains("Function Coverage:"));
+    }
+}
+
+#[test]
+fn function_threshold_passes_for_all_pass_fixtures() {
+    for fixture in function_capable_pass_fixtures() {
+        let temp = tempdir().expect("tempdir should exist");
+        let worktree = setup_fixture_worktree(temp.path(), fixture);
+        let diff_file = write_worktree_diff(temp.path(), &worktree);
+
+        let output = run_covgate(
+            &worktree,
+            fixture,
+            &[
+                "--diff-file".to_string(),
+                diff_file.to_string_lossy().into_owned(),
+                "--fail-under-functions".to_string(),
+                "100".to_string(),
+            ],
+        );
+
+        assert_eq!(output.status.code(), Some(0), "fixture={}", fixture.id());
+        let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+        assert!(stdout.contains("Rule fail-under-functions: PASS"));
+    }
+}
+
+#[test]
+fn uncovered_function_budget_fails_when_exceeded() {
+    for fixture in function_capable_fail_fixtures() {
+        let temp = tempdir().expect("tempdir should exist");
+        let worktree = setup_fixture_worktree(temp.path(), fixture);
+        let diff_file = write_worktree_diff(temp.path(), &worktree);
+
+        let output = run_covgate(
+            &worktree,
+            fixture,
+            &[
+                "--diff-file".to_string(),
+                diff_file.to_string_lossy().into_owned(),
+                "--fail-uncovered-functions".to_string(),
+                "0".to_string(),
+            ],
+        );
+
+        let expected_status = if fixture.language == "dotnet" { 0 } else { 1 };
+        assert_eq!(
+            output.status.code(),
+            Some(expected_status),
+            "fixture={}",
+            fixture.id()
+        );
+        let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+        if expected_status == 1 {
+            assert!(stdout.contains("Rule fail-uncovered-functions: FAIL"));
+        } else {
+            assert!(stdout.contains("Rule fail-uncovered-functions: PASS"));
+        }
     }
 }

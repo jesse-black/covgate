@@ -29,10 +29,12 @@ and `covgate` explains those function-oriented rules directly in console output 
 ## Progress
 
 - [x] (2026-03-11 20:35Z) Create a separate draft ExecPlan for function or method thresholds so the idea is captured without prematurely expanding the current implementation milestone.
-- [ ] Define how `covgate` will normalize Istanbul functions and Coverlet methods into one shared internal opportunity kind.
-- [ ] Define the public CLI and TOML surface for function-based fail-under and fail-uncovered gates.
-- [ ] Specify diff intersection rules for changed functions or methods, especially when only part of a function body changed.
-- [ ] Record validation expectations for Istanbul and Coverlet fixture scenarios once those parser plans are active.
+- [x] (2026-03-16 01:05Z) Define and implement shared internal callable-unit normalization for currently supported parser paths (LLVM functions and Coverlet methods) into `MetricKind::Function` / `OpportunityKind::Function`.
+- [x] (2026-03-16 00:15Z) Implement shared internal callable-unit normalization for currently supported parsers (LLVM functions and Coverlet methods) into `MetricKind::Function` / `OpportunityKind::Function`, including parser edge-case deduplication and covered-state fixes discovered during dogfooding.
+- [x] (2026-03-16 00:15Z) Define the public CLI and TOML surface for function-based fail-under and fail-uncovered gates (`--fail-under-functions`, `--fail-uncovered-functions`, `fail_under_functions`, `fail_uncovered_functions`).
+- [x] (2026-03-16 00:15Z) Specify and implement diff intersection rules for changed functions: callable spans are normalized to source line ranges and selected with the same line-overlap logic used by other metrics in `compute_changed_metric`.
+- [x] (2026-03-16 01:05Z) Move Istanbul-specific validation expectations to the active Istanbul ExecPlan (`docs/exec-plans/active/covgate-vitest-istanbul-native-json-fixture.md`) and keep this plan scoped to shipped function-gating behavior in currently supported formats.
+- [x] (2026-03-15 16:05Z) Align function-threshold integration-test expectations with `docs/TESTING.md`: metric semantics belong in `tests/cli_metrics.rs`, should execute across a compatible fixture list, and should stay separate from CLI interface-only coverage in `tests/cli_interface.rs`.
 
 ## Current evaluation after .NET Coverlet landing
 
@@ -69,9 +71,11 @@ and `covgate` explains those function-oriented rules directly in console output 
 
 ## Outcomes & Retrospective
 
-This is a draft plan rather than an implementation plan for immediate execution. The current outcome is clarity about why function thresholds are worth planning now even though the repository does not yet parse Istanbul or Coverlet coverage reports. The practical product claim is that `covgate` should eventually support a rule like “every changed function or method must be exercised,” and that rule should be expressed with the same threshold vocabulary as the rest of the tool.
+Function gating is now implemented and shipping for currently supported coverage formats. Repositories can configure `--fail-under-functions` and `--fail-uncovered-functions` (or TOML equivalents) and get diff-focused function gate results through the same shared gate engine used for regions/lines/branches.
 
-The main risk is pretending that “functions” means the same thing everywhere without documenting the translation step. Istanbul and Coverlet are close enough for a shared user-facing concept, but the internal model still needs a careful normalization rule for callable units, source spans, and hit status. This draft exists so that future implementation work does not treat function thresholds as an afterthought bolted onto line or branch coverage.
+Dogfooding uncovered parser-level normalization issues in LLVM callable records (covered-state derivation, duplicate span handling, and suffix-path mapping). Those issues were fixed with TDD regressions, which stabilized uncovered-function counts and aligned function totals with expected execution behavior.
+
+Istanbul-specific function validation concerns have been moved to the active Istanbul ExecPlan so this completed plan remains scoped to the delivered function metric foundation and currently supported parser families.
 
 ## Context and Orientation
 
@@ -172,14 +176,18 @@ This is a draft plan, so the commands below are the intended implementation path
 
     Edit `src/render/console.rs`, `src/render/markdown.rs`, and integration tests under `tests/`.
 
+    The function-threshold CLI assertions in this step must follow `docs/TESTING.md`: add them to `tests/cli_metrics.rs` (not `tests/cli_interface.rs`), define fixture lists for shared threshold semantics, and run each scenario across every compatible fixture unless the scenario is intentionally proving format-specific metric availability behavior.
+
     Example commands:
 
         cargo test render
-        cargo test cli
+        cargo test cli_metrics
+        cargo test cli_interface
         cargo fmt --check
         cargo check
         cargo clippy --all-targets --all-features -- -D warnings
         cargo test
+        cargo xtask validate
         cargo llvm-cov --summary-only
 
     Expected outcome: output and integration tests prove that function gates are visible in both text and Markdown summaries and that the repository validation stack still passes.
@@ -196,7 +204,7 @@ Running `covgate` against an Istanbul-backed fixture and a Coverlet-backed fixtu
 
 If the function parser path is unavailable for the chosen coverage report format, `covgate` must fail clearly when the user asks for a function threshold. It must not silently ignore the rule.
 
-CLI integration tests must eventually include at least:
+CLI integration tests must eventually include at least, and these cases must live in `tests/cli_metrics.rs` as metric-semantics tests that iterate across compatible fixture lists when semantics are shared:
 
 - an Istanbul scenario where a changed function is covered and `--fail-under-functions 100` passes
 - an Istanbul scenario where a changed function is uncovered and `--fail-under-functions 100` fails
@@ -252,3 +260,9 @@ Revision note: Initial draft plan created for future function or method threshol
 Revision note: Updated the intended TOML section name from `[thresholds]` to `[gates]` so this draft matches the current repository configuration vocabulary.
 
 Revision note: Re-evaluated this plan after native .NET Coverlet support landed; documented that current parser support is line/branch only, confirmed method-shaped data is available in Coverlet fixtures, and reaffirmed `functions` as the single public term with parser-level method normalization.
+
+Revision note: Updated test-planning guidance to match `docs/TESTING.md`: function-threshold scenarios are metric tests in `tests/cli_metrics.rs`, should use compatible fixture matrices for shared semantics, and should be validated with `cargo xtask validate` as part of completion criteria.
+
+Revision note: Documented completed milestones (CLI/TOML surface and diff-overlap behavior), clarified that Istanbul validation remains pending parser support, and captured that function normalization is implemented for currently supported parsers with additional dogfooding-driven parser fixes.
+
+Revision note: Closed out this plan after function-gating implementation shipped for supported parser families (LLVM/Coverlet), moved Istanbul-specific follow-up concerns into the active Istanbul plan, and relocated this file from active to completed.

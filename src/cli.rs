@@ -26,6 +26,9 @@ pub struct Args {
     #[arg(long = "fail-under-branches", value_name = "MIN")]
     pub fail_under_branches: Option<f64>,
 
+    #[arg(long = "fail-under-functions", value_name = "MIN")]
+    pub fail_under_functions: Option<f64>,
+
     #[arg(long = "fail-uncovered-regions", value_name = "MAX")]
     pub fail_uncovered_regions: Option<usize>,
 
@@ -34,6 +37,9 @@ pub struct Args {
 
     #[arg(long = "fail-uncovered-branches", value_name = "MAX")]
     pub fail_uncovered_branches: Option<usize>,
+
+    #[arg(long = "fail-uncovered-functions", value_name = "MAX")]
+    pub fail_uncovered_functions: Option<usize>,
 
     #[arg(long)]
     pub markdown_output: Option<PathBuf>,

@@ -16,8 +16,47 @@ pub(crate) fn parse_str_with_repo_root(input: &str, repo_root: &Path) -> Result<
     let mut region_totals_by_file = BTreeMap::new();
     let mut line_totals_by_file = BTreeMap::new();
     let mut branch_totals_by_file = BTreeMap::new();
+    let mut function_totals_by_file = BTreeMap::new();
 
     for data in export.data {
+        let known_file_paths: Vec<PathBuf> = data
+            .files
+            .iter()
+            .map(|file| normalize_path(&file.filename, repo_root))
+            .collect();
+
+        let mut function_records_by_file: BTreeMap<PathBuf, BTreeMap<FunctionSpanKey, bool>> =
+            BTreeMap::new();
+        for function in data.functions {
+            if function.filenames.is_empty() {
+                continue;
+            }
+            let path =
+                normalize_function_path(&function.filenames[0], repo_root, &known_file_paths);
+            let mut start_line: Option<u32> = None;
+            let mut end_line: Option<u32> = None;
+            let mut region_covered = false;
+            for region in function.regions {
+                start_line =
+                    Some(start_line.map_or(region.line_start, |cur| cur.min(region.line_start)));
+                end_line = Some(end_line.map_or(region.line_end, |cur| cur.max(region.line_end)));
+                region_covered |= region.execution_count > 0;
+            }
+            let (Some(start_line), Some(end_line)) = (start_line, end_line) else {
+                continue;
+            };
+            let entry = function_records_by_file.entry(path).or_default();
+            let key = FunctionSpanKey {
+                start_line,
+                end_line,
+            };
+            let covered = function.count > 0 || region_covered;
+            entry
+                .entry(key)
+                .and_modify(|existing| *existing = *existing || covered)
+                .or_insert(covered);
+        }
+
         for file in data.files {
             let path = normalize_path(&file.filename, repo_root);
             let mut region_covered = 0usize;
@@ -97,10 +136,36 @@ pub(crate) fn parse_str_with_repo_root(input: &str, repo_root: &Path) -> Result<
 
             if branch_total > 0 {
                 branch_totals_by_file.insert(
-                    path,
+                    path.clone(),
                     FileTotals {
                         covered: branch_covered,
                         total: branch_total,
+                    },
+                );
+            }
+
+            if let Some(function_records) = function_records_by_file.remove(&path) {
+                let mut function_covered = 0usize;
+                let function_total = function_records.len();
+                for (span, covered) in function_records {
+                    if covered {
+                        function_covered += 1;
+                    }
+                    opportunities.push(CoverageOpportunity {
+                        kind: OpportunityKind::Function,
+                        span: SourceSpan {
+                            path: path.clone(),
+                            start_line: span.start_line,
+                            end_line: span.end_line,
+                        },
+                        covered,
+                    });
+                }
+                function_totals_by_file.insert(
+                    path,
+                    FileTotals {
+                        covered: function_covered,
+                        total: function_total,
                     },
                 );
             }
@@ -116,6 +181,9 @@ pub(crate) fn parse_str_with_repo_root(input: &str, repo_root: &Path) -> Result<
     }
     if !branch_totals_by_file.is_empty() {
         totals_by_file.insert(MetricKind::Branch, branch_totals_by_file);
+    }
+    if !function_totals_by_file.is_empty() {
+        totals_by_file.insert(MetricKind::Function, function_totals_by_file);
     }
 
     Ok(CoverageReport {
@@ -140,6 +208,30 @@ fn lexical_normalize(path: impl AsRef<Path>) -> PathBuf {
     path.as_ref().components().collect()
 }
 
+fn normalize_function_path(value: &str, repo_root: &Path, known_file_paths: &[PathBuf]) -> PathBuf {
+    let normalized = normalize_path(value, repo_root);
+    if known_file_paths.contains(&normalized) {
+        return normalized;
+    }
+
+    let normalized_string = normalized.to_string_lossy();
+    if let Some(candidate) = known_file_paths
+        .iter()
+        .filter(|candidate| {
+            let candidate_string = candidate.to_string_lossy();
+            normalized_string == candidate_string
+                || normalized_string
+                    .strip_suffix(candidate_string.as_ref())
+                    .is_some_and(|prefix| prefix.ends_with('/'))
+        })
+        .max_by_key(|candidate| candidate.to_string_lossy().len())
+    {
+        return candidate.clone();
+    }
+
+    normalized
+}
+
 #[derive(Debug, Deserialize)]
 struct LlvmExport {
     data: Vec<LlvmData>,
@@ -148,6 +240,55 @@ struct LlvmExport {
 #[derive(Debug, Deserialize)]
 struct LlvmData {
     files: Vec<LlvmFile>,
+    #[serde(default)]
+    functions: Vec<LlvmFunction>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LlvmFunction {
+    #[serde(default)]
+    count: u64,
+    #[serde(default)]
+    filenames: Vec<String>,
+    #[serde(default)]
+    regions: Vec<LlvmFunctionRegion>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LlvmFunctionRegion {
+    #[serde(deserialize_with = "de_u32_from_i64")]
+    line_start: u32,
+    #[serde(deserialize_with = "de_u32_from_i64")]
+    _col_start: u32,
+    #[serde(deserialize_with = "de_u32_from_i64")]
+    line_end: u32,
+    #[serde(deserialize_with = "de_u32_from_i64")]
+    _col_end: u32,
+    #[serde(default)]
+    execution_count: u64,
+    #[serde(default)]
+    _file_id: u32,
+    #[serde(default)]
+    _expanded_file_id: u32,
+    #[serde(default)]
+    _kind: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct FunctionSpanKey {
+    start_line: u32,
+    end_line: u32,
+}
+
+fn de_u32_from_i64<'de, D>(deserializer: D) -> Result<u32, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = i64::deserialize(deserializer)?;
+    if value < 0 {
+        return Err(serde::de::Error::custom("negative value not allowed"));
+    }
+    u32::try_from(value).map_err(serde::de::Error::custom)
 }
 
 #[derive(Debug, Deserialize)]
@@ -319,6 +460,18 @@ mod tests {
         {
           "data": [
             {
+              "functions": [
+                {
+                  "count": 1,
+                  "filenames": ["src/lib.rs"],
+                  "regions": [[1,1,2,1,1,0,0,0]]
+                },
+                {
+                  "count": 0,
+                  "filenames": ["src/lib.rs"],
+                  "regions": [[3,1,4,1,0,0,0,0]]
+                }
+              ],
               "files": [
                 {
                   "filename": "src/lib.rs",
@@ -340,7 +493,7 @@ mod tests {
         "#;
 
         let report = parse_str(input).expect("llvm export should parse");
-        assert_eq!(report.opportunities.len(), 8); // 4 regions + 4 lines
+        assert_eq!(report.opportunities.len(), 10); // 4 regions + 4 lines + 2 functions
 
         let region_totals = report
             .totals_by_file
@@ -359,6 +512,15 @@ mod tests {
             .expect("file totals should exist");
         assert_eq!(line_totals.covered, 2);
         assert_eq!(line_totals.total, 4);
+
+        let function_totals = report
+            .totals_by_file
+            .get(&crate::model::MetricKind::Function)
+            .expect("function metric totals should exist")
+            .get(&std::path::PathBuf::from("src/lib.rs"))
+            .expect("file totals should exist");
+        assert_eq!(function_totals.covered, 1);
+        assert_eq!(function_totals.total, 2);
     }
 
     #[test]
@@ -525,5 +687,204 @@ mod tests {
         let repo_root = Path::new("/workspace/covgate");
         let normalized = normalize_path("/workspace/covgate/src/lib.rs", repo_root);
         assert_eq!(normalized, PathBuf::from("src/lib.rs"));
+    }
+
+    #[test]
+    fn skips_function_entries_without_filenames_or_regions() {
+        let input = r#"
+        {
+          "data": [
+            {
+              "functions": [
+                {
+                  "count": 1,
+                  "filenames": [],
+                  "regions": [[1,1,2,1,1,0,0,0]]
+                },
+                {
+                  "count": 1,
+                  "filenames": ["src/lib.rs"],
+                  "regions": []
+                }
+              ],
+              "files": [
+                {
+                  "filename": "src/lib.rs",
+                  "segments": [
+                    [1, 1, 1, true, false, false],
+                    [2, 1, 0, false, false, false]
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+        "#;
+
+        let report = parse_str(input).expect("llvm export should parse");
+        assert!(
+            !report
+                .totals_by_file
+                .contains_key(&crate::model::MetricKind::Function)
+        );
+    }
+
+    #[test]
+    fn rejects_negative_function_region_fields() {
+        let input = r#"
+        {
+          "data": [
+            {
+              "functions": [
+                {
+                  "count": 1,
+                  "filenames": ["src/lib.rs"],
+                  "regions": [[-1,1,2,1,1,0,0,0]]
+                }
+              ],
+              "files": [
+                {
+                  "filename": "src/lib.rs",
+                  "segments": [
+                    [1, 1, 1, true, false, false],
+                    [2, 1, 0, false, false, false]
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+        "#;
+
+        let error = parse_str(input).expect_err("negative line should fail parsing");
+        assert!(error.to_string().contains("failed to parse llvm json"));
+    }
+
+    #[test]
+    fn marks_function_covered_when_regions_have_execution_count() {
+        let input = r#"
+        {
+          "data": [
+            {
+              "functions": [
+                {
+                  "count": 0,
+                  "filenames": ["src/lib.rs"],
+                  "regions": [[10,1,12,1,3,0,0,0]]
+                }
+              ],
+              "files": [
+                {
+                  "filename": "src/lib.rs",
+                  "segments": [
+                    [10, 1, 1, true, false, false],
+                    [12, 1, 0, false, false, false]
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+        "#;
+
+        let report = parse_str(input).expect("llvm export should parse");
+        let totals = report
+            .totals_by_file
+            .get(&crate::model::MetricKind::Function)
+            .expect("function totals should exist")
+            .get(&PathBuf::from("src/lib.rs"))
+            .expect("file totals should exist");
+
+        assert_eq!(totals.covered, 1);
+        assert_eq!(totals.total, 1);
+    }
+
+    #[test]
+    fn merges_duplicate_function_spans_as_covered_if_any_variant_is_covered() {
+        let input = r#"
+        {
+          "data": [
+            {
+              "functions": [
+                {
+                  "count": 0,
+                  "filenames": ["src/lib.rs"],
+                  "regions": [[20,1,25,1,0,0,0,0]]
+                },
+                {
+                  "count": 1,
+                  "filenames": ["src/lib.rs"],
+                  "regions": [[20,1,25,1,1,0,0,0]]
+                }
+              ],
+              "files": [
+                {
+                  "filename": "src/lib.rs",
+                  "segments": [
+                    [20, 1, 1, true, false, false],
+                    [25, 1, 0, false, false, false]
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+        "#;
+
+        let report = parse_str(input).expect("llvm export should parse");
+        let totals = report
+            .totals_by_file
+            .get(&crate::model::MetricKind::Function)
+            .expect("function totals should exist")
+            .get(&PathBuf::from("src/lib.rs"))
+            .expect("file totals should exist");
+
+        assert_eq!(totals.covered, 1);
+        assert_eq!(totals.total, 1);
+    }
+
+    #[test]
+    fn prefers_longest_suffix_for_function_file_mapping() {
+        let input = r#"
+        {
+          "data": [
+            {
+              "functions": [
+                {
+                  "count": 0,
+                  "filenames": ["/tmp/build/pkg/src/lib.rs"],
+                  "regions": [[10,1,10,5,0,0,0,0]]
+                }
+              ],
+              "files": [
+                {
+                  "filename": "src/lib.rs",
+                  "segments": [[1,1,1,true,false,false],[2,1,0,false,false,false]]
+                },
+                {
+                  "filename": "pkg/src/lib.rs",
+                  "segments": [[1,1,1,true,false,false],[2,1,0,false,false,false]]
+                }
+              ]
+            }
+          ]
+        }
+        "#;
+
+        let report = parse_str(input).expect("llvm export should parse");
+        let function_totals = report
+            .totals_by_file
+            .get(&crate::model::MetricKind::Function)
+            .expect("function totals should exist");
+
+        assert!(
+            !function_totals.contains_key(&PathBuf::from("src/lib.rs")),
+            "function should not map to less specific suffix"
+        );
+        let mapped = function_totals
+            .get(&PathBuf::from("pkg/src/lib.rs"))
+            .expect("function should map to longest matching suffix");
+        assert_eq!(mapped.covered, 0);
+        assert_eq!(mapped.total, 1);
     }
 }

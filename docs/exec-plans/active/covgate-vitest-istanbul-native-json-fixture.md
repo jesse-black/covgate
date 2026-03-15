@@ -22,6 +22,7 @@ Today, `covgate` supports LLVM JSON and Coverlet JSON parsing. The next ecosyste
 - [ ] Implement `src/coverage/istanbul_json.rs` parser support that maps Istanbul line and branch data into `covgate` internal metric structures.
 - [ ] Extend coverage-format autodetection to identify Istanbul JSON and dispatch it without requiring a new primary CLI input switch.
 - [ ] Add/expand integration tests in `tests/cli_metrics.rs` and `tests/cli_interface.rs` to validate pass/fail, metric availability semantics, and unknown/ambiguous JSON format errors.
+- [ ] Add Istanbul function normalization + fixture-matrix validation for `--fail-under-functions` / `--fail-uncovered-functions` so Istanbul follows the same public `functions` vocabulary as LLVM/Coverlet.
 - [ ] Run full validation (`cargo xtask validate`) and complete this plan’s retrospective before moving it to `docs/exec-plans/completed/`.
 
 ## Surprises & Discoveries
@@ -47,6 +48,10 @@ Today, `covgate` supports LLVM JSON and Coverlet JSON parsing. The next ecosyste
   Date/Author: 2026-03-15 / Codex
 
 ## Outcomes & Retrospective
+
+- Decision: Istanbul function-threshold validation now lives in this active Istanbul plan rather than the completed function-threshold plan.
+  Rationale: Function gating is already shipped for supported parser families; Istanbul remains the active parser milestone and should own Istanbul-specific function normalization and fixture-matrix acceptance criteria.
+  Date/Author: 2026-03-16 / Codex
 
 This section will be completed after implementation. Expected outcomes:
 
@@ -151,3 +156,5 @@ where `covgate` determines whether the JSON payload is LLVM, Coverlet, or Istanb
 At the bottom of this plan, append a revision note every time the plan changes materially, describing what changed and why.
 
 Revision note: Initial plan authored to add native Istanbul JSON support, create Vite/Vitest fixtures using the default v8 runner, and integrate parser + autodetect behavior into the existing coverage pipeline.
+
+Revision note: Added explicit Istanbul ownership of function-threshold follow-up (normalization + fixture matrix validation) after closing out the dedicated function-threshold plan for currently supported parser families.
