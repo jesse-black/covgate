@@ -34,10 +34,12 @@ pub(crate) fn parse_str_with_repo_root(input: &str, repo_root: &Path) -> Result<
                 normalize_function_path(&function.filenames[0], repo_root, &known_file_paths);
             let mut start_line: Option<u32> = None;
             let mut end_line: Option<u32> = None;
+            let mut region_covered = false;
             for region in function.regions {
                 start_line =
                     Some(start_line.map_or(region.line_start, |cur| cur.min(region.line_start)));
                 end_line = Some(end_line.map_or(region.line_end, |cur| cur.max(region.line_end)));
+                region_covered |= region.execution_count > 0;
             }
             let (Some(start_line), Some(end_line)) = (start_line, end_line) else {
                 continue;
@@ -48,7 +50,7 @@ pub(crate) fn parse_str_with_repo_root(input: &str, repo_root: &Path) -> Result<
                 .push(FunctionRecord {
                     start_line,
                     end_line,
-                    covered: function.count > 0,
+                    covered: function.count > 0 || region_covered,
                 });
         }
 
@@ -260,7 +262,7 @@ struct LlvmFunctionRegion {
     #[serde(deserialize_with = "de_u32_from_i64")]
     _col_end: u32,
     #[serde(default)]
-    _execution_count: u64,
+    execution_count: u64,
     #[serde(default)]
     _file_id: u32,
     #[serde(default)]
@@ -754,6 +756,45 @@ mod tests {
 
         let error = parse_str(input).expect_err("negative line should fail parsing");
         assert!(error.to_string().contains("failed to parse llvm json"));
+    }
+
+    #[test]
+    fn marks_function_covered_when_regions_have_execution_count() {
+        let input = r#"
+        {
+          "data": [
+            {
+              "functions": [
+                {
+                  "count": 0,
+                  "filenames": ["src/lib.rs"],
+                  "regions": [[10,1,12,1,3,0,0,0]]
+                }
+              ],
+              "files": [
+                {
+                  "filename": "src/lib.rs",
+                  "segments": [
+                    [10, 1, 1, true, false, false],
+                    [12, 1, 0, false, false, false]
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+        "#;
+
+        let report = parse_str(input).expect("llvm export should parse");
+        let totals = report
+            .totals_by_file
+            .get(&crate::model::MetricKind::Function)
+            .expect("function totals should exist")
+            .get(&PathBuf::from("src/lib.rs"))
+            .expect("file totals should exist");
+
+        assert_eq!(totals.covered, 1);
+        assert_eq!(totals.total, 1);
     }
 
     #[test]
