@@ -91,6 +91,10 @@ pub fn render(result: &GateResult, _diff_description: &str) -> String {
                 missed
             ));
         }
+        out.push_str(&format!(
+            "| **Total** | **{}** | **{}** | **{:.2}%** |  |\n",
+            metric.covered, metric.total, metric.percent
+        ));
         out.push('\n');
     }
 
@@ -116,6 +120,10 @@ pub fn render(result: &GateResult, _diff_description: &str) -> String {
                 percent
             ));
         }
+        out.push_str(&format!(
+            "| **Total** | **{}** | **{}** | **{:.2}%** |\n",
+            metric.covered, metric.total, metric.percent
+        ));
         out.push('\n');
     }
 
@@ -189,7 +197,9 @@ mod tests {
             "| File | Covered Changed Regions | Changed Regions | Coverage | Missed Changed Spans |"
         ));
         assert!(rendered.contains("| `src/lib.rs` | 1 | 2 | 50.00% |"));
+        assert!(rendered.contains("| **Total** | **1** | **2** | **50.00%** |  |"));
         assert!(rendered.contains("| File | Covered Regions | Regions | Coverage |"));
+        assert!(rendered.contains("| **Total** | **1** | **2** | **50.00%** |"));
         assert!(rendered.contains("### Overall Coverage"));
         assert!(!rendered.contains("Informational only. Does not affect the gate result in v1."));
     }
