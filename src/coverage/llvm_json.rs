@@ -25,7 +25,8 @@ pub(crate) fn parse_str_with_repo_root(input: &str, repo_root: &Path) -> Result<
             .map(|file| normalize_path(&file.filename, repo_root))
             .collect();
 
-        let mut function_records_by_file: BTreeMap<PathBuf, Vec<FunctionRecord>> = BTreeMap::new();
+        let mut function_records_by_file: BTreeMap<PathBuf, BTreeMap<FunctionSpanKey, bool>> =
+            BTreeMap::new();
         for function in data.functions {
             if function.filenames.is_empty() {
                 continue;
@@ -44,14 +45,16 @@ pub(crate) fn parse_str_with_repo_root(input: &str, repo_root: &Path) -> Result<
             let (Some(start_line), Some(end_line)) = (start_line, end_line) else {
                 continue;
             };
-            function_records_by_file
-                .entry(path)
-                .or_default()
-                .push(FunctionRecord {
-                    start_line,
-                    end_line,
-                    covered: function.count > 0 || region_covered,
-                });
+            let entry = function_records_by_file.entry(path).or_default();
+            let key = FunctionSpanKey {
+                start_line,
+                end_line,
+            };
+            let covered = function.count > 0 || region_covered;
+            entry
+                .entry(key)
+                .and_modify(|existing| *existing = *existing || covered)
+                .or_insert(covered);
         }
 
         for file in data.files {
@@ -144,18 +147,18 @@ pub(crate) fn parse_str_with_repo_root(input: &str, repo_root: &Path) -> Result<
             if let Some(function_records) = function_records_by_file.remove(&path) {
                 let mut function_covered = 0usize;
                 let function_total = function_records.len();
-                for function in function_records {
-                    if function.covered {
+                for (span, covered) in function_records {
+                    if covered {
                         function_covered += 1;
                     }
                     opportunities.push(CoverageOpportunity {
                         kind: OpportunityKind::Function,
                         span: SourceSpan {
                             path: path.clone(),
-                            start_line: function.start_line,
-                            end_line: function.end_line,
+                            start_line: span.start_line,
+                            end_line: span.end_line,
                         },
-                        covered: function.covered,
+                        covered,
                     });
                 }
                 function_totals_by_file.insert(
@@ -271,11 +274,10 @@ struct LlvmFunctionRegion {
     _kind: u32,
 }
 
-#[derive(Debug)]
-struct FunctionRecord {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct FunctionSpanKey {
     start_line: u32,
     end_line: u32,
-    covered: bool,
 }
 
 fn de_u32_from_i64<'de, D>(deserializer: D) -> Result<u32, D::Error>
@@ -777,6 +779,50 @@ mod tests {
                   "segments": [
                     [10, 1, 1, true, false, false],
                     [12, 1, 0, false, false, false]
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+        "#;
+
+        let report = parse_str(input).expect("llvm export should parse");
+        let totals = report
+            .totals_by_file
+            .get(&crate::model::MetricKind::Function)
+            .expect("function totals should exist")
+            .get(&PathBuf::from("src/lib.rs"))
+            .expect("file totals should exist");
+
+        assert_eq!(totals.covered, 1);
+        assert_eq!(totals.total, 1);
+    }
+
+    #[test]
+    fn merges_duplicate_function_spans_as_covered_if_any_variant_is_covered() {
+        let input = r#"
+        {
+          "data": [
+            {
+              "functions": [
+                {
+                  "count": 0,
+                  "filenames": ["src/lib.rs"],
+                  "regions": [[20,1,25,1,0,0,0,0]]
+                },
+                {
+                  "count": 1,
+                  "filenames": ["src/lib.rs"],
+                  "regions": [[20,1,25,1,1,0,0,0]]
+                }
+              ],
+              "files": [
+                {
+                  "filename": "src/lib.rs",
+                  "segments": [
+                    [20, 1, 1, true, false, false],
+                    [25, 1, 0, false, false, false]
                   ]
                 }
               ]
