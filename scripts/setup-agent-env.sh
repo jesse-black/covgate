@@ -83,6 +83,24 @@ ensure_cargo_tool() {
 	fi
 }
 
+ensure_origin_main_ref() {
+	if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+		echo "${SETUP_LABEL}: not a git worktree; skipping origin/main bootstrap"
+		return 0
+	fi
+
+	if ! git remote get-url origin >/dev/null 2>&1; then
+		echo "${SETUP_LABEL}: origin remote missing; skipping origin/main bootstrap"
+		return 0
+	fi
+
+	if git fetch --no-tags --depth=1 origin +refs/heads/main:refs/remotes/origin/main >/dev/null 2>&1; then
+		echo "${SETUP_LABEL}: fetched origin/main (depth=1)"
+	else
+		echo "${SETUP_LABEL}: failed to fetch origin/main (depth=1); continuing" >&2
+	fi
+}
+
 has_pkg() {
 	local pkg="$1"
 	printf '%s\n' "${APT_PACKAGES[@]}" | grep -qx "$pkg"
@@ -188,5 +206,6 @@ fi
 ensure_cargo_tool "llvm-cov" "cargo-llvm-cov"
 ensure_cargo_tool "machete" "cargo-machete"
 ensure_cargo_tool "deny" "cargo-deny"
+ensure_origin_main_ref
 
 echo "${SETUP_LABEL}: Complete!"

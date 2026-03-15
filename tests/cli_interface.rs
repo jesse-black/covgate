@@ -210,3 +210,34 @@ fn cli_threshold_overrides_repo_config_default() {
     assert!(stdout.contains("Rule fail-under-regions: FAIL"));
     assert!(stdout.contains("Diff Coverage: FAIL"));
 }
+
+#[test]
+fn unknown_coverage_json_shape_reports_supported_formats() {
+    let fixture = rust_basic_fail_fixture();
+    let temp = tempdir().expect("tempdir should exist");
+    let worktree = setup_fixture_worktree(temp.path(), fixture);
+    let diff_file = write_worktree_diff(temp.path(), &worktree);
+    let invalid_coverage = temp.path().join("unknown-coverage.json");
+    fs::write(&invalid_coverage, "{\"hello\":\"world\"}")
+        .expect("invalid coverage fixture should be written");
+
+    let output = run_covgate_with_coverage(
+        &worktree,
+        &invalid_coverage,
+        &[
+            "--diff-file".to_string(),
+            diff_file.to_string_lossy().into_owned(),
+            "--fail-under-lines".to_string(),
+            "90".to_string(),
+        ],
+    );
+
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
+    assert!(
+        stderr.contains("unsupported coverage format"),
+        "stderr={stderr}"
+    );
+    assert!(stderr.contains("LLVM JSON export"), "stderr={stderr}");
+    assert!(stderr.contains("Coverlet native JSON"), "stderr={stderr}");
+}

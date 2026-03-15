@@ -1,0 +1,36 @@
+{
+  "CovgateDemo.dll": {
+    "src/CovgateDemo/MathOps.cs": {
+      "CovgateDemo.MathOps": {
+        "System.Int32 CovgateDemo.MathOps::Add(System.Int32,System.Int32)": {
+          "Branches": [
+            {
+              "EndOffset": 9,
+              "Hits": 1,
+              "Line": 7,
+              "Offset": 7,
+              "Ordinal": 0,
+              "Path": 0
+            },
+            {
+              "EndOffset": 14,
+              "Hits": 1,
+              "Line": 7,
+              "Offset": 7,
+              "Ordinal": 1,
+              "Path": 1
+            }
+          ],
+          "Lines": {
+            "12": 1,
+            "13": 2,
+            "6": 2,
+            "7": 2,
+            "8": 1,
+            "9": 1
+          }
+        }
+      }
+    }
+  }
+}

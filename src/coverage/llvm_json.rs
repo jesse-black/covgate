@@ -1,6 +1,5 @@
 use std::{
     collections::BTreeMap,
-    env, fs,
     path::{Path, PathBuf},
 };
 
@@ -11,19 +10,7 @@ use crate::model::{
     CoverageOpportunity, CoverageReport, FileTotals, MetricKind, OpportunityKind, SourceSpan,
 };
 
-pub fn parse_path(path: &Path) -> Result<CoverageReport> {
-    let text = fs::read_to_string(path)
-        .with_context(|| format!("failed to read coverage json: {}", path.display()))?;
-    parse_str(&text)
-}
-
-pub fn parse_str(input: &str) -> Result<CoverageReport> {
-    let repo_root = env::current_dir()
-        .context("failed to determine current directory for llvm path normalization")?;
-    parse_str_with_repo_root(input, &repo_root)
-}
-
-fn parse_str_with_repo_root(input: &str, repo_root: &Path) -> Result<CoverageReport> {
+pub(crate) fn parse_str_with_repo_root(input: &str, repo_root: &Path) -> Result<CoverageReport> {
     let export: LlvmExport = serde_json::from_str(input).context("failed to parse llvm json")?;
     let mut opportunities = Vec::new();
     let mut region_totals_by_file = BTreeMap::new();
@@ -320,7 +307,11 @@ fn bool_at(values: &[serde_json::Value], index: usize) -> Option<bool> {
 mod tests {
     use std::path::{Path, PathBuf};
 
-    use super::{normalize_path, parse_str};
+    use super::{normalize_path, parse_str_with_repo_root};
+
+    fn parse_str(input: &str) -> anyhow::Result<crate::model::CoverageReport> {
+        parse_str_with_repo_root(input, Path::new("/workspace/covgate"))
+    }
 
     #[test]
     fn parses_basic_llvm_export() {
