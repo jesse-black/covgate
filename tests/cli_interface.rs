@@ -240,4 +240,5 @@ fn unknown_coverage_json_shape_reports_supported_formats() {
     );
     assert!(stderr.contains("LLVM JSON export"), "stderr={stderr}");
     assert!(stderr.contains("Coverlet native JSON"), "stderr={stderr}");
+    assert!(stderr.contains("Istanbul native JSON"), "stderr={stderr}");
 }
