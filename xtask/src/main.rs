@@ -185,13 +185,16 @@ fn regen_fixture_coverage_all() -> Result<()> {
 }
 
 fn write_fixture_coverage(spec: &FixtureCoverageSpec) -> Result<()> {
-    if matches!(spec.toolchain, FixtureToolchain::Dotnet) {
-        return write_dotnet_fixture_coverage(spec);
+    match spec.toolchain {
+        FixtureToolchain::Dotnet => write_dotnet_fixture_coverage(spec),
+        FixtureToolchain::Vitest => write_vitest_fixture_coverage(spec),
+        FixtureToolchain::Rust | FixtureToolchain::Cpp | FixtureToolchain::Swift => {
+            write_llvm_fixture_coverage(spec)
+        }
     }
-    if matches!(spec.toolchain, FixtureToolchain::Vitest) {
-        return write_vitest_fixture_coverage(spec);
-    }
+}
 
+fn write_llvm_fixture_coverage(spec: &FixtureCoverageSpec) -> Result<()> {
     let repo_root = project_root()?;
     let source_path = repo_root
         .join("tests")
@@ -283,9 +286,10 @@ fn build_fixture_binary(
         FixtureToolchain::Rust => build_rust_fixture_binary(spec, source_path, binary_path),
         FixtureToolchain::Cpp => build_cpp_fixture_binary(spec, source_path, binary_path),
         FixtureToolchain::Swift => build_swift_fixture_binary(spec, source_path, binary_path),
-        FixtureToolchain::Dotnet | FixtureToolchain::Vitest => {
-            bail!("fixture toolchain does not support llvm fixture binary generation")
-        }
+        _ => bail!(
+            "fixture toolchain `{}` does not support llvm fixture binary generation",
+            spec.id
+        ),
     }
 }
 
