@@ -87,6 +87,3 @@ Decision:
 - `covgate` function gates (`--fail-under-functions`, `--fail-uncovered-functions`) should continue to count the callable opportunities reported by each native coverage format adapter, including anonymous/unnamed units where present.
 - We prefer parity and predictability versus ecosystem-native thresholds over tool-specific filtering heuristics that might hide real coverage-tool behavior.
 
-Implication for users:
-
-- If your policy intent is strictly “no uncovered named functions/methods,” configure exclusions upstream in the coverage producer where available, and treat `covgate` function gates as enforcing the broader callable-unit definition emitted by the report format.
