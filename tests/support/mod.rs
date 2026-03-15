@@ -122,6 +122,14 @@ pub fn pass_fixtures_with_lines() -> Vec<Fixture> {
     fixtures
 }
 
+pub fn function_capable_fail_fixtures() -> Vec<Fixture> {
+    fail_fixtures_with_regions()
+}
+
+pub fn function_capable_pass_fixtures() -> Vec<Fixture> {
+    pass_fixtures_with_regions()
+}
+
 pub fn assert_fixture_has_no_branch_coverage(fixture: Fixture) {
     fn contains_non_empty_branches(value: &serde_json::Value) -> bool {
         match value {

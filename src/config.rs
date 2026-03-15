@@ -35,9 +35,11 @@ struct GateConfig {
     fail_under_regions: Option<f64>,
     fail_under_lines: Option<f64>,
     fail_under_branches: Option<f64>,
+    fail_under_functions: Option<f64>,
     fail_uncovered_regions: Option<usize>,
     fail_uncovered_lines: Option<usize>,
     fail_uncovered_branches: Option<usize>,
+    fail_uncovered_functions: Option<usize>,
 }
 
 impl TryFrom<Args> for Config {
@@ -165,6 +167,19 @@ fn resolve_rules(args: &Args, file_config: Option<&FileConfig>) -> Result<Vec<Ga
         });
     }
 
+    // fail_under_functions
+    if let Some(minimum_percent) = args.fail_under_functions {
+        configured.push(GateRule::Percent {
+            metric: MetricKind::Function,
+            minimum_percent,
+        });
+    } else if let Some(minimum_percent) = file_config.and_then(|c| c.gates.fail_under_functions) {
+        configured.push(GateRule::Percent {
+            metric: MetricKind::Function,
+            minimum_percent,
+        });
+    }
+
     // fail_uncovered_branches
     if let Some(maximum_count) = args.fail_uncovered_branches {
         configured.push(GateRule::UncoveredCount {
@@ -174,6 +189,19 @@ fn resolve_rules(args: &Args, file_config: Option<&FileConfig>) -> Result<Vec<Ga
     } else if let Some(maximum_count) = file_config.and_then(|c| c.gates.fail_uncovered_branches) {
         configured.push(GateRule::UncoveredCount {
             metric: MetricKind::Branch,
+            maximum_count,
+        });
+    }
+
+    // fail_uncovered_functions
+    if let Some(maximum_count) = args.fail_uncovered_functions {
+        configured.push(GateRule::UncoveredCount {
+            metric: MetricKind::Function,
+            maximum_count,
+        });
+    } else if let Some(maximum_count) = file_config.and_then(|c| c.gates.fail_uncovered_functions) {
+        configured.push(GateRule::UncoveredCount {
+            metric: MetricKind::Function,
             maximum_count,
         });
     }
@@ -213,9 +241,11 @@ mod tests {
                 fail_under_regions: Some(90.0),
                 fail_under_lines: None,
                 fail_under_branches: None,
+                fail_under_functions: None,
                 fail_uncovered_regions: Some(1),
                 fail_uncovered_lines: None,
                 fail_uncovered_branches: None,
+                fail_uncovered_functions: None,
                 markdown_output: None,
             },
             None,
@@ -247,9 +277,11 @@ mod tests {
             fail_under_regions: Some(90.0),
             fail_under_lines: None,
             fail_under_branches: None,
+            fail_under_functions: None,
             fail_uncovered_regions: None, // Will fallback to TOML
             fail_uncovered_lines: None,
             fail_uncovered_branches: None,
+            fail_uncovered_functions: None,
             markdown_output: None,
         };
 
@@ -286,9 +318,11 @@ mod tests {
             fail_under_regions: None,
             fail_under_lines: None,
             fail_under_branches: None,
+            fail_under_functions: None,
             fail_uncovered_regions: None,
             fail_uncovered_lines: None,
             fail_uncovered_branches: None,
+            fail_uncovered_functions: None,
             markdown_output: None,
         };
 
@@ -346,9 +380,11 @@ mod tests {
                     fail_under_regions: None,
                     fail_under_lines: None,
                     fail_under_branches: None,
+                    fail_under_functions: None,
                     fail_uncovered_regions: None,
                     fail_uncovered_lines: None,
                     fail_uncovered_branches: None,
+                    fail_uncovered_functions: None,
                     markdown_output: None,
                 },
                 Some(&config)

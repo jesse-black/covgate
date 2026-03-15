@@ -17,12 +17,14 @@ pub(crate) fn parse_str_with_repo_root(input: &str, repo_root: &Path) -> Result<
     let mut opportunities = Vec::new();
     let mut line_totals_by_file = BTreeMap::new();
     let mut branch_totals_by_file = BTreeMap::new();
+    let mut function_totals_by_file = BTreeMap::new();
 
     for classes_by_file in export.into_values() {
         for (file_name, class_value) in classes_by_file {
             let path = normalize_path(&file_name, repo_root);
             let mut line_hits_by_line = BTreeMap::<u32, bool>::new();
             let mut branch_records = Vec::<BranchRecord>::new();
+            let mut function_records = Vec::<FunctionRecord>::new();
 
             let Some(classes) = class_value.as_object() else {
                 continue;
@@ -38,7 +40,7 @@ pub(crate) fn parse_str_with_repo_root(input: &str, repo_root: &Path) -> Result<
                         continue;
                     };
 
-                    for (line_number, hits) in method.lines {
+                    for (&line_number, &hits) in &method.lines {
                         let covered = hits > 0;
                         line_hits_by_line
                             .entry(line_number)
@@ -47,6 +49,17 @@ pub(crate) fn parse_str_with_repo_root(input: &str, repo_root: &Path) -> Result<
                     }
 
                     branch_records.extend(method.branches);
+
+                    let start_line = method.lines.keys().copied().min();
+                    let end_line = method.lines.keys().copied().max();
+                    if let (Some(start_line), Some(end_line)) = (start_line, end_line) {
+                        let covered = method.lines.values().any(|hits| *hits > 0);
+                        function_records.push(FunctionRecord {
+                            start_line,
+                            end_line,
+                            covered,
+                        });
+                    }
                 }
             }
 
@@ -88,7 +101,27 @@ pub(crate) fn parse_str_with_repo_root(input: &str, repo_root: &Path) -> Result<
                         covered: is_covered,
                     });
                 }
-                branch_totals_by_file.insert(path, FileTotals { covered, total });
+                branch_totals_by_file.insert(path.clone(), FileTotals { covered, total });
+            }
+
+            if !function_records.is_empty() {
+                let mut covered = 0usize;
+                let total = function_records.len();
+                for function in function_records {
+                    if function.covered {
+                        covered += 1;
+                    }
+                    opportunities.push(CoverageOpportunity {
+                        kind: OpportunityKind::Function,
+                        span: SourceSpan {
+                            path: path.clone(),
+                            start_line: function.start_line,
+                            end_line: function.end_line,
+                        },
+                        covered: function.covered,
+                    });
+                }
+                function_totals_by_file.insert(path, FileTotals { covered, total });
             }
         }
     }
@@ -99,6 +132,9 @@ pub(crate) fn parse_str_with_repo_root(input: &str, repo_root: &Path) -> Result<
     }
     if !branch_totals_by_file.is_empty() {
         totals_by_file.insert(MetricKind::Branch, branch_totals_by_file);
+    }
+    if !function_totals_by_file.is_empty() {
+        totals_by_file.insert(MetricKind::Function, function_totals_by_file);
     }
 
     Ok(CoverageReport {
@@ -148,6 +184,13 @@ struct BranchRecord {
     line: u32,
     #[serde(rename = "Hits")]
     hits: u64,
+}
+
+#[derive(Debug)]
+struct FunctionRecord {
+    start_line: u32,
+    end_line: u32,
+    covered: bool,
 }
 
 fn deserialize_line_hits<'de, D>(deserializer: D) -> Result<HashMap<u32, u64>, D::Error>
@@ -216,6 +259,51 @@ mod tests {
             .expect("file totals should exist");
         assert_eq!(branch_totals.covered, 1);
         assert_eq!(branch_totals.total, 2);
+
+        let function_totals = report
+            .totals_by_file
+            .get(&MetricKind::Function)
+            .expect("function totals should exist")
+            .get(&PathBuf::from("src/lib.cs"))
+            .expect("file totals should exist");
+        assert_eq!(function_totals.covered, 1);
+        assert_eq!(function_totals.total, 1);
+    }
+
+    #[test]
+    fn computes_function_spans_from_method_lines() {
+        let input = r#"
+        {
+          "Demo.dll": {
+            "src/lib.cs": {
+              "Demo.MathOps": {
+                "Covered": {"Lines": {"10": 1, "11": 0, "15": 2}, "Branches": []},
+                "Uncovered": {"Lines": {"20": 0, "21": 0}, "Branches": []}
+              }
+            }
+          }
+        }
+        "#;
+
+        let report = parse_str_with_repo_root(input, Path::new("/workspace/covgate"))
+            .expect("coverlet json should parse");
+
+        let function_ops: Vec<_> = report
+            .opportunities
+            .iter()
+            .filter(|op| op.kind == OpportunityKind::Function)
+            .collect();
+        assert_eq!(function_ops.len(), 2);
+        assert!(
+            function_ops
+                .iter()
+                .any(|op| { op.span.start_line == 10 && op.span.end_line == 15 && op.covered })
+        );
+        assert!(
+            function_ops
+                .iter()
+                .any(|op| { op.span.start_line == 20 && op.span.end_line == 21 && !op.covered })
+        );
     }
 
     #[test]

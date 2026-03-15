@@ -33,6 +33,7 @@ and `covgate` explains those function-oriented rules directly in console output 
 - [ ] Define the public CLI and TOML surface for function-based fail-under and fail-uncovered gates.
 - [ ] Specify diff intersection rules for changed functions or methods, especially when only part of a function body changed.
 - [ ] Record validation expectations for Istanbul and Coverlet fixture scenarios once those parser plans are active.
+- [x] (2026-03-15 16:05Z) Align function-threshold integration-test expectations with `docs/TESTING.md`: metric semantics belong in `tests/cli_metrics.rs`, should execute across a compatible fixture list, and should stay separate from CLI interface-only coverage in `tests/cli_interface.rs`.
 
 ## Current evaluation after .NET Coverlet landing
 
@@ -172,14 +173,18 @@ This is a draft plan, so the commands below are the intended implementation path
 
     Edit `src/render/console.rs`, `src/render/markdown.rs`, and integration tests under `tests/`.
 
+    The function-threshold CLI assertions in this step must follow `docs/TESTING.md`: add them to `tests/cli_metrics.rs` (not `tests/cli_interface.rs`), define fixture lists for shared threshold semantics, and run each scenario across every compatible fixture unless the scenario is intentionally proving format-specific metric availability behavior.
+
     Example commands:
 
         cargo test render
-        cargo test cli
+        cargo test cli_metrics
+        cargo test cli_interface
         cargo fmt --check
         cargo check
         cargo clippy --all-targets --all-features -- -D warnings
         cargo test
+        cargo xtask validate
         cargo llvm-cov --summary-only
 
     Expected outcome: output and integration tests prove that function gates are visible in both text and Markdown summaries and that the repository validation stack still passes.
@@ -196,7 +201,7 @@ Running `covgate` against an Istanbul-backed fixture and a Coverlet-backed fixtu
 
 If the function parser path is unavailable for the chosen coverage report format, `covgate` must fail clearly when the user asks for a function threshold. It must not silently ignore the rule.
 
-CLI integration tests must eventually include at least:
+CLI integration tests must eventually include at least, and these cases must live in `tests/cli_metrics.rs` as metric-semantics tests that iterate across compatible fixture lists when semantics are shared:
 
 - an Istanbul scenario where a changed function is covered and `--fail-under-functions 100` passes
 - an Istanbul scenario where a changed function is uncovered and `--fail-under-functions 100` fails
@@ -252,3 +257,5 @@ Revision note: Initial draft plan created for future function or method threshol
 Revision note: Updated the intended TOML section name from `[thresholds]` to `[gates]` so this draft matches the current repository configuration vocabulary.
 
 Revision note: Re-evaluated this plan after native .NET Coverlet support landed; documented that current parser support is line/branch only, confirmed method-shaped data is available in Coverlet fixtures, and reaffirmed `functions` as the single public term with parser-level method normalization.
+
+Revision note: Updated test-planning guidance to match `docs/TESTING.md`: function-threshold scenarios are metric tests in `tests/cli_metrics.rs`, should use compatible fixture matrices for shared semantics, and should be validated with `cargo xtask validate` as part of completion criteria.

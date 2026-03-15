@@ -7,6 +7,7 @@ pub enum MetricKind {
     Region,
     Line,
     Branch,
+    Function,
 }
 
 impl MetricKind {
@@ -15,6 +16,7 @@ impl MetricKind {
             "region" => Ok(Self::Region),
             "line" => Ok(Self::Line),
             "branch" => Ok(Self::Branch),
+            "function" => Ok(Self::Function),
             _ => bail!("unsupported metric kind: {value}"),
         }
     }
@@ -24,6 +26,7 @@ impl MetricKind {
             Self::Region => "region",
             Self::Line => "line",
             Self::Branch => "branch",
+            Self::Function => "function",
         }
     }
 
@@ -32,6 +35,7 @@ impl MetricKind {
             Self::Region => "regions",
             Self::Line => "lines",
             Self::Branch => "branches",
+            Self::Function => "functions",
         }
     }
 
@@ -40,6 +44,7 @@ impl MetricKind {
             Self::Region => OpportunityKind::Region,
             Self::Line => OpportunityKind::Line,
             Self::Branch => OpportunityKind::BranchOutcome,
+            Self::Function => OpportunityKind::Function,
         }
     }
 }
@@ -107,6 +112,7 @@ pub enum OpportunityKind {
     Region,
     Line,
     BranchOutcome,
+    Function,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
