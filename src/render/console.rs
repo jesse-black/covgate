@@ -70,11 +70,13 @@ pub fn render(result: &GateResult, diff_description: &str) -> String {
             crate::model::GateRule::Percent {
                 minimum_percent, ..
             } => {
+                let comparator = if outcome.passed { "≥" } else { "≱" };
                 out.push_str(&format!(
-                    "Rule {}: {} ({:.2}% ≥ {:.2}%)\n",
+                    "Rule {}: {} ({:.2}% {} {:.2}%)\n",
                     outcome.rule.label(),
                     status,
                     outcome.observed_percent,
+                    comparator,
                     minimum_percent
                 ));
             }
@@ -200,7 +202,7 @@ mod tests {
         let rendered = render(&result, "origin/main...HEAD");
         assert!(rendered.contains("Diff Coverage: FAIL"));
         assert!(rendered.contains("src/lib.rs (50.00%)"));
-        assert!(rendered.contains("Rule fail-under-regions: FAIL (50.00% ≥ 90.00%)"));
+        assert!(rendered.contains("Rule fail-under-regions: FAIL (50.00% ≱ 90.00%)"));
     }
 
     #[test]
