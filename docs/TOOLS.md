@@ -1,12 +1,12 @@
 # Tools
 
-Brief guide to tooling available to an agent running in this repository's devcontainer, in Codex Cloud after running `scripts/setup-codex-cloud.sh`, or in Jules after running `scripts/setup-jules.sh`.
+Brief guide to tooling available to an agent running in this repository's devcontainer or after running the shared setup script `scripts/agent-env-setup.sh`.
 
 See `docs/reference/environment-execution-contexts.md` for deeper rationale, source references, and setup-decision process details.
 
 ## Repo-relevant tooling summary
 
-### Installed by the shared agent setup used by `scripts/setup-codex-cloud.sh` and `scripts/setup-jules.sh` when missing
+### Installed by `scripts/agent-env-setup.sh` when missing
 
 - Core CLI/build tools: `jq`, `ripgrep`, `yq`, `fd` (via `fd-find` + symlink), `eza`
 - Shell tooling: `shellcheck`, `shfmt`
@@ -15,11 +15,10 @@ See `docs/reference/environment-execution-contexts.md` for deeper rationale, sou
 - .NET workflows: `dotnet` SDK
 - Rust workflows: `cargo llvm-cov`, `cargo-machete`, `cargo-deny` (plus `llvm-tools-preview` via `rustup component add` when `rustup` is present)
 
-### Git bootstrap for dogfooding in cloud agents
+### Base-ref maintenance for cloud agents
 
-- `scripts/setup-agent-env.sh` now performs a best-effort `origin/main` bootstrap at the end of setup using a shallow fetch (`--depth=1`) so `cargo xtask validate` can resolve `--base origin/main` in PR environments.
-- `scripts/setup-agent-maintenance.sh` is the lightweight maintenance script for subsequent environment loads; it refreshes `origin/main` using the same shallow fetch.
-- Codex Cloud maintenance wrapper: `scripts/setup-codex-cloud-maintenance.sh`.
+- `scripts/agent-env-setup.sh` installs and updates tools only; it no longer tries to fetch `origin/main`.
+- `scripts/agent-env-maintenance.sh` runs `covgate record-base` when available so agent worktrees can record a stable base ref without relying on remote-tracking branches.
 
 ### Available in devcontainer
 

@@ -5,7 +5,7 @@ use std::path::PathBuf;
 #[command(
     name = "covgate",
     about = "Diff-focused coverage gate",
-    after_help = "Repository-local defaults may be read from ./covgate.toml.\nCLI flags override config values. Supported defaults in v1:\n  base = \"origin/main\"\n  [gates]\n  fail_under_regions = 90\n  fail_uncovered_regions = 1"
+    after_help = "Repository-local defaults may be read from ./covgate.toml.\nCLI flags override config values. Supported defaults in v1:\n  base = \"origin/main\"\n  [gates]\n  fail_under_regions = 90\n  fail_uncovered_regions = 1\n\nAgent workflow:\n  covgate record-base\nthen run covgate without --base to auto-discover refs/worktree/covgate/base."
 )]
 pub struct Args {
     #[arg(long)]

@@ -5,10 +5,162 @@ use std::fs;
 use tempfile::tempdir;
 
 use crate::support::{
-    copy_tree, init_git_repo, run_covgate, run_covgate_with_coverage, run_git,
+    copy_tree, init_git_repo, run_covgate, run_covgate_raw, run_covgate_with_coverage, run_git,
     rust_basic_fail_fixture, rust_basic_pass_fixture, setup_fixture_worktree,
     write_absolute_path_coverage_fixture, write_worktree_diff,
 };
+
+#[test]
+fn record_base_creates_worktree_ref() {
+    let fixture = rust_basic_pass_fixture();
+    let temp = tempdir().expect("tempdir should exist");
+    let worktree = setup_fixture_worktree(temp.path(), fixture);
+
+    let output = run_covgate_raw(&worktree, &["record-base".to_string()]);
+    assert_eq!(output.status.code(), Some(0));
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+    assert!(stdout.contains("Recorded base commit"), "stdout={stdout}");
+    assert!(
+        stdout.contains("refs/worktree/covgate/base"),
+        "stdout={stdout}"
+    );
+
+    let ref_sha = std::process::Command::new("git")
+        .args(["rev-parse", "--verify", "refs/worktree/covgate/base"])
+        .current_dir(&worktree)
+        .output()
+        .expect("git rev-parse should run");
+    assert!(ref_sha.status.success(), "stderr={:?}", ref_sha.stderr);
+}
+
+#[test]
+fn record_base_fails_outside_git_repo() {
+    let temp = tempdir().expect("tempdir should exist");
+
+    let output = run_covgate_raw(temp.path(), &["record-base".to_string()]);
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
+    assert!(
+        stderr.contains("failed to resolve HEAD commit"),
+        "stderr={stderr}"
+    );
+}
+
+#[test]
+fn record_base_is_idempotent() {
+    let fixture = rust_basic_pass_fixture();
+    let temp = tempdir().expect("tempdir should exist");
+    let worktree = setup_fixture_worktree(temp.path(), fixture);
+
+    let first = run_covgate_raw(&worktree, &["record-base".to_string()]);
+    assert_eq!(first.status.code(), Some(0));
+    let first_ref = std::process::Command::new("git")
+        .args(["rev-parse", "--verify", "refs/worktree/covgate/base"])
+        .current_dir(&worktree)
+        .output()
+        .expect("git rev-parse should run");
+    let first_sha = String::from_utf8(first_ref.stdout).expect("sha should be utf8");
+
+    fs::write(worktree.join("idempotent.txt"), "change\n").expect("file should write");
+    run_git(&worktree, &["add", "."]);
+    run_git(&worktree, &["commit", "-m", "change after record-base"]);
+
+    let second = run_covgate_raw(&worktree, &["record-base".to_string()]);
+    assert_eq!(second.status.code(), Some(0));
+    let second_stdout = String::from_utf8(second.stdout).expect("stdout should be utf8");
+    assert!(second_stdout.contains("Base already recorded"));
+
+    let second_ref = std::process::Command::new("git")
+        .args(["rev-parse", "--verify", "refs/worktree/covgate/base"])
+        .current_dir(&worktree)
+        .output()
+        .expect("git rev-parse should run");
+    let second_sha = String::from_utf8(second_ref.stdout).expect("sha should be utf8");
+    assert_eq!(second_sha.trim(), first_sha.trim());
+}
+
+#[test]
+fn automatic_base_prefers_recorded_worktree_ref() {
+    let fixture = rust_basic_pass_fixture();
+    let temp = tempdir().expect("tempdir should exist");
+    let fixture_root = fixture.root();
+    let repo_src = fixture_root.join("repo");
+    let overlay_src = fixture_root.join("overlay");
+    let worktree = temp.path().join("repo");
+    copy_tree(&repo_src, &worktree);
+    init_git_repo(&worktree);
+    run_git(&worktree, &["branch", "-M", "main"]);
+    run_git(&worktree, &["checkout", "-b", "feature/recorded-base"]);
+
+    let output = run_covgate_raw(&worktree, &["record-base".to_string()]);
+    assert_eq!(output.status.code(), Some(0));
+
+    copy_tree(&overlay_src, &worktree);
+    run_git(&worktree, &["add", "."]);
+    run_git(&worktree, &["commit", "-m", "feature change"]);
+
+    let output = run_covgate(
+        &worktree,
+        fixture,
+        &["--fail-under-regions".to_string(), "90".to_string()],
+    );
+
+    assert_eq!(output.status.code(), Some(0));
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+    assert!(stdout.contains("Diff: refs/worktree/covgate/base...HEAD"));
+}
+
+#[test]
+fn explicit_base_overrides_recorded_worktree_ref() {
+    let fixture = rust_basic_pass_fixture();
+    let temp = tempdir().expect("tempdir should exist");
+    let fixture_root = fixture.root();
+    let repo_src = fixture_root.join("repo");
+    let overlay_src = fixture_root.join("overlay");
+    let worktree = temp.path().join("repo");
+    copy_tree(&repo_src, &worktree);
+    init_git_repo(&worktree);
+    run_git(&worktree, &["branch", "-M", "main"]);
+    run_git(&worktree, &["checkout", "-b", "feature/explicit-base"]);
+
+    let output = run_covgate_raw(&worktree, &["record-base".to_string()]);
+    assert_eq!(output.status.code(), Some(0));
+
+    copy_tree(&overlay_src, &worktree);
+    run_git(&worktree, &["add", "."]);
+    run_git(&worktree, &["commit", "-m", "feature change"]);
+
+    let output = run_covgate(
+        &worktree,
+        fixture,
+        &[
+            "--base".to_string(),
+            "main".to_string(),
+            "--fail-under-regions".to_string(),
+            "90".to_string(),
+        ],
+    );
+
+    assert_eq!(output.status.code(), Some(0));
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+    assert!(stdout.contains("Diff: main...HEAD"), "stdout={stdout}");
+}
+
+#[test]
+fn failure_text_mentions_record_base_when_base_is_unresolved() {
+    let fixture = rust_basic_pass_fixture();
+    let temp = tempdir().expect("tempdir should exist");
+
+    let output = run_covgate_with_coverage(
+        temp.path(),
+        &fixture.coverage_json(),
+        &["--fail-under-regions".to_string(), "90".to_string()],
+    );
+
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
+    assert!(stderr.contains("covgate record-base"), "stderr={stderr}");
+}
 
 #[test]
 fn markdown_summary_rust_fixture() {

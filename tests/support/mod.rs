@@ -225,6 +225,14 @@ pub fn run_covgate(worktree: &Path, fixture: Fixture, extra_args: &[String]) -> 
     run_covgate_with_coverage(worktree, &fixture.coverage_json(), extra_args)
 }
 
+pub fn run_covgate_raw(worktree: &Path, args: &[String]) -> Output {
+    let binary = env!("CARGO_BIN_EXE_covgate");
+    let mut command = Command::new(binary);
+    command.args(args);
+    command.current_dir(worktree);
+    command.output().expect("covgate should run")
+}
+
 pub fn run_covgate_with_coverage(
     worktree: &Path,
     coverage_json: &Path,

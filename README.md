@@ -73,6 +73,10 @@ Run `covgate` in your CI pipeline after your tests generate coverage artifacts. 
 * `--fail-under-branches <PERCENT>`: Fails if changed-branch coverage is below this threshold
 * `--markdown-output <FILE>`: Write a Markdown summary for CI interfaces like GitHub Actions
 
+`covgate` also supports a dedicated agent-workflow command:
+
+* `record-base`: Records `HEAD` into `refs/worktree/covgate/base` if that ref is not already set.
+
 ### Examples
 
 **Gating a Rust Pull Request Locally:**
@@ -82,13 +86,35 @@ cargo llvm-cov --json --output-path coverage.json
 covgate --coverage-json coverage.json --base origin/main --fail-under-regions 80
 ```
 
+### Agent Workflows: Recording a Stable Base
+
+In cloud agent environments, `origin/main` is intentionally inaccessible for security sandboxing. Run `covgate record-base` at task start to capture a stable per-worktree base commit.
+
+When `--base` is omitted, `covgate` automatically checks `refs/worktree/covgate/base` before the standard fallback refs used in normal local/CI workflows (`origin/HEAD`, `origin/main`, `main`). Explicit `--base` still takes precedence.
+
+```bash
+covgate record-base
+
+# ...agent performs the task work...
+
+cargo llvm-cov --json --output-path coverage.json
+covgate --coverage-json coverage.json --fail-under-regions 80
+```
+
+The Codex Cloud environment settings maintenance script should include `covgate record-base` so coverage gating can validate the task reliably. Jules does not have a maintenance-script setting, so AGENTS instructions should require running `covgate record-base` before every task.
+
+If you prefer to run the underlying Git plumbing directly, these are the commands `covgate record-base` uses conceptually:
+
+```bash
+git rev-parse -q --verify refs/worktree/covgate/base >/dev/null || \
+  git update-ref refs/worktree/covgate/base HEAD
+```
+
 ### Configuration (`covgate.toml`)
 
 `covgate` reads repository-local defaults from `covgate.toml` at the repository root so teams can keep their gate configuration checked in with the code it protects. CLI flags always override config values.
 
 ```toml
-base = "origin/main"
-
 [gates]
 fail_under_regions = 80
 fail_under_lines = 80

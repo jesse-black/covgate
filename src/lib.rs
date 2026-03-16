@@ -3,6 +3,7 @@ pub mod config;
 pub mod coverage;
 pub mod diff;
 pub mod gate;
+pub mod git;
 pub mod metrics;
 pub mod model;
 pub mod render;
@@ -36,4 +37,11 @@ pub fn run(config: Config) -> Result<i32> {
     }
 
     Ok(if gate_result.passed { 0 } else { 1 })
+}
+
+#[cfg(test)]
+pub mod test_support {
+    use std::sync::Mutex;
+
+    pub static CWD_LOCK: Mutex<()> = Mutex::new(());
 }

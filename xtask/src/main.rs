@@ -1,6 +1,5 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::process::Stdio;
 
 use anyhow::{Context, Result, bail};
 
@@ -55,25 +54,17 @@ fn validate() -> Result<()> {
         ],
     )?;
 
-    if let Some(base_ref) = resolve_base_ref() {
-        run(
-            "cargo",
-            &[
-                "run",
-                "--bin",
-                "covgate",
-                "--",
-                "--coverage-json",
-                coverage_json_str,
-                "--base",
-                &base_ref,
-            ],
-        )?;
-    } else {
-        eprintln!(
-            "warning: skipping covgate dogfooding step; no suitable git base ref was found in this environment"
-        );
-    }
+    run(
+        "cargo",
+        &[
+            "run",
+            "--bin",
+            "covgate",
+            "--",
+            "--coverage-json",
+            coverage_json_str,
+        ],
+    )?;
 
     run("cargo-machete", &["."])?;
     run("cargo-deny", &["check"])?;
@@ -609,52 +600,6 @@ fn project_root() -> Result<PathBuf> {
         .parent()
         .context("xtask manifest should live under the repository root")?;
     Ok(root.to_path_buf())
-}
-
-fn resolve_base_ref() -> Option<String> {
-    for candidate in ["origin/main", "main"] {
-        if git_ref_exists(candidate) {
-            return Some(candidate.to_owned());
-        }
-    }
-
-    fetch_main_branch();
-
-    for candidate in ["origin/main", "refs/remotes/origin/main", "main"] {
-        if git_ref_exists(candidate) {
-            return Some(candidate.to_owned());
-        }
-    }
-
-    None
-}
-
-fn fetch_main_branch() {
-    let _ = Command::new("git")
-        .args([
-            "fetch",
-            "--no-tags",
-            "--depth=1",
-            "origin",
-            "+refs/heads/main:refs/remotes/origin/main",
-        ])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status();
-
-    let _ = Command::new("git")
-        .args(["fetch", "--no-tags", "--depth=1", "origin", "main"])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status();
-}
-
-fn git_ref_exists(reference: &str) -> bool {
-    Command::new("git")
-        .args(["rev-parse", "--verify", "--quiet", reference])
-        .status()
-        .map(|status| status.success())
-        .unwrap_or(false)
 }
 
 fn coverage_path() -> PathBuf {
