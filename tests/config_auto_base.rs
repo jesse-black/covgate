@@ -1,4 +1,5 @@
 use std::fs;
+use std::sync::Mutex;
 
 use tempfile::tempdir;
 
@@ -8,6 +9,8 @@ use covgate::{
     diff::DiffSource,
     git::{RECORDED_BASE_REF, record_base_ref},
 };
+
+static CWD_LOCK: Mutex<()> = Mutex::new(());
 
 struct CwdGuard(std::path::PathBuf);
 impl Drop for CwdGuard {
@@ -32,6 +35,8 @@ fn run_git(path: &std::path::Path, args: &[&str]) {
 
 #[test]
 fn config_uses_recorded_base_when_base_is_omitted() {
+    let _lock = CWD_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
+
     let temp = tempdir().expect("tempdir should exist");
     let repo = temp.path();
     fs::write(repo.join("README.md"), "initial\n").expect("fixture file should write");

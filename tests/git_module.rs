@@ -126,10 +126,17 @@ fn resolve_head_fails_outside_git_repo() {
 }
 
 #[test]
-fn resolve_ref_and_create_ref_report_when_git_command_is_missing() {
+fn resolve_head_ref_and_create_ref_report_when_git_command_is_missing() {
     let _lock = CWD_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
 
     with_path_override("", || {
+        let head_err = resolve_head_sha().expect_err("resolve_head_sha should fail");
+        assert!(
+            head_err
+                .to_string()
+                .contains("failed to run git rev-parse for HEAD")
+        );
+
         let resolve_err = resolve_ref_sha("HEAD").expect_err("resolve_ref_sha should fail");
         assert!(
             resolve_err
