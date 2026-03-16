@@ -154,6 +154,26 @@ mod tests {
         f(repo);
     }
 
+    fn with_temp_non_git_dir<F>(f: F)
+    where
+        F: FnOnce(&std::path::Path),
+    {
+        let _lock = CWD_LOCK.lock().expect("cwd lock should be available");
+
+        struct CwdGuard(std::path::PathBuf);
+        impl Drop for CwdGuard {
+            fn drop(&mut self) {
+                let _ = std::env::set_current_dir(&self.0);
+            }
+        }
+
+        let temp = tempdir().expect("tempdir should exist");
+        let previous = env::current_dir().expect("cwd should resolve");
+        let _guard = CwdGuard(previous);
+        env::set_current_dir(temp.path()).expect("should chdir into temp dir");
+        f(temp.path());
+    }
+
     #[test]
     fn record_base_creates_ref_when_missing() {
         with_temp_git_repo(|_| {
@@ -195,6 +215,71 @@ mod tests {
 
             let discovered = discover_base_ref().expect("discovery should succeed");
             assert_eq!(discovered.as_deref(), Some(RECORDED_BASE_REF));
+        });
+    }
+
+    #[test]
+    fn resolve_head_sha_errors_outside_git_repo() {
+        with_temp_non_git_dir(|_| {
+            let err = super::resolve_head_sha().expect_err("HEAD lookup should fail");
+            assert!(err.to_string().contains("failed to resolve HEAD commit"));
+        });
+    }
+
+    #[test]
+    fn resolve_ref_sha_returns_none_for_missing_ref() {
+        with_temp_git_repo(|_| {
+            let resolved =
+                super::resolve_ref_sha("refs/worktree/covgate/missing").expect("query should run");
+            assert!(resolved.is_none());
+        });
+    }
+
+    #[test]
+    fn resolve_ref_sha_falls_back_to_show_ref_for_non_commit_refs() {
+        with_temp_git_repo(|repo| {
+            fs::write(repo.join("blob.txt"), "blob-content\n").expect("blob should write");
+            let blob_hash_output = std::process::Command::new("git")
+                .args(["hash-object", "-w", "blob.txt"])
+                .current_dir(repo)
+                .output()
+                .expect("hash-object should run");
+            assert!(blob_hash_output.status.success());
+            let blob_hash = String::from_utf8(blob_hash_output.stdout)
+                .expect("hash should be utf8")
+                .trim()
+                .to_string();
+
+            run_git(
+                repo,
+                &[
+                    "update-ref",
+                    "refs/worktree/covgate/blob",
+                    blob_hash.as_str(),
+                ],
+            );
+
+            let resolved = super::resolve_ref_sha("refs/worktree/covgate/blob")
+                .expect("ref lookup should run")
+                .expect("ref should resolve");
+            assert_eq!(resolved, blob_hash);
+        });
+    }
+
+    #[test]
+    fn create_ref_errors_for_invalid_target() {
+        with_temp_git_repo(|_| {
+            let err = super::create_ref("refs/worktree/covgate/base", "not-a-real-target")
+                .expect_err("create_ref should fail");
+            assert!(err.to_string().contains("failed to update git ref"));
+        });
+    }
+
+    #[test]
+    fn record_base_ref_errors_outside_git_repo() {
+        with_temp_non_git_dir(|_| {
+            let err = super::record_base_ref().expect_err("record-base should fail");
+            assert!(err.to_string().contains("failed to resolve HEAD commit"));
         });
     }
 }

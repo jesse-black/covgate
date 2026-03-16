@@ -34,6 +34,19 @@ fn record_base_creates_worktree_ref() {
 }
 
 #[test]
+fn record_base_fails_outside_git_repo() {
+    let temp = tempdir().expect("tempdir should exist");
+
+    let output = run_covgate_raw(temp.path(), &["record-base".to_string()]);
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
+    assert!(
+        stderr.contains("failed to resolve HEAD commit"),
+        "stderr={stderr}"
+    );
+}
+
+#[test]
 fn record_base_is_idempotent() {
     let fixture = rust_basic_pass_fixture();
     let temp = tempdir().expect("tempdir should exist");
