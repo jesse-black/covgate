@@ -38,3 +38,10 @@ pub fn run(config: Config) -> Result<i32> {
 
     Ok(if gate_result.passed { 0 } else { 1 })
 }
+
+#[cfg(test)]
+pub mod test_support {
+    use std::sync::Mutex;
+
+    pub static CWD_LOCK: Mutex<()> = Mutex::new(());
+}

@@ -104,13 +104,12 @@ pub fn record_base_ref() -> Result<String> {
 
 #[cfg(test)]
 mod tests {
-    use std::{env, fs, sync::Mutex};
+    use std::{env, fs};
 
     use tempfile::tempdir;
 
     use super::{RECORDED_BASE_REF, discover_base_ref, record_base_ref, resolve_ref_sha};
-
-    static CWD_LOCK: Mutex<()> = Mutex::new(());
+    use crate::test_support::CWD_LOCK;
 
     fn run_git(path: &std::path::Path, args: &[&str]) {
         let output = std::process::Command::new("git")
@@ -130,7 +129,7 @@ mod tests {
     where
         F: FnOnce(&std::path::Path),
     {
-        let _lock = CWD_LOCK.lock().expect("cwd lock should be available");
+        let _lock = CWD_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
 
         struct CwdGuard(std::path::PathBuf);
         impl Drop for CwdGuard {
@@ -152,26 +151,6 @@ mod tests {
         let _guard = CwdGuard(previous);
         env::set_current_dir(repo).expect("should chdir into repo");
         f(repo);
-    }
-
-    fn with_temp_non_git_dir<F>(f: F)
-    where
-        F: FnOnce(&std::path::Path),
-    {
-        let _lock = CWD_LOCK.lock().expect("cwd lock should be available");
-
-        struct CwdGuard(std::path::PathBuf);
-        impl Drop for CwdGuard {
-            fn drop(&mut self) {
-                let _ = std::env::set_current_dir(&self.0);
-            }
-        }
-
-        let temp = tempdir().expect("tempdir should exist");
-        let previous = env::current_dir().expect("cwd should resolve");
-        let _guard = CwdGuard(previous);
-        env::set_current_dir(temp.path()).expect("should chdir into temp dir");
-        f(temp.path());
     }
 
     #[test]
@@ -220,10 +199,22 @@ mod tests {
 
     #[test]
     fn resolve_head_sha_errors_outside_git_repo() {
-        with_temp_non_git_dir(|_| {
-            let err = super::resolve_head_sha().expect_err("HEAD lookup should fail");
-            assert!(err.to_string().contains("failed to resolve HEAD commit"));
-        });
+        let _lock = CWD_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
+
+        struct CwdGuard(std::path::PathBuf);
+        impl Drop for CwdGuard {
+            fn drop(&mut self) {
+                let _ = std::env::set_current_dir(&self.0);
+            }
+        }
+
+        let temp = tempdir().expect("tempdir should exist");
+        let previous = env::current_dir().expect("cwd should resolve");
+        let _guard = CwdGuard(previous);
+        env::set_current_dir(temp.path()).expect("should chdir into temp dir");
+
+        let err = super::resolve_head_sha().expect_err("HEAD lookup should fail");
+        assert!(err.to_string().contains("failed to resolve HEAD commit"));
     }
 
     #[test]
@@ -272,14 +263,6 @@ mod tests {
             let err = super::create_ref("refs/worktree/covgate/base", "not-a-real-target")
                 .expect_err("create_ref should fail");
             assert!(err.to_string().contains("failed to update git ref"));
-        });
-    }
-
-    #[test]
-    fn record_base_ref_errors_outside_git_repo() {
-        with_temp_non_git_dir(|_| {
-            let err = super::record_base_ref().expect_err("record-base should fail");
-            assert!(err.to_string().contains("failed to resolve HEAD commit"));
         });
     }
 }

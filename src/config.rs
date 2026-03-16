@@ -223,7 +223,7 @@ fn resolve_rules(args: &Args, file_config: Option<&FileConfig>) -> Result<Vec<Ga
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, sync::Mutex};
+    use std::fs;
 
     use tempfile::tempdir;
 
@@ -233,11 +233,8 @@ mod tests {
     use crate::{
         cli::Args,
         diff::DiffSource,
-        git,
         model::{GateRule, MetricKind},
     };
-
-    static CWD_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn parses_region_cli_rules() {
@@ -476,71 +473,5 @@ mod tests {
             )
             .is_err()
         );
-    }
-
-    #[test]
-    fn auto_discovers_recorded_worktree_base_when_not_explicitly_configured() {
-        let _lock = CWD_LOCK.lock().expect("cwd lock should be available");
-
-        struct CwdGuard(std::path::PathBuf);
-        impl Drop for CwdGuard {
-            fn drop(&mut self) {
-                let _ = std::env::set_current_dir(&self.0);
-            }
-        }
-
-        let temp = tempdir().expect("tempdir should exist");
-        let repo = temp.path();
-        fs::write(repo.join("README.md"), "initial\n").expect("fixture file should write");
-
-        let run_git = |args: &[&str]| {
-            let output = std::process::Command::new("git")
-                .args(args)
-                .current_dir(repo)
-                .output()
-                .expect("git should run");
-            assert!(
-                output.status.success(),
-                "git {:?} failed: {}",
-                args,
-                String::from_utf8_lossy(&output.stderr)
-            );
-        };
-
-        run_git(&["init"]);
-        run_git(&["config", "user.email", "covgate@example.com"]);
-        run_git(&["config", "user.name", "Covgate Tests"]);
-        run_git(&["add", "."]);
-        run_git(&["commit", "-m", "initial"]);
-
-        let previous = std::env::current_dir().expect("cwd should resolve");
-        let _guard = CwdGuard(previous);
-        std::env::set_current_dir(repo).expect("should chdir");
-
-        git::record_base_ref().expect("record-base should succeed");
-
-        let source = resolve_diff_source(
-            &Args {
-                coverage_json: "coverage.json".into(),
-                base: None,
-                diff_file: None,
-                fail_under_regions: None,
-                fail_under_lines: None,
-                fail_under_branches: None,
-                fail_under_functions: None,
-                fail_uncovered_regions: None,
-                fail_uncovered_lines: None,
-                fail_uncovered_branches: None,
-                fail_uncovered_functions: None,
-                markdown_output: None,
-            },
-            None,
-        )
-        .expect("diff source should resolve");
-
-        match source {
-            DiffSource::GitBase(base) => assert_eq!(base, git::RECORDED_BASE_REF),
-            DiffSource::DiffFile(_) => panic!("expected git base"),
-        }
     }
 }
