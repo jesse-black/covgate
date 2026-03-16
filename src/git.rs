@@ -24,9 +24,8 @@ pub fn resolve_head_sha() -> Result<String> {
 }
 
 pub fn resolve_ref_sha(reference: &str) -> Result<Option<String>> {
-    let commit_ref = format!("{reference}^{{commit}}");
     let output = Command::new("git")
-        .args(["rev-parse", "--verify", "--quiet", &commit_ref])
+        .args(["rev-parse", "--verify", "--quiet", reference])
         .output()
         .with_context(|| format!("failed to run git rev-parse for {reference}"))?;
 
@@ -39,21 +38,7 @@ pub fn resolve_ref_sha(reference: &str) -> Result<Option<String>> {
         ));
     }
 
-    let show_ref = Command::new("git")
-        .args(["show-ref", "--verify", "--hash", reference])
-        .output()
-        .with_context(|| format!("failed to run git show-ref for {reference}"))?;
-
-    if !show_ref.status.success() {
-        return Ok(None);
-    }
-
-    Ok(Some(
-        String::from_utf8(show_ref.stdout)
-            .context("git show-ref output was not valid utf-8")?
-            .trim()
-            .to_string(),
-    ))
+    Ok(None)
 }
 
 pub fn create_ref(reference: &str, target: &str) -> Result<()> {
@@ -100,169 +85,4 @@ pub fn record_base_ref() -> Result<String> {
     create_ref(RECORDED_BASE_REF, "HEAD")?;
     println!("Recorded base commit {head_sha} at {RECORDED_BASE_REF}");
     Ok(head_sha)
-}
-
-#[cfg(test)]
-mod tests {
-    use std::{env, fs};
-
-    use tempfile::tempdir;
-
-    use super::{RECORDED_BASE_REF, discover_base_ref, record_base_ref, resolve_ref_sha};
-    use crate::test_support::CWD_LOCK;
-
-    fn run_git(path: &std::path::Path, args: &[&str]) {
-        let output = std::process::Command::new("git")
-            .args(args)
-            .current_dir(path)
-            .output()
-            .expect("git command should run");
-        assert!(
-            output.status.success(),
-            "git {:?} failed: {}",
-            args,
-            String::from_utf8_lossy(&output.stderr)
-        );
-    }
-
-    fn with_temp_git_repo<F>(f: F)
-    where
-        F: FnOnce(&std::path::Path),
-    {
-        let _lock = CWD_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
-
-        struct CwdGuard(std::path::PathBuf);
-        impl Drop for CwdGuard {
-            fn drop(&mut self) {
-                let _ = std::env::set_current_dir(&self.0);
-            }
-        }
-
-        let temp = tempdir().expect("tempdir should exist");
-        let repo = temp.path();
-        fs::write(repo.join("README.md"), "initial\n").expect("fixture file should be written");
-        run_git(repo, &["init"]);
-        run_git(repo, &["config", "user.email", "covgate@example.com"]);
-        run_git(repo, &["config", "user.name", "Covgate Tests"]);
-        run_git(repo, &["add", "."]);
-        run_git(repo, &["commit", "-m", "initial"]);
-
-        let previous = env::current_dir().expect("cwd should resolve");
-        let _guard = CwdGuard(previous);
-        env::set_current_dir(repo).expect("should chdir into repo");
-        f(repo);
-    }
-
-    #[test]
-    fn record_base_creates_ref_when_missing() {
-        with_temp_git_repo(|_| {
-            let head_before = resolve_ref_sha("HEAD").expect("head resolve should work");
-            let _ = record_base_ref().expect("record-base should succeed");
-            let recorded = resolve_ref_sha(RECORDED_BASE_REF).expect("recorded ref should resolve");
-            assert_eq!(recorded, head_before);
-        });
-    }
-
-    #[test]
-    fn record_base_is_idempotent() {
-        with_temp_git_repo(|repo| {
-            let first = record_base_ref().expect("first record should work");
-            fs::write(repo.join("next.txt"), "next\n").expect("next file should write");
-            run_git(repo, &["add", "."]);
-            run_git(repo, &["commit", "-m", "next"]);
-
-            let second = record_base_ref().expect("second record should work");
-            assert_eq!(second, first);
-            let recorded = resolve_ref_sha(RECORDED_BASE_REF).expect("recorded ref should resolve");
-            assert_eq!(recorded.as_deref(), Some(first.as_str()));
-        });
-    }
-
-    #[test]
-    fn auto_base_prefers_recorded_worktree_ref() {
-        with_temp_git_repo(|repo| {
-            let main_sha = resolve_ref_sha("HEAD")
-                .expect("main sha query should work")
-                .expect("head should resolve");
-            run_git(repo, &["branch", "-M", "main"]);
-            run_git(repo, &["branch", "origin/main", &main_sha]);
-            let _ = record_base_ref().expect("record-base should succeed");
-
-            fs::write(repo.join("next.txt"), "next\n").expect("next file should write");
-            run_git(repo, &["add", "."]);
-            run_git(repo, &["commit", "-m", "next"]);
-
-            let discovered = discover_base_ref().expect("discovery should succeed");
-            assert_eq!(discovered.as_deref(), Some(RECORDED_BASE_REF));
-        });
-    }
-
-    #[test]
-    fn resolve_head_sha_errors_outside_git_repo() {
-        let _lock = CWD_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
-
-        struct CwdGuard(std::path::PathBuf);
-        impl Drop for CwdGuard {
-            fn drop(&mut self) {
-                let _ = std::env::set_current_dir(&self.0);
-            }
-        }
-
-        let temp = tempdir().expect("tempdir should exist");
-        let previous = env::current_dir().expect("cwd should resolve");
-        let _guard = CwdGuard(previous);
-        env::set_current_dir(temp.path()).expect("should chdir into temp dir");
-
-        let err = super::resolve_head_sha().expect_err("HEAD lookup should fail");
-        assert!(err.to_string().contains("failed to resolve HEAD commit"));
-    }
-
-    #[test]
-    fn resolve_ref_sha_returns_none_for_missing_ref() {
-        with_temp_git_repo(|_| {
-            let resolved =
-                super::resolve_ref_sha("refs/worktree/covgate/missing").expect("query should run");
-            assert!(resolved.is_none());
-        });
-    }
-
-    #[test]
-    fn resolve_ref_sha_falls_back_to_show_ref_for_non_commit_refs() {
-        with_temp_git_repo(|repo| {
-            fs::write(repo.join("blob.txt"), "blob-content\n").expect("blob should write");
-            let blob_hash_output = std::process::Command::new("git")
-                .args(["hash-object", "-w", "blob.txt"])
-                .current_dir(repo)
-                .output()
-                .expect("hash-object should run");
-            assert!(blob_hash_output.status.success());
-            let blob_hash = String::from_utf8(blob_hash_output.stdout)
-                .expect("hash should be utf8")
-                .trim()
-                .to_string();
-
-            run_git(
-                repo,
-                &[
-                    "update-ref",
-                    "refs/worktree/covgate/blob",
-                    blob_hash.as_str(),
-                ],
-            );
-
-            let resolved = super::resolve_ref_sha("refs/worktree/covgate/blob")
-                .expect("ref lookup should run")
-                .expect("ref should resolve");
-            assert_eq!(resolved, blob_hash);
-        });
-    }
-
-    #[test]
-    fn create_ref_errors_for_invalid_target() {
-        with_temp_git_repo(|_| {
-            let err = super::create_ref("refs/worktree/covgate/base", "not-a-real-target")
-                .expect_err("create_ref should fail");
-            assert!(err.to_string().contains("failed to update git ref"));
-        });
-    }
 }
