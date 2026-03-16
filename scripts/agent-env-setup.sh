@@ -3,7 +3,7 @@ set -euo pipefail
 
 SETUP_LABEL="${1:-agent-env-setup}"
 
-if [[ "${CODEX_DEBUG:-}" == "1" || "${CODEX_SETUP_DEBUG:-}" == "1" || "${JULES_DEBUG:-}" == "1" || "${JULES_SETUP_DEBUG:-}" == "1" ]]; then
+if [[ "${DEBUG:-}" == "1" ]]; then
 	set -x
 fi
 

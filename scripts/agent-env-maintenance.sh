@@ -3,13 +3,7 @@ set -euo pipefail
 
 SETUP_LABEL="${1:-agent-env-maintenance}"
 
-if [[ "$(id -u)" -eq 0 ]]; then
-	SUDO=""
-else
-	SUDO="sudo"
-fi
-
-if [[ "${CODEX_DEBUG:-}" == "1" || "${CODEX_SETUP_DEBUG:-}" == "1" || "${JULES_DEBUG:-}" == "1" || "${JULES_SETUP_DEBUG:-}" == "1" ]]; then
+if [[ "${DEBUG:-}" == "1" ]]; then
 	set -x
 fi
 
@@ -31,8 +25,6 @@ record_base_ref() {
 	fi
 }
 
-# no-op placeholder to keep compatibility if future maintenance tasks require elevated ops.
-: "$SUDO"
 
 record_base_ref
 
