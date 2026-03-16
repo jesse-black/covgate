@@ -88,23 +88,22 @@ covgate --coverage-json coverage.json --base origin/main --fail-under-regions 80
 
 ### Agent Workflows: Recording a Stable Base
 
-In ephemeral agent/task environments, `origin/main` may be unavailable, detached, or intentionally inaccessible. In those environments, use `covgate record-base` at task start to capture a stable per-worktree base commit.
+In cloud agent environments, `origin/main` is intentionally inaccessible for security sandboxing. Run `covgate record-base` at task start to capture a stable per-worktree base commit.
 
-When `--base` is omitted, `covgate` automatically checks `refs/worktree/covgate/base` before legacy fallback refs (`origin/HEAD`, `origin/main`, `origin/master`, `main`, `master`). Explicit `--base` still takes precedence.
+When `--base` is omitted, `covgate` automatically checks `refs/worktree/covgate/base` before the standard fallback refs used in normal local/CI workflows (`origin/HEAD`, `origin/main`, `main`). Explicit `--base` still takes precedence.
 
 ```bash
 covgate record-base
+
+# ...agent performs the task work...
+
 cargo llvm-cov --json --output-path coverage.json
 covgate --coverage-json coverage.json --fail-under-regions 80
 ```
 
-Maintenance/bootstrap scripts can use the same first-class command:
+The Codex Cloud environment settings maintenance script should include `covgate record-base` so coverage gating can validate the task reliably. Jules does not have a maintenance-script setting, so AGENTS instructions should require running `covgate record-base` before every task.
 
-```bash
-scripts/agent-env-maintenance.sh
-```
-
-Raw Git equivalent (for transparency):
+If you prefer to run the underlying Git plumbing directly, these are the commands `covgate record-base` uses conceptually:
 
 ```bash
 git rev-parse -q --verify refs/worktree/covgate/base >/dev/null || \
@@ -116,8 +115,6 @@ git rev-parse -q --verify refs/worktree/covgate/base >/dev/null || \
 `covgate` reads repository-local defaults from `covgate.toml` at the repository root so teams can keep their gate configuration checked in with the code it protects. CLI flags always override config values.
 
 ```toml
-base = "origin/main"
-
 [gates]
 fail_under_regions = 80
 fail_under_lines = 80

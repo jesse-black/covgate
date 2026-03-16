@@ -24,8 +24,9 @@ pub fn resolve_head_sha() -> Result<String> {
 }
 
 pub fn resolve_ref_sha(reference: &str) -> Result<Option<String>> {
+    let commit_ref = format!("{reference}^{{commit}}");
     let output = Command::new("git")
-        .args(["rev-parse", "--verify", "--quiet", reference])
+        .args(["rev-parse", "--verify", "--quiet", &commit_ref])
         .output()
         .with_context(|| format!("failed to run git rev-parse for {reference}"))?;
 

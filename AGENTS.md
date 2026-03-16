@@ -10,3 +10,4 @@
 ## Rust Workflow
 - Run `cargo xtask validate` before considering work complete.
 - Address bug reports and review findings with TDD: first reproduce the issue in a failing test, then fix the issue and rerun the relevant tests until they pass.
+- In Jules environments, run `covgate record-base` before starting every task.
