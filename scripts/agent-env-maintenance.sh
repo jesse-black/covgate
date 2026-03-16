@@ -14,7 +14,16 @@ record_base_ref() {
 	fi
 
 	if ! command -v covgate >/dev/null 2>&1; then
-		echo "${SETUP_LABEL}: covgate not found; skipping covgate record-base" >&2
+		if ! command -v cargo >/dev/null 2>&1; then
+			echo "${SETUP_LABEL}: covgate and cargo not found; skipping covgate record-base" >&2
+			return 0
+		fi
+
+		if cargo run --quiet -- record-base; then
+			echo "${SETUP_LABEL}: recorded stable base ref via cargo run"
+		else
+			echo "${SETUP_LABEL}: cargo run -- record-base failed; continuing" >&2
+		fi
 		return 0
 	fi
 
