@@ -3,6 +3,7 @@ pub mod config;
 pub mod coverage;
 pub mod diff;
 pub mod gate;
+pub mod git;
 pub mod metrics;
 pub mod model;
 pub mod render;

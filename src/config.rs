@@ -9,6 +9,7 @@ use serde::Deserialize;
 use crate::{
     cli::Args,
     diff::DiffSource,
+    git,
     model::{GateRule, MetricKind},
 };
 
@@ -89,10 +90,14 @@ fn resolve_diff_source(args: &Args, file_config: Option<&FileConfig>) -> Result<
         (None, None) => {
             if let Some(base) = file_config.and_then(|config| config.base.clone()) {
                 Ok(DiffSource::GitBase(base))
+            } else if let Some(base) = git::discover_base_ref()? {
+                Ok(DiffSource::GitBase(base))
             } else {
                 bail!(
-                    "either --base, --diff-file, or {} with a base value is required",
-                    CONFIG_FILE_NAME
+                    "unable to determine a base ref automatically. Try one of: pass --base <REF>; run covgate record-base; create {} manually with `git update-ref {} HEAD`; or configure {} with a base value",
+                    git::RECORDED_BASE_REF,
+                    git::RECORDED_BASE_REF,
+                    CONFIG_FILE_NAME,
                 )
             }
         }

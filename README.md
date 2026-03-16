@@ -73,6 +73,10 @@ Run `covgate` in your CI pipeline after your tests generate coverage artifacts. 
 * `--fail-under-branches <PERCENT>`: Fails if changed-branch coverage is below this threshold
 * `--markdown-output <FILE>`: Write a Markdown summary for CI interfaces like GitHub Actions
 
+`covgate` also supports a dedicated agent-workflow command:
+
+* `record-base`: Records `HEAD` into `refs/worktree/covgate/base` if that ref is not already set.
+
 ### Examples
 
 **Gating a Rust Pull Request Locally:**
@@ -80,6 +84,31 @@ Run `covgate` in your CI pipeline after your tests generate coverage artifacts. 
 ```bash
 cargo llvm-cov --json --output-path coverage.json
 covgate --coverage-json coverage.json --base origin/main --fail-under-regions 80
+```
+
+### Agent Workflows: Recording a Stable Base
+
+In ephemeral agent/task environments, `origin/main` may be unavailable, detached, or intentionally inaccessible. In those environments, use `covgate record-base` at task start to capture a stable per-worktree base commit.
+
+When `--base` is omitted, `covgate` automatically checks `refs/worktree/covgate/base` before legacy fallback refs (`origin/HEAD`, `origin/main`, `origin/master`, `main`, `master`). Explicit `--base` still takes precedence.
+
+```bash
+covgate record-base
+cargo llvm-cov --json --output-path coverage.json
+covgate --coverage-json coverage.json --fail-under-regions 80
+```
+
+Maintenance/bootstrap scripts can use the same first-class command:
+
+```bash
+scripts/agent-env-maintenance.sh
+```
+
+Raw Git equivalent (for transparency):
+
+```bash
+git rev-parse -q --verify refs/worktree/covgate/base >/dev/null || \
+  git update-ref refs/worktree/covgate/base HEAD
 ```
 
 ### Configuration (`covgate.toml`)
