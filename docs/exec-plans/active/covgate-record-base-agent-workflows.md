@@ -8,24 +8,28 @@ Maintain this document in accordance with `docs/PLANS.md`. Re-read that file bef
 
 ## Purpose / Big Picture
 
-After this change, `covgate` will support an explicit `covgate record-base` command that captures a stable per-worktree Git base commit at task start. When later `covgate` commands run without `--base`, they will automatically prefer that recorded worktree ref before legacy branch-based fallback refs such as `origin/main`.
+After this change, `covgate` will expose explicit subcommands: `covgate check <coverage-report>` for coverage gating and `covgate record-base` for task-start base capture. The `check` command will automatically detect the input file format, and when `--base` is omitted it will prefer the recorded worktree ref before legacy branch-based fallback refs such as `origin/main`. In cached cloud worktrees, `record-base` must also detect when a new task branch has started and refresh the recorded base for that branch while remaining idempotent for repeated runs during the same task.
 
-This matters because cloud or agent worktrees are frequently detached, shallow, or missing remote-tracking refs. The current setup scripts try to fetch `origin/main`, but that behavior is non-deterministic and often non-functional in restricted or ephemeral environments. The new user-visible behavior is deterministic and local to the worktree: run `covgate record-base` once at task start, then run `covgate` normally and get a stable diff base even if remote refs are unavailable.
+This matters because cloud or agent worktrees are frequently detached, shallow, or missing remote-tracking refs, and cached containers can preserve old worktree-local refs across tasks. The current setup scripts try to fetch `origin/main`, but that behavior is non-deterministic and often non-functional in restricted or ephemeral environments. The new user-visible behavior is deterministic and local to the worktree: when a task starts on a fresh branch, run `covgate record-base` and get a branch-specific stable diff base even if remote refs are unavailable; if maintenance runs again later during the same task, it must keep the original recorded base instead of moving it forward. Separating `check` from `record-base` also removes today’s mixed root-command parsing and gives the CLI a clearer long-term shape for CI and wrapper commands such as `cargo xtask validate`.
 
 You will know this is working when all of the following are true:
 
-1. Running `covgate record-base` inside a Git worktree creates `refs/worktree/covgate/base` on first run and preserves it on later runs.
-2. Running `covgate` without `--base` chooses `refs/worktree/covgate/base` before `origin/HEAD`, `origin/main`, and similar fallback refs.
-3. The agent environment scripts no longer attempt best-effort `origin/main` fetches and instead initialize/refresh diff-base readiness by invoking `covgate record-base`.
-4. README and tooling docs explain both the recommended `covgate record-base` workflow and the raw Git plumbing equivalent.
+1. Running `covgate record-base` inside a Git worktree creates `refs/worktree/covgate/base` on first run for a task branch and preserves it on later runs from that same branch, even after new commits are created during the task.
+2. Running `covgate check <coverage-report>` without `--base` chooses `refs/worktree/covgate/base` before `origin/HEAD`, `origin/main`, and similar fallback refs.
+3. Running `covgate record-base` after switching to a different task branch refreshes `refs/worktree/covgate/base` to that branch's current `HEAD`.
+4. The agent environment scripts no longer attempt best-effort `origin/main` fetches and instead initialize/refresh diff-base readiness by invoking `covgate record-base`.
+5. README and tooling docs explain both the recommended `covgate record-base` workflow and the task-branch refresh semantics that keep repeated maintenance runs idempotent within one task.
 
 ## Progress
 
 - [x] (2026-03-15 00:00Z) Adapted the incoming feature plan into a repository-specific ExecPlan with concrete file targets and validation commands.
-- [ ] Implement `covgate record-base` CLI plumbing and Git helper logic.
+- [x] (2026-03-17 20:10Z) Investigated cached-worktree behavior and confirmed that `record-base` currently preserves an existing `refs/worktree/covgate/base` ref even when maintenance is rerun for a new task branch.
+- [ ] Refresh local branches and reset implementation context before making code changes for the updated task-boundary behavior.
+- [ ] Reshape the CLI so `covgate check <coverage-report>` and `covgate record-base` are separate subcommands owned entirely by `src/cli.rs`.
+- [ ] Implement `covgate record-base` Git helper logic, including task-branch detection for cached worktrees.
 - [ ] Extend automatic base discovery to prefer `refs/worktree/covgate/base` when `--base` is omitted.
-- [ ] Remove non-functional `origin/main` fetch attempts from agent setup and maintenance scripts and replace maintenance behavior with `covgate record-base`.
-- [ ] Update README and tooling/context docs for agent workflows and recorded base usage.
+- [ ] Remove non-functional `origin/main` fetch attempts from agent setup and align both the maintenance script's raw Git fallback and `covgate record-base` with the same task-boundary refresh behavior.
+- [ ] Update README and tooling/context docs for the new `check`/`record-base` CLI surface, agent workflows, recorded base usage, and same-branch idempotence versus branch-change refreshes.
 - [ ] Add and run tests plus full repository validation (`cargo xtask validate`).
 
 ## Surprises & Discoveries
@@ -36,14 +40,22 @@ You will know this is working when all of the following are true:
 - Observation: Existing docs describe this fetch behavior as part of the intended cloud-agent bootstrap path.
   Evidence: `docs/TOOLS.md` and `docs/reference/environment-execution-contexts.md` describe the `origin/main` bootstrap and maintenance refresh flow.
 
+- Observation: `git rev-parse -q --verify refs/worktree/covgate/base` can print a SHA from a ref file even when the corresponding Git object is missing in the current clone.
+  Evidence: local reproduction with a synthetic `.git/refs/worktree/covgate/base` file returned the SHA, while `git cat-file -t <sha>` failed with `could not get object info`.
+
+- Observation: The current `record_base_ref` implementation is deliberately write-once and does not look for task boundaries.
+  Evidence: `src/git.rs` returns early with `Base already recorded at refs/worktree/covgate/base -> ...`, and `tests/cli_interface.rs` asserts that repeated runs preserve the first recorded SHA even after later commits.
+
+- Observation: `scripts/agent-env-maintenance.sh` already bypasses `cargo run -- record-base` and uses raw Git plumbing directly because compiling `covgate` during maintenance was too slow for practical agent startup.
+  Evidence: the script now checks `git rev-parse -q --verify refs/worktree/covgate/base` and then falls back to `git update-ref refs/worktree/covgate/base HEAD` without invoking `covgate` or `cargo`.
+
+- Observation: `src/main.rs` currently owns Clap-specific validation logic for missing `--coverage-json`, which is a symptom of the root command serving two different modes with incompatible required arguments.
+  Evidence: `src/main.rs` constructs a Clap `MissingRequiredArgument` error manually when `cli.args.coverage_json.is_none()`.
+
 ## Decision Log
 
 - Decision: Use `refs/worktree/covgate/base` as the recorded base marker instead of a branch or tag.
   Rationale: Worktree refs are isolated per worktree, preventing collisions across concurrent tasks and preserving deterministic task-local behavior.
-  Date/Author: 2026-03-15 / Codex
-
-- Decision: Keep `record-base` idempotent and write-once by default.
-  Rationale: Task-start baselines must remain stable; moving the ref on every run would invalidate deterministic diffs.
   Date/Author: 2026-03-15 / Codex
 
 - Decision: Replace the maintenance script’s `origin/main` fetch behavior with an invocation of `covgate record-base`.
@@ -54,112 +66,152 @@ You will know this is working when all of the following are true:
   Rationale: These fetches are unreliable in ephemeral agent contexts and are superseded by local recorded base refs.
   Date/Author: 2026-03-15 / Codex
 
+- Decision: Keep `record-base` idempotent within a task, but refresh the recorded base when maintenance observes a different task branch than the branch that recorded the current base.
+  Rationale: Cached containers can preserve old worktree refs across tasks, so write-once semantics are too sticky across branch boundaries. Branch identity matches the stated cloud-task workflow: a new task starts by branching from `main`, and repeated maintenance runs during that task stay on the same branch.
+  Date/Author: 2026-03-17 / Codex
+
+- Decision: Update the maintenance script's raw Git fallback in parallel with `src/git.rs` instead of routing maintenance back through `cargo run -- record-base`.
+  Rationale: The repository already moved maintenance away from building `covgate` because compile time slowed task startup too much. The plan must preserve that operational constraint while keeping shell behavior consistent with the Rust implementation.
+  Date/Author: 2026-03-17 / Codex
+
+- Decision: Reshape the CLI to use explicit subcommands `covgate check <coverage-report>` and `covgate record-base`.
+  Rationale: This keeps command parsing and required-argument handling inside `src/cli.rs`, removes the need for `src/main.rs` to manufacture Clap errors, and better matches the repository’s mostly scripted CI-oriented usage. Because coverage format is auto-detected, the primary input should be a generic required coverage-report path rather than a flag named `--coverage-json`.
+  Date/Author: 2026-03-17 / Codex
+
 ## Outcomes & Retrospective
 
-This plan adaptation is complete, but feature implementation is not yet started. The outcome of this planning pass is a concrete, repo-scoped implementation path that includes CLI behavior, base-resolution behavior, script workflow changes, and documentation changes aligned with this repository’s current file layout.
+This plan adaptation is complete, but the revised feature implementation is intentionally paused until branch refresh work is done. The outcome of this planning pass is a concrete, repo-scoped implementation path that now accounts for cached worktree state, task-boundary refresh behavior, CLI behavior, base-resolution behavior, script workflow changes, and documentation changes aligned with this repository’s current file layout.
 
-The main risk to monitor during implementation is preserving existing local developer behavior while changing agent scripts and fallback messaging. Validation must prove both backward compatibility (`--base` still wins; legacy fallback refs still work) and the new deterministic agent flow.
+The main risk to monitor during implementation is preserving existing local developer behavior while changing agent scripts and fallback messaging. Validation must prove both backward compatibility (`--base` still wins; legacy fallback refs still work) and the new deterministic agent flow where branch changes refresh the stored base but repeated maintenance within one task does not.
 
 ## Context and Orientation
 
-`covgate` is a Rust CLI linter in `src/` that computes diff coverage from coverage JSON plus a Git diff base. CLI parsing currently lives in `src/cli.rs` and command orchestration in `src/main.rs`. Base resolution and Git diff behavior are implemented in the Git/diff modules under `src/` (exact function names should be confirmed before editing).
+`covgate` is a Rust CLI linter in `src/` that computes diff coverage from an input coverage report plus a Git diff base. Command orchestration currently lives in `src/main.rs`. CLI types and Clap annotations live in `src/cli.rs`. Base resolution and Git subprocess helpers are implemented in `src/git.rs`, while argument/config resolution lives in `src/config.rs`.
 
 Agent environment setup scripts live in `scripts/`. The relevant files are:
 
 - `scripts/agent-env-setup.sh`: full setup path used by cloud agent environments.
-- `scripts/agent-env-maintenance.sh`: lightweight recurring setup path that will call `covgate record-base`.
+- `scripts/agent-env-maintenance.sh`: lightweight recurring setup path that currently uses raw Git plumbing instead of invoking `covgate` or `cargo`, and must be kept behaviorally aligned with the Rust implementation.
 
 User-facing docs live in `README.md`, while environment/tooling context docs live in `docs/TOOLS.md` and `docs/reference/environment-execution-contexts.md`.
 
 A “worktree ref” in Git is a reference under `refs/worktree/...` intended to be local to the current worktree instead of shared like ordinary branch refs. This plan uses `refs/worktree/covgate/base` as a task-local marker for the recorded base commit.
 
+A “task boundary” in this repository’s cloud workflow means the moment a new task branch is created from `main` and the maintenance script runs in the resumed container. The plan assumes branch identity is stable for one task and changes when a new task begins.
+
 ## Plan of Work
 
-Implement the feature in six cohesive edits.
+Implement the feature in seven cohesive edits.
 
-First, extend CLI shape to include a `record-base` subcommand. Update the command enum/parser in `src/cli.rs` and dispatch in `src/main.rs` so `covgate record-base` executes a dedicated handler without requiring coverage input arguments.
+First, refresh the relevant local branches and pause implementation edits until the working tree is ready for a clean task-boundary change. This plan intentionally treats branch refresh as a prerequisite because cached branch state is part of the bug we are fixing.
 
-Second, add or extend Git helper functions (in whichever module currently owns Git subprocess calls) so the command can validate repository context, resolve `HEAD`, resolve ref existence, and create refs deterministically. The implementation should use Git plumbing commands equivalent to `git rev-parse -q --verify` and `git update-ref` while keeping subprocess handling aligned with existing repository patterns.
+Second, reshape `src/cli.rs` so it owns the entire public CLI surface. Define explicit subcommands for `check` and `record-base`, make `check` require a positional `<coverage-report>` path, and move the existing gating flags onto the `check` argument struct. The path should no longer be named `coverage_json` in the user-facing CLI because the tool auto-detects format from the file contents or extension.
 
-Third, implement `record-base` behavior: validate Git repo, resolve `HEAD` commit SHA, check `refs/worktree/covgate/base`, create only if absent, and print deterministic stdout messages for “recorded” vs “already recorded”. Return nonzero on true failures with clear stderr.
+Third, simplify `src/main.rs` so it performs only high-level dispatch based on the parsed CLI enum returned by `src/cli.rs`. It should not construct Clap errors or inspect optional command-specific fields. All parsing-time validation should be expressed in Clap metadata or in helper functions inside `src/cli.rs`.
 
-Fourth, update automatic base discovery logic used when `--base` is omitted. Insert `refs/worktree/covgate/base` at the top of auto-candidate refs before existing fallbacks such as `origin/HEAD`, `origin/main`, `origin/master`, `main`, and `master`. Keep explicit `--base` precedence unchanged.
+Fourth, extend `src/git.rs` with task-boundary detection. In addition to the existing `refs/worktree/covgate/base` ref, persist enough worktree-local metadata to identify which branch recorded that base. A simple branch-marker file under the current Git worktree is sufficient if it is created and read through `git rev-parse --git-path ...` so it stays worktree-local. The implementation must resolve the current branch name via Git plumbing, treat detached HEAD as “no branch identity available”, and remain safe when the marker file is missing.
 
-Fifth, revise failure guidance text for unresolved base refs so it explicitly recommends `covgate record-base`, while still documenting `--base <REF>` and the raw Git fallback option.
+Fifth, update `record_base_ref` in `src/git.rs` so it behaves as follows. If no recorded base ref exists, record `HEAD` and store the current branch marker. If a recorded base ref exists and the stored branch marker matches the current branch, return the existing SHA unchanged. If a recorded base ref exists but the stored branch marker is missing or differs from the current branch, refresh the ref to `HEAD`, rewrite the branch marker, and print a distinct “refreshed” message. This is the key behavioral change that fixes resumed-cache staleness while preserving same-task idempotence.
 
-Sixth, modify agent scripts and docs to match the new workflow. Remove best-effort `origin/main` fetch attempts from `scripts/agent-env-setup.sh` and `scripts/agent-env-maintenance.sh`. Replace maintenance script behavior with a call to `covgate record-base` (guarded with clear messaging if `covgate` is unavailable), and remove xtask fallback attempts to fetch mainline refs. Update `docs/TOOLS.md`, `docs/reference/environment-execution-contexts.md`, and `README.md` to describe the recorded-base workflow and include the raw Git equivalent.
+Sixth, keep automatic base discovery in `src/config.rs` preferring `refs/worktree/covgate/base` when `--base` is omitted. Explicit `--base` must still win, and the unresolved-base guidance must continue recommending `covgate record-base` while staying accurate with the refreshed semantics. Adjust config parsing and naming so repository-internal code refers to a generic coverage report path rather than a user-facing `coverage_json` flag.
+
+Seventh, modify agent scripts and docs to match the new workflow. Remove best-effort `origin/main` fetch attempts from `scripts/agent-env-setup.sh` and keep `scripts/agent-env-maintenance.sh` on its raw Git path instead of routing back through `cargo run -- record-base`. Extend that shell logic so it uses the same task-boundary rule as the Rust implementation: same branch keeps the original base, a different branch refreshes the stored base. Update `docs/TOOLS.md`, `docs/reference/environment-execution-contexts.md`, and `README.md` to describe the new CLI surface, including `covgate check <coverage-report>` and `covgate record-base`, explain that same-branch reruns keep the original base, explain that a new task branch refreshes the base automatically, and note that maintenance uses raw Git for startup speed.
+
+Eighth, add regression tests in `tests/git_module.rs` and `tests/cli_interface.rs` that prove both sides of the contract: repeated `record-base` calls on the same branch preserve the original SHA after later commits, while switching to a different branch and running `record-base` again refreshes the stored base to the new branch’s current `HEAD`. Those tests must also verify the new CLI surface and help output for `check`.
 
 ## Concrete Steps
 
-Run all commands from repository root `/workspace/covgate` unless otherwise noted.
+Run all commands from repository root `/home/jesse/git/covgate` unless otherwise noted.
 
-1. Inspect implementation entry points and tests.
+1. Refresh branch references and inspect implementation entry points before changing code.
 
-    rg -n "enum|Subcommand|record|base" src/cli.rs src/main.rs src
-    rg -n "origin/main|base" tests README.md docs/TOOLS.md docs/reference/environment-execution-contexts.md
+    git status --short
+    git branch --verbose --all
+    git fetch --all --prune
+    rg -n "record_base_ref|RECORDED_BASE_REF|discover_base_ref" src tests README.md docs scripts
 
-    Expected result: identify exact files and functions to edit for CLI wiring, base resolution, and user messaging.
+    Expected result: the working tree state is known before edits, local/remote branch refs are refreshed, and the exact files that govern recorded-base behavior are confirmed.
 
-2. Implement and unit/integration test `record-base` behavior.
+2. Add or update tests to capture the new CLI shape, same-task idempotence, and branch-change refresh behavior.
 
     cargo test record_base
-    cargo test cli -- --nocapture
+    cargo test git_module -- --nocapture
+    cargo test cli_interface -- --nocapture
 
-    Expected result: tests prove create-if-missing and idempotent-if-present behavior in real temporary Git repositories.
+    Expected result: before the fix, new regression tests should fail because the CLI still expects root-level mixed arguments and because `record-base` does not refresh across branch changes. After the fix, `check` parsing works, same-branch reruns remain stable, and branch-change reruns refresh.
 
-3. Implement automatic base preference for `refs/worktree/covgate/base` and explicit-override behavior.
+3. Implement the `check`/`record-base` CLI split and simplify `src/main.rs`.
+
+    cargo test record_base
+    cargo test git_module -- --nocapture
+    cargo test cli_interface -- --nocapture
+
+    Expected result: help output and missing-argument handling come entirely from Clap definitions in `src/cli.rs`, and `src/main.rs` is reduced to dispatch.
+
+4. Implement branch-aware `record-base` refresh semantics and retest.
+
+    cargo test record_base
+    cargo test git_module -- --nocapture
+    cargo test cli_interface -- --nocapture
+
+    Expected result: stdout includes distinct “Recorded”, “Base already recorded”, and “Refreshed” messages, and the recorded ref matches the task branch contract.
+
+5. Verify automatic base preference and fallback behavior.
 
     cargo test base
-    cargo test cli -- --nocapture
+    cargo test config_auto_base -- --nocapture
 
-    Expected result: tests prove `--base` still wins while auto mode prefers recorded worktree ref.
+    Expected result: `refs/worktree/covgate/base` remains the first automatic choice for `covgate check`, but explicit `--base` still overrides it.
 
-4. Update agent scripts to remove `origin/main` fetches and call `covgate record-base` in maintenance flow.
+6. Update agent scripts to remove `origin/main` fetches and bring the maintenance script's raw Git fallback into parity with the Rust task-boundary behavior.
 
     bash -n scripts/agent-env-setup.sh scripts/agent-env-maintenance.sh
 
-    Expected result: scripts remain syntactically valid and logs/messages describe recorded-base workflow.
+    Expected result: scripts remain syntactically valid and logs/messages describe recorded-base workflow, including branch-change refresh behavior without compiling `covgate`.
 
-5. Update docs and validate repository quality gates.
+7. Update docs and validate repository quality gates.
 
     cargo fmt --check
     cargo test
     cargo xtask validate
 
-    Expected result: all checks pass; docs describe recommended `covgate record-base` usage plus raw Git equivalent.
+    Expected result: all checks pass; docs describe `covgate check <coverage-report>`, recommended `covgate record-base` usage, same-branch idempotence, and branch-change refresh semantics.
 
 ## Validation and Acceptance
 
 Acceptance is complete only when the behavior is observable end to end.
 
-In a temp Git repository with at least one commit, `covgate record-base` must exit successfully and print `Recorded base commit <sha> at refs/worktree/covgate/base` when the ref is absent. Running it again after additional commits must exit successfully and print `Base already recorded at refs/worktree/covgate/base -> <sha>`, where `<sha>` is still the first recorded commit.
+Invoking `covgate check <coverage-report>` with a valid report path and gate flags must parse successfully without requiring a root-level `--coverage-json` flag. Invoking `covgate check` without the required positional coverage report must fail with Clap-generated usage output owned by the `check` subcommand rather than ad hoc logic in `src/main.rs`.
 
-When running `covgate` without `--base`, automatic resolution must first check `refs/worktree/covgate/base`. If it exists, `covgate` uses it. If not, `covgate` continues with legacy fallback refs without regression.
+In a temp Git repository with at least one commit on a task branch, `covgate record-base` must exit successfully and print `Recorded base commit <sha> at refs/worktree/covgate/base` when the ref is absent. Running it again after additional commits on that same branch must exit successfully and print `Base already recorded at refs/worktree/covgate/base -> <sha>`, where `<sha>` is still the first recorded commit for that branch.
 
-When running `covgate --base <REF>`, explicit `--base` must continue to override recorded and fallback auto discovery.
+In that same repository, after switching to a different branch and creating at least one commit, `covgate record-base` must exit successfully and print a distinct refresh message. After that run, `refs/worktree/covgate/base` must resolve to the new branch’s current `HEAD`, not the earlier branch’s recorded SHA.
+
+When running `covgate check <coverage-report>` without `--base`, automatic resolution must first check `refs/worktree/covgate/base`. If it exists, `covgate` uses it. If not, `covgate` continues with legacy fallback refs without regression.
+
+When running `covgate check <coverage-report> --base <REF>`, explicit `--base` must continue to override recorded and fallback auto discovery.
 
 When no automatic base candidate exists, user-facing error/help text must mention `covgate record-base` as a remediation alongside explicit `--base` guidance.
 
-Script acceptance requires that `scripts/agent-env-setup.sh` and `scripts/agent-env-maintenance.sh` no longer perform `git fetch ... origin/main` bootstrap attempts. The maintenance script must invoke `covgate record-base` (or emit a clear warning if `covgate` is unavailable).
+Script acceptance requires that `scripts/agent-env-setup.sh` and `scripts/agent-env-maintenance.sh` no longer perform `git fetch ... origin/main` bootstrap attempts. The maintenance script must keep using raw Git plumbing, not compile `covgate`, and must still follow the same task-boundary semantics as `covgate record-base`.
 
 Documentation acceptance requires README coverage of:
 
 - why agent environments may lack `origin/main`
+- the new top-level CLI shape with `covgate check <coverage-report>` and `covgate record-base`
 - recommended `covgate record-base` command
 - automatic use of recorded base when `--base` is omitted
-- a maintenance/bootstrap snippet that uses `covgate record-base`
-- raw Git equivalent:
-
-    git rev-parse -q --verify refs/worktree/covgate/base >/dev/null || \
-      git update-ref refs/worktree/covgate/base HEAD
+- same-branch reruns preserving the original task base
+- branch changes refreshing the recorded task base
+- a maintenance/bootstrap snippet or explanation that reflects the raw Git maintenance path
 
 ## Idempotence and Recovery
 
-`covgate record-base` is intentionally idempotent. Re-running the command should never move an existing `refs/worktree/covgate/base` ref. This property enables safe retries in flaky agent sessions.
+`covgate record-base` is intentionally idempotent within a task. Re-running the command on the same branch should never move an existing `refs/worktree/covgate/base` ref. This property enables safe retries in flaky agent sessions while still allowing a new task branch to refresh the stored base.
 
 Script changes should also be retry-safe. Running setup/maintenance scripts multiple times must not require mutable remote state. If `covgate` is temporarily unavailable in PATH during setup, scripts should log a warning and continue rather than corrupting repository state.
 
-If implementation introduces regressions in legacy base fallback behavior, recovery is to keep the inserted worktree-ref candidate logic but restore original fallback candidate ordering immediately below it.
+If implementation introduces regressions in legacy base fallback behavior, recovery is to keep the inserted worktree-ref candidate logic but restore original fallback candidate ordering immediately below it. If the shell implementation and Rust implementation diverge, prefer restoring parity first even if that means temporarily simplifying branch-marker handling in both paths.
 
 ## Artifacts and Notes
 
@@ -168,10 +220,29 @@ Expected successful `record-base` transcript in a temp repo:
     $ covgate record-base
     Recorded base commit 0123456789abcdef0123456789abcdef01234567 at refs/worktree/covgate/base
 
-Expected idempotent re-run transcript:
+Expected `check` usage example:
+
+    $ covgate check coverage.json --fail-under-regions 90
+    Diff: refs/worktree/covgate/base...HEAD
+    Region Coverage: 100.0% (threshold: 90.0%)
+
+Expected same-branch idempotent re-run transcript:
 
     $ covgate record-base
     Base already recorded at refs/worktree/covgate/base -> 0123456789abcdef0123456789abcdef01234567
+
+Expected branch-change refresh transcript:
+
+    $ git checkout -b task/two
+    $ covgate record-base
+    Refreshed base commit fedcba9876543210fedcba9876543210fedcba98 at refs/worktree/covgate/base for branch task/two
+
+Expected maintenance-script-style raw Git behavior:
+
+    $ git rev-parse -q --verify refs/worktree/covgate/base
+    0123456789abcdef0123456789abcdef01234567
+    $ # branch marker differs from current branch, so maintenance refreshes:
+    $ git update-ref refs/worktree/covgate/base HEAD
 
 Expected failure guidance excerpt when no base can be resolved:
 
@@ -188,9 +259,12 @@ The implementation should preserve current crate boundaries and introduce only m
 At minimum, by the end of this work there should be a callable path equivalent to:
 
 - CLI command enum variant for `record-base` in `src/cli.rs`.
-- Main dispatch branch in `src/main.rs` that invokes a new function such as `record_base()`.
+- CLI command enum variant for `check` in `src/cli.rs` with a required positional coverage-report path and the existing gate/base flags.
+- Main dispatch branch in `src/main.rs` that matches on parsed command variants without constructing Clap errors manually.
 - Git helper functions capable of:
   - resolving `HEAD` commit SHA
+  - resolving current branch identity when available
+  - resolving a worktree-local metadata path for the branch marker
   - resolving arbitrary ref SHA as optional result
   - creating a ref pointing at a target object
 - Base resolver candidate list that includes `refs/worktree/covgate/base` before legacy fallback refs when explicit `--base` is not provided.
@@ -198,3 +272,7 @@ At minimum, by the end of this work there should be a callable path equivalent t
 No new external dependency should be required for this feature; continue using existing subprocess/process helpers for Git interactions.
 
 Change note (2026-03-15): Adapted a generic feature brief into a repository-specific ExecPlan and explicitly added script migration scope: remove non-functional `origin/main` fetch attempts from agent setup/maintenance, replace maintenance bootstrap behavior with `covgate record-base`, and remove xtask's best-effort mainline fetch fallback.
+
+Change note (2026-03-17): Revised the plan after confirming that cached worktrees can preserve stale `refs/worktree/covgate/base` values across tasks. The plan now requires branch-aware refresh behavior: keep the recorded base stable for repeated runs on the same task branch, but refresh it when maintenance runs after a new task branch is created.
+
+Change note (2026-03-17): Updated the plan to reflect the current operational constraint in `scripts/agent-env-maintenance.sh`: maintenance must keep using raw Git plumbing because compiling `covgate` during startup was too slow. The plan now explicitly includes updating that shell fallback alongside the Rust implementation so both paths enforce the same task-boundary semantics.
