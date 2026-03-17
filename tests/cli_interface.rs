@@ -150,6 +150,62 @@ fn record_base_refreshes_after_branch_switch() {
 }
 
 #[test]
+fn covgate_rejects_dirty_worktree_by_default() {
+    let fixture = rust_basic_pass_fixture();
+    let temp = tempdir().expect("tempdir should exist");
+    let worktree = setup_fixture_worktree(temp.path(), fixture);
+
+    fs::write(
+        worktree.join("dirty.txt"),
+        "dirty
+",
+    )
+    .expect("dirty file should write");
+
+    let output = run_covgate(
+        &worktree,
+        fixture,
+        &["--fail-under-regions".to_string(), "90".to_string()],
+    );
+
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
+    assert!(
+        stderr.contains("working tree has uncommitted changes"),
+        "stderr={stderr}"
+    );
+    assert!(stderr.contains("--allow-dirty-worktree"), "stderr={stderr}");
+}
+
+#[test]
+fn covgate_allows_dirty_worktree_with_flag() {
+    let fixture = rust_basic_pass_fixture();
+    let temp = tempdir().expect("tempdir should exist");
+    let worktree = setup_fixture_worktree(temp.path(), fixture);
+
+    fs::write(
+        worktree.join("dirty.txt"),
+        "dirty
+",
+    )
+    .expect("dirty file should write");
+
+    let output = run_covgate(
+        &worktree,
+        fixture,
+        &[
+            "--allow-dirty-worktree".to_string(),
+            "--fail-under-regions".to_string(),
+            "90".to_string(),
+        ],
+    );
+
+    assert_eq!(output.status.code(), Some(0));
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+    assert!(stdout.contains("Diff Coverage: PASS"), "stdout={stdout}");
+}
+
+#[test]
 fn automatic_base_prefers_recorded_worktree_ref() {
     let fixture = rust_basic_pass_fixture();
     let temp = tempdir().expect("tempdir should exist");
@@ -352,6 +408,8 @@ fn uses_repo_config_defaults_for_base_and_threshold() {
         "base = \"main\"\n[gates]\nfail_under_regions = 0.0\n",
     )
     .expect("config should be written");
+    run_git(&worktree, &["add", "covgate.toml"]);
+    run_git(&worktree, &["commit", "-m", "add covgate defaults"]);
 
     let output = run_covgate(&worktree, fixture, &[]);
 
@@ -383,6 +441,8 @@ fn mixed_cli_over_toml_precedence() {
         "base = \"main\"\n[gates]\nfail_under_regions = 0.0\nfail_uncovered_regions = 10\n",
     )
     .expect("config should be written");
+    run_git(&worktree, &["add", "covgate.toml"]);
+    run_git(&worktree, &["commit", "-m", "add covgate defaults"]);
 
     let output = run_covgate(
         &worktree,
@@ -419,6 +479,8 @@ fn cli_threshold_overrides_repo_config_default() {
         "base = \"main\"\n[gates]\nfail_under_regions = 0.0\n",
     )
     .expect("config should be written");
+    run_git(&worktree, &["add", "covgate.toml"]);
+    run_git(&worktree, &["commit", "-m", "add covgate defaults"]);
 
     let output = run_covgate(
         &worktree,

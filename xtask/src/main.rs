@@ -43,8 +43,6 @@ fn quick() -> Result<()> {
 }
 
 fn validate() -> Result<()> {
-    ensure_clean_worktree()?;
-
     run("cargo", &["fmt", "--check"])?;
     run(
         "cargo",
@@ -620,35 +618,6 @@ fn project_root() -> Result<PathBuf> {
         .parent()
         .context("xtask manifest should live under the repository root")?;
     Ok(root.to_path_buf())
-}
-
-fn ensure_clean_worktree() -> Result<()> {
-    let output = Command::new("git")
-        .args(["status", "--short", "--untracked-files=all"])
-        .current_dir(project_root()?)
-        .output()
-        .context("failed to run git status to verify xtask validate preconditions")?;
-
-    if !output.status.success() {
-        bail!(
-            "failed to inspect git worktree state: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        );
-    }
-
-    let status =
-        String::from_utf8(output.stdout).context("git status output was not valid utf-8")?;
-    if !status.trim().is_empty() {
-        bail!(
-            "xtask validate requires a clean worktree so diff coverage matches committed changes. Commit or stash local edits before running validate.
-
-Pending changes:
-{}",
-            status.trim_end()
-        );
-    }
-
-    Ok(())
 }
 
 fn coverage_path() -> PathBuf {

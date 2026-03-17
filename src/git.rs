@@ -140,6 +140,34 @@ fn is_ancestor(ancestor: &str, descendant: &str) -> Result<bool> {
     Ok(output.status.success())
 }
 
+pub fn ensure_clean_worktree() -> Result<()> {
+    let output = Command::new("git")
+        .args(["status", "--porcelain", "--untracked-files=all"])
+        .output()
+        .context("failed to run git status to inspect worktree state")?;
+
+    if !output.status.success() {
+        bail!(
+            "failed to inspect git worktree state: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+
+    let status =
+        String::from_utf8(output.stdout).context("git status output was not valid utf-8")?;
+    if !status.trim().is_empty() {
+        bail!(
+            "working tree has uncommitted changes. Commit or stash changes before running covgate, or pass --allow-dirty-worktree (or set allow_dirty_worktree = true in covgate.toml).
+
+Pending changes:
+{}",
+            status.trim_end()
+        );
+    }
+
+    Ok(())
+}
+
 pub fn discover_base_ref() -> Result<Option<String>> {
     for candidate in [
         RECORDED_BASE_REF,

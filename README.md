@@ -87,6 +87,7 @@ Run `covgate` in your CI pipeline after your tests generate coverage artifacts. 
 * `--fail-uncovered-branches <MAX>`: Fails if the raw count of uncovered branches exceeds this limit
 * `--fail-uncovered-functions <MAX>`: Fails if the raw count of uncovered functions exceeds this limit
 * `--markdown-output <FILE>`: Write a Markdown summary for CI interfaces like GitHub Actions
+* `--allow-dirty-worktree`: Skip the default clean-worktree guard when diffing against a Git base
 
 `covgate` also supports a dedicated agent-workflow command:
 
@@ -146,11 +147,13 @@ fi
 `covgate` reads repository-local defaults from `covgate.toml` at the repository root so teams can keep their gate configuration checked in with the code. CLI flags always override config values.
 
 You can specify a default `base` and `markdown_output` at the top level, along with minimum percentage (`fail_under_*`) and maximum uncovered count (`fail_uncovered_*`) rules under `[gates]`.
+Set `allow_dirty_worktree = true` only when you intentionally want `covgate` to include uncommitted local edits in workflows that diff against a Git base.
 
 ```toml
 # Set a default comparison base and output file
 base = "origin/main"
 markdown_output = "summary.md"
+allow_dirty_worktree = false
 
 [gates]
 # Percentage-based gates

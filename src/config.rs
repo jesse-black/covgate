@@ -21,12 +21,14 @@ pub struct Config {
     pub diff_source: DiffSource,
     pub rules: Vec<GateRule>,
     pub markdown_output: Option<PathBuf>,
+    pub require_clean_worktree: bool,
 }
 
 #[derive(Debug, Default, Deserialize)]
 struct FileConfig {
     base: Option<String>,
     markdown_output: Option<PathBuf>,
+    allow_dirty_worktree: Option<bool>,
     #[serde(default)]
     gates: GateConfig,
 }
@@ -50,9 +52,16 @@ impl TryFrom<Args> for Config {
         let file_config = load_file_config()?;
         let diff_source = resolve_diff_source(&args, file_config.as_ref())?;
         let rules = resolve_rules(&args, file_config.as_ref())?;
-        let markdown_output = args
-            .markdown_output
-            .or_else(|| file_config.and_then(|config| config.markdown_output));
+        let markdown_output = args.markdown_output.or_else(|| {
+            file_config
+                .as_ref()
+                .and_then(|config| config.markdown_output.clone())
+        });
+        let allow_dirty_worktree = args.allow_dirty_worktree
+            || file_config
+                .as_ref()
+                .and_then(|config| config.allow_dirty_worktree)
+                .unwrap_or(false);
 
         Ok(Self {
             coverage_json: args
@@ -61,6 +70,7 @@ impl TryFrom<Args> for Config {
             diff_source,
             rules,
             markdown_output,
+            require_clean_worktree: !allow_dirty_worktree,
         })
     }
 }
@@ -230,7 +240,8 @@ mod tests {
     use tempfile::tempdir;
 
     use super::{
-        CONFIG_FILE_NAME, FileConfig, load_file_config_from, resolve_diff_source, resolve_rules,
+        CONFIG_FILE_NAME, Config, FileConfig, load_file_config_from, resolve_diff_source,
+        resolve_rules,
     };
     use crate::{
         cli::Args,
@@ -254,6 +265,7 @@ mod tests {
                 fail_uncovered_branches: None,
                 fail_uncovered_functions: None,
                 markdown_output: None,
+                allow_dirty_worktree: false,
             },
             None,
         )
@@ -290,6 +302,7 @@ mod tests {
             fail_uncovered_branches: None,
             fail_uncovered_functions: None,
             markdown_output: None,
+            allow_dirty_worktree: false,
         };
 
         let diff_source =
@@ -331,6 +344,7 @@ mod tests {
             fail_uncovered_branches: None,
             fail_uncovered_functions: None,
             markdown_output: None,
+            allow_dirty_worktree: false,
         };
 
         let diff_source =
@@ -372,6 +386,7 @@ mod tests {
             fail_uncovered_branches: None,
             fail_uncovered_functions: None,
             markdown_output: None,
+            allow_dirty_worktree: false,
         };
 
         let rules = resolve_rules(&args, Some(&file_config)).expect("rules should resolve");
@@ -407,6 +422,7 @@ mod tests {
             fail_uncovered_branches: None,
             fail_uncovered_functions: Some(2),
             markdown_output: None,
+            allow_dirty_worktree: false,
         };
 
         let rules = resolve_rules(&args, Some(&file_config)).expect("rules should resolve");
@@ -449,6 +465,56 @@ mod tests {
         );
         assert_eq!(config.gates.fail_under_regions, Some(80.0));
         assert_eq!(config.gates.fail_uncovered_regions, Some(1));
+        assert_eq!(config.allow_dirty_worktree, None);
+    }
+
+    #[test]
+    fn cli_allow_dirty_worktree_disables_clean_requirement() {
+        let args = Args {
+            coverage_json: Some("coverage.json".into()),
+            base: Some("main".into()),
+            diff_file: None,
+            fail_under_regions: Some(90.0),
+            fail_under_lines: None,
+            fail_under_branches: None,
+            fail_under_functions: None,
+            fail_uncovered_regions: None,
+            fail_uncovered_lines: None,
+            fail_uncovered_branches: None,
+            fail_uncovered_functions: None,
+            markdown_output: None,
+            allow_dirty_worktree: true,
+        };
+
+        let config = Config::try_from(args).expect("config should parse");
+        assert!(!config.require_clean_worktree);
+    }
+
+    #[test]
+    fn repo_config_can_disable_clean_requirement() {
+        let file_config: FileConfig = toml::from_str(
+            "base = \"main\"\nallow_dirty_worktree = true\n[gates]\nfail_under_regions = 75\n",
+        )
+        .expect("config should parse");
+        let args = Args {
+            coverage_json: Some("coverage.json".into()),
+            base: None,
+            diff_file: None,
+            fail_under_regions: None,
+            fail_under_lines: None,
+            fail_under_branches: None,
+            fail_under_functions: None,
+            fail_uncovered_regions: None,
+            fail_uncovered_lines: None,
+            fail_uncovered_branches: None,
+            fail_uncovered_functions: None,
+            markdown_output: None,
+            allow_dirty_worktree: false,
+        };
+
+        let allow_dirty =
+            args.allow_dirty_worktree || file_config.allow_dirty_worktree.unwrap_or(false);
+        assert!(allow_dirty);
     }
 
     #[test]
@@ -470,6 +536,7 @@ mod tests {
                     fail_uncovered_branches: None,
                     fail_uncovered_functions: None,
                     markdown_output: None,
+                    allow_dirty_worktree: false,
                 },
                 Some(&config)
             )

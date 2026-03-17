@@ -6,8 +6,8 @@ use std::sync::Mutex;
 use tempfile::tempdir;
 
 use covgate::git::{
-    RECORDED_BASE_REF, create_ref, discover_base_ref, record_base_ref, resolve_head_sha,
-    resolve_ref_sha,
+    RECORDED_BASE_REF, create_ref, discover_base_ref, ensure_clean_worktree, record_base_ref,
+    resolve_head_sha, resolve_ref_sha,
 };
 use support::run_git;
 
@@ -98,6 +98,23 @@ fn record_base_refreshes_when_branch_changes() {
             .expect("recorded ref should resolve")
             .expect("recorded ref should exist");
         assert_eq!(recorded, refreshed);
+    });
+}
+
+#[test]
+fn clean_worktree_check_detects_pending_changes() {
+    with_temp_git_repo(|repo| {
+        ensure_clean_worktree().expect("clean worktree should pass");
+
+        fs::write(
+            repo.join("dirty.txt"),
+            "dirty
+",
+        )
+        .expect("dirty file should write");
+        let err = ensure_clean_worktree().expect_err("dirty worktree should fail");
+        assert!(err.to_string().contains("--allow-dirty-worktree"));
+        assert!(err.to_string().contains("dirty.txt"));
     });
 }
 
