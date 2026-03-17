@@ -26,11 +26,11 @@ You will know this is working when all of the following are true:
 - [x] (2026-03-17 20:10Z) Investigated cached-worktree behavior and confirmed that `record-base` currently preserves an existing `refs/worktree/covgate/base` ref even when maintenance is rerun for a new task branch.
 - [ ] Refresh local branches and reset implementation context before making code changes for the updated task-boundary behavior.
 - [ ] Reshape the CLI so `covgate check <coverage-report>` and `covgate record-base` are separate subcommands owned entirely by `src/cli.rs`.
-- [ ] Implement `covgate record-base` Git helper logic, including task-branch detection for cached worktrees.
+- [x] (2026-03-17 21:05Z) Implemented `covgate record-base` branch-aware refresh semantics via a persisted branch marker: same-branch reruns remain idempotent while branch changes refresh `refs/worktree/covgate/base`.
 - [ ] Extend automatic base discovery to prefer `refs/worktree/covgate/base` when `--base` is omitted.
-- [ ] Remove non-functional `origin/main` fetch attempts from agent setup and align both the maintenance script's raw Git fallback and `covgate record-base` with the same task-boundary refresh behavior.
-- [ ] Update README and tooling/context docs for the new `check`/`record-base` CLI surface, agent workflows, recorded base usage, and same-branch idempotence versus branch-change refreshes.
-- [ ] Add and run tests plus full repository validation (`cargo xtask validate`).
+- [x] (2026-03-17 21:12Z) Aligned `scripts/agent-env-maintenance.sh` raw Git fallback with `covgate record-base` semantics by adding the same branch-marker-based refresh behavior.
+- [x] (2026-03-17 21:15Z) Updated README and tooling/context docs to describe same-branch idempotence, branch-change refreshes, and branch-aware raw Git maintenance flow.
+- [x] (2026-03-17 21:26Z) Added branch-refresh regression coverage and passed full repository validation, including `cargo xtask validate`.
 
 ## Surprises & Discoveries
 
@@ -45,6 +45,9 @@ You will know this is working when all of the following are true:
 
 - Observation: The current `record_base_ref` implementation is deliberately write-once and does not look for task boundaries.
   Evidence: `src/git.rs` returns early with `Base already recorded at refs/worktree/covgate/base -> ...`, and `tests/cli_interface.rs` asserts that repeated runs preserve the first recorded SHA even after later commits.
+
+- Observation: A lightweight branch marker file under the Git worktree path (`refs/worktree/covgate/base.branch`) gives deterministic same-branch idempotence and branch-change refreshes without requiring remote refs.
+  Evidence: updated `src/git.rs` and `scripts/agent-env-maintenance.sh` both compare current branch identity against this marker before deciding whether to refresh `refs/worktree/covgate/base`.
 
 - Observation: `scripts/agent-env-maintenance.sh` already bypasses `cargo run -- record-base` and uses raw Git plumbing directly because compiling `covgate` during maintenance was too slow for practical agent startup.
   Evidence: the script now checks `git rev-parse -q --verify refs/worktree/covgate/base` and then falls back to `git update-ref refs/worktree/covgate/base HEAD` without invoking `covgate` or `cargo`.

@@ -18,7 +18,7 @@ See `docs/reference/environment-execution-contexts.md` for deeper rationale, sou
 ### Base-ref maintenance for cloud agents
 
 - `scripts/agent-env-setup.sh` installs and updates tools.
-- `scripts/agent-env-maintenance.sh` uses raw Git plumbing to ensure `refs/worktree/covgate/base` exists without building `covgate`.
+- `scripts/agent-env-maintenance.sh` uses raw Git plumbing to keep `refs/worktree/covgate/base` branch-aware: same-branch runs stay idempotent, while branch changes refresh the recorded base, all without building `covgate`.
 
 ### Available in devcontainer
 

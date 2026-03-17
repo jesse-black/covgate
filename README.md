@@ -108,6 +108,8 @@ In cloud agent environments, base branches like `origin/main` are intentionally 
 
 When `--base` is omitted, `covgate` automatically checks `refs/worktree/covgate/base` before checking standard fallback refs (`origin/HEAD`, `origin/main`, `main`). Explicit `--base` still takes precedence.
 
+Repeated `covgate record-base` calls on the same branch are intentionally idempotent. If you start a new task branch in a cached worktree, running `covgate record-base` refreshes the recorded base to that branch's current `HEAD`.
+
 ```bash
 # Capture a stable base commit at task start
 covgate record-base
@@ -121,12 +123,22 @@ covgate --coverage-json coverage.json --fail-under-regions 90
 
 The Codex Cloud environment settings maintenance script should include `covgate record-base` so coverage gating can validate the task reliably. Jules does not have a maintenance-script setting, so `AGENTS` instructions should require running `covgate record-base` before every task.
 
-If you prefer to run the underlying Git plumbing directly, these are the commands `covgate record-base` uses:
+If you prefer to run the underlying Git plumbing directly, this shell-style flow mirrors the `covgate record-base` branch-aware behavior:
 
 ```bash
-# Check if the base ref exists, and if not, record HEAD
-git rev-parse -q --verify refs/worktree/covgate/base >/dev/null || \
+current_branch="$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true)"
+marker_path="$(git rev-parse --git-path refs/worktree/covgate/base.branch)"
+recorded_branch="$(test -r "$marker_path" && tr -d "\n" < "$marker_path" || true)"
+
+if git rev-parse -q --verify refs/worktree/covgate/base >/dev/null; then
+  if [[ -n "$current_branch" && -n "$recorded_branch" && "$current_branch" != "$recorded_branch" ]]; then
+    git update-ref refs/worktree/covgate/base HEAD
+    printf "%s\n" "$current_branch" > "$marker_path"
+  fi
+else
   git update-ref refs/worktree/covgate/base HEAD
+  [[ -n "$current_branch" ]] && printf "%s\n" "$current_branch" > "$marker_path"
+fi
 ```
 
 ### Configuration (`covgate.toml`)

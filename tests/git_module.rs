@@ -80,6 +80,28 @@ fn record_base_creates_and_is_idempotent() {
 }
 
 #[test]
+fn record_base_refreshes_when_branch_changes() {
+    with_temp_git_repo(|repo| {
+        run_git(repo, &["branch", "-M", "main"]);
+
+        let first = record_base_ref().expect("record-base should succeed on main");
+
+        run_git(repo, &["checkout", "-b", "task/two"]);
+        fs::write(repo.join("task-two.txt"), "task two\n").expect("task-two file should write");
+        run_git(repo, &["add", "."]);
+        run_git(repo, &["commit", "-m", "task two"]);
+
+        let refreshed = record_base_ref().expect("record-base should refresh on branch change");
+        assert_ne!(refreshed, first);
+
+        let recorded = resolve_ref_sha(RECORDED_BASE_REF)
+            .expect("recorded ref should resolve")
+            .expect("recorded ref should exist");
+        assert_eq!(recorded, refreshed);
+    });
+}
+
+#[test]
 fn discover_base_prefers_recorded_ref() {
     with_temp_git_repo(|repo| {
         let main_sha = resolve_ref_sha("HEAD")
