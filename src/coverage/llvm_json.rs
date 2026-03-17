@@ -78,27 +78,13 @@ pub(crate) fn parse_str_with_repo_root(input: &str, repo_root: &Path) -> Result<
                 });
             }
 
-            if let Some(summary) = file
-                .summary
-                .as_ref()
-                .and_then(|summary| summary.regions.as_ref())
-            {
-                region_totals_by_file.insert(
-                    path.clone(),
-                    FileTotals {
-                        covered: summary.covered,
-                        total: summary.count,
-                    },
-                );
-            } else {
-                region_totals_by_file.insert(
-                    path.clone(),
-                    FileTotals {
-                        covered: region_covered,
-                        total: region_total,
-                    },
-                );
-            }
+            region_totals_by_file.insert(
+                path.clone(),
+                FileTotals {
+                    covered: region_covered,
+                    total: region_total,
+                },
+            );
 
             let mut line_covered = 0usize;
             let mut line_total = 0usize;
@@ -119,21 +105,7 @@ pub(crate) fn parse_str_with_repo_root(input: &str, repo_root: &Path) -> Result<
                 });
             }
 
-            if let Some(summary) = file
-                .summary
-                .as_ref()
-                .and_then(|summary| summary.lines.as_ref())
-            {
-                if summary.count > 0 {
-                    line_totals_by_file.insert(
-                        path.clone(),
-                        FileTotals {
-                            covered: summary.covered,
-                            total: summary.count,
-                        },
-                    );
-                }
-            } else if line_total > 0 {
+            if line_total > 0 {
                 line_totals_by_file.insert(
                     path.clone(),
                     FileTotals {
@@ -162,21 +134,7 @@ pub(crate) fn parse_str_with_repo_root(input: &str, repo_root: &Path) -> Result<
                 });
             }
 
-            if let Some(summary) = file
-                .summary
-                .as_ref()
-                .and_then(|summary| summary.branches.as_ref())
-            {
-                if summary.count > 0 {
-                    branch_totals_by_file.insert(
-                        path.clone(),
-                        FileTotals {
-                            covered: summary.covered,
-                            total: summary.count,
-                        },
-                    );
-                }
-            } else if branch_total > 0 {
+            if branch_total > 0 {
                 branch_totals_by_file.insert(
                     path.clone(),
                     FileTotals {
@@ -203,38 +161,11 @@ pub(crate) fn parse_str_with_repo_root(input: &str, repo_root: &Path) -> Result<
                         covered,
                     });
                 }
-                if let Some(summary) = file
-                    .summary
-                    .as_ref()
-                    .and_then(|summary| summary.functions.as_ref())
-                {
-                    function_totals_by_file.insert(
-                        path,
-                        FileTotals {
-                            covered: summary.covered,
-                            total: summary.count,
-                        },
-                    );
-                } else {
-                    function_totals_by_file.insert(
-                        path,
-                        FileTotals {
-                            covered: function_covered,
-                            total: function_total,
-                        },
-                    );
-                }
-            } else if let Some(summary) = file
-                .summary
-                .as_ref()
-                .and_then(|summary| summary.functions.as_ref())
-                .filter(|summary| summary.count > 0)
-            {
                 function_totals_by_file.insert(
                     path,
                     FileTotals {
-                        covered: summary.covered,
-                        total: summary.count,
+                        covered: function_covered,
+                        total: function_total,
                     },
                 );
             }
@@ -367,26 +298,6 @@ struct LlvmFile {
     segments: Vec<Vec<serde_json::Value>>,
     #[serde(default)]
     branches: Vec<Vec<serde_json::Value>>,
-    #[serde(default)]
-    summary: Option<LlvmFileSummary>,
-}
-
-#[derive(Debug, Deserialize)]
-struct LlvmFileSummary {
-    #[serde(default)]
-    regions: Option<LlvmSummaryTotals>,
-    #[serde(default)]
-    lines: Option<LlvmSummaryTotals>,
-    #[serde(default)]
-    functions: Option<LlvmSummaryTotals>,
-    #[serde(default)]
-    branches: Option<LlvmSummaryTotals>,
-}
-
-#[derive(Debug, Deserialize)]
-struct LlvmSummaryTotals {
-    count: usize,
-    covered: usize,
 }
 
 #[derive(Debug)]
@@ -425,7 +336,9 @@ impl LlvmFile {
 
             let count = number_at(start, 2)?;
             let has_count = bool_at(start, 3).unwrap_or(true);
-            if !has_count {
+            let is_region_entry = bool_at(start, 4).unwrap_or(true);
+            let is_gap_region = bool_at(start, 5).unwrap_or(false);
+            if !has_count || !is_region_entry || is_gap_region {
                 continue;
             }
 
@@ -565,13 +478,13 @@ mod tests {
                 {
                   "filename": "src/lib.rs",
                   "segments": [
-                    [1, 1, 1, true, false, false],
+                    [1, 1, 1, true, true, false],
                     [1, 2, 0, false, false, false],
-                    [2, 1, 1, true, false, false],
+                    [2, 1, 1, true, true, false],
                     [2, 2, 0, false, false, false],
-                    [3, 1, 0, true, false, false],
+                    [3, 1, 0, true, true, false],
                     [3, 2, 0, false, false, false],
-                    [4, 1, 0, true, false, false],
+                    [4, 1, 0, true, true, false],
                     [4, 2, 0, false, false, false]
                   ]
                 }
@@ -772,28 +685,49 @@ mod tests {
     }
 
     #[test]
-    fn prefers_file_summary_totals_over_segment_derived_totals() {
+    fn region_totals_skip_non_region_entries() {
         let input = r#"
         {
           "data": [
             {
-              "functions": [
-                {
-                  "count": 1,
-                  "filenames": ["src/lib.rs"],
-                  "regions": [[1,1,2,1,1,0,0,0]]
-                }
-              ],
               "files": [
                 {
                   "filename": "src/lib.rs",
-                  "summary": {
-                    "regions": { "count": 10, "covered": 9 },
-                    "lines": { "count": 7, "covered": 6 },
-                    "functions": { "count": 3, "covered": 2 }
-                  },
                   "segments": [
                     [1, 1, 1, true, false, false],
+                    [2, 1, 0, true, true, false],
+                    [3, 1, 0, false, false, false]
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+        "#;
+
+        let report = parse_str(input).expect("llvm export should parse");
+        let region_totals = report
+            .totals_by_file
+            .get(&crate::model::MetricKind::Region)
+            .expect("region metric totals should exist")
+            .get(&PathBuf::from("src/lib.rs"))
+            .expect("file totals should exist");
+
+        assert_eq!(region_totals.covered, 0);
+        assert_eq!(region_totals.total, 1);
+    }
+
+    #[test]
+    fn region_totals_skip_gap_regions() {
+        let input = r#"
+        {
+          "data": [
+            {
+              "files": [
+                {
+                  "filename": "src/lib.rs",
+                  "segments": [
+                    [1, 1, 3, true, true, true],
                     [2, 1, 0, false, false, false]
                   ]
                 }
@@ -804,33 +738,15 @@ mod tests {
         "#;
 
         let report = parse_str(input).expect("llvm export should parse");
-
         let region_totals = report
             .totals_by_file
             .get(&crate::model::MetricKind::Region)
-            .expect("region totals should exist")
+            .expect("region metric totals should exist")
             .get(&PathBuf::from("src/lib.rs"))
-            .expect("file region totals should exist");
-        assert_eq!(region_totals.covered, 9);
-        assert_eq!(region_totals.total, 10);
+            .expect("file totals should exist");
 
-        let line_totals = report
-            .totals_by_file
-            .get(&crate::model::MetricKind::Line)
-            .expect("line totals should exist")
-            .get(&PathBuf::from("src/lib.rs"))
-            .expect("file line totals should exist");
-        assert_eq!(line_totals.covered, 6);
-        assert_eq!(line_totals.total, 7);
-
-        let function_totals = report
-            .totals_by_file
-            .get(&crate::model::MetricKind::Function)
-            .expect("function totals should exist")
-            .get(&PathBuf::from("src/lib.rs"))
-            .expect("file function totals should exist");
-        assert_eq!(function_totals.covered, 2);
-        assert_eq!(function_totals.total, 3);
+        assert_eq!(region_totals.covered, 0);
+        assert_eq!(region_totals.total, 0);
     }
 
     #[test]
