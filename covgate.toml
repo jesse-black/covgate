@@ -1,3 +1,3 @@
 [gates]
-fail_under_regions = 85
-fail_uncovered_functions = 5
+fail_under_regions = 96
+fail_uncovered_functions = 0
