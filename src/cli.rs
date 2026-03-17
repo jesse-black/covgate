@@ -5,7 +5,7 @@ use std::path::PathBuf;
 #[command(
     name = "covgate",
     about = "Diff-focused coverage gate",
-    after_help = "Repository-local defaults may be read from ./covgate.toml.\nCLI flags override config values. Supported defaults in v1:\n  base = \"origin/main\"\n  allow_dirty_worktree = false\n  [gates]\n  fail_under_regions = 90\n  fail_uncovered_regions = 1\n\nAgent workflow:\n  covgate record-base\n  covgate check <coverage-report>"
+    after_help = "Repository-local defaults may be read from ./covgate.toml.\nCLI flags override config values. Supported defaults in v1:\n  base = \"origin/main\"\n  [gates]\n  fail_under_regions = 90\n  fail_uncovered_regions = 1\n\nAgent workflow:\n  covgate record-base\n  covgate check <coverage-report>"
 )]
 pub struct Cli {
     #[command(subcommand)]
@@ -58,7 +58,4 @@ pub struct Args {
 
     #[arg(long)]
     pub markdown_output: Option<PathBuf>,
-
-    #[arg(long, default_value_t = false)]
-    pub allow_dirty_worktree: bool,
 }

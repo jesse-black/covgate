@@ -113,7 +113,7 @@ fn clean_worktree_check_detects_pending_changes() {
         )
         .expect("dirty file should write");
         let err = ensure_clean_worktree().expect_err("dirty worktree should fail");
-        assert!(err.to_string().contains("--allow-dirty-worktree"));
+        assert!(err.to_string().contains("Commit or stash changes"));
         assert!(err.to_string().contains("dirty.txt"));
     });
 }

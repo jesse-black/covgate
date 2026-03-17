@@ -162,7 +162,7 @@ pub fn ensure_clean_worktree() -> Result<()> {
         String::from_utf8(output.stdout).context("git status output was not valid utf-8")?;
     if !status.trim().is_empty() {
         bail!(
-            "working tree has uncommitted changes. Commit or stash changes before running covgate, or pass --allow-dirty-worktree (or set allow_dirty_worktree = true in covgate.toml).
+            "working tree has uncommitted changes. Commit or stash changes before running covgate.
 
 Pending changes:
 {}",

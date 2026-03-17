@@ -200,7 +200,7 @@ Run all commands from repository root `/home/jesse/git/covgate` unless otherwise
     Step A — Diagnose concrete uncovered spans/functions
 
         cargo llvm-cov --json --output-path target/xtask/coverage-diagnose.json --fail-under-regions=88
-        cargo run -- check target/xtask/coverage-diagnose.json --allow-dirty-worktree
+        cargo run -- check target/xtask/coverage-diagnose.json
 
     Step B — Map each uncovered function/span to executable branches and add focused tests in existing test modules (`tests/git_module.rs`, `tests/cli_interface.rs`, parser-specific unit tests).
 
@@ -211,14 +211,14 @@ Run all commands from repository root `/home/jesse/git/covgate` unless otherwise
     Potential blockers to monitor:
     - LLVM inlining collapsing changed helper functions into callsites and obscuring per-function coverage attribution.
     - Branch-specific/ref-state logic requiring non-trivial Git fixture setup (detached HEAD, marker missing, divergent ancestry).
-    - Dirty-worktree guard interactions when diagnosing local coverage (use `--allow-dirty-worktree` for diagnosis only; never as policy bypass).
+    - Untracked-file changes are not emitted by default `git diff <merge-base>` output; use `git add -N <path>` when you need untracked files represented in diagnosis diffs.
 
     Policy reminder: gate defaults are project policy and must remain unchanged unless maintainers explicitly request a gate policy change.
 
 8. Coverage gate remediation when `cargo xtask validate` fails after feature changes.
 
     cargo llvm-cov --json --output-path /tmp/covgate-validate.json --fail-under-regions=88
-    cargo run -- check /tmp/covgate-validate.json --allow-dirty-worktree
+    cargo run -- check /tmp/covgate-validate.json
     cargo test git_module -- --nocapture
 
     Expected result: uncovered changed spans/functions are identified in the touched files; follow-up commits add tests that execute those paths until `cargo xtask validate` passes.
@@ -273,7 +273,7 @@ Expected successful `record-base` transcript in a temp repo:
 Expected `check` usage example:
 
     $ covgate check coverage.json --fail-under-regions 90
-    Diff: refs/worktree/covgate/base...HEAD
+    Diff: refs/worktree/covgate/base...WORKTREE
     Region Coverage: 100.0% (threshold: 90.0%)
 
 Expected same-branch idempotent re-run transcript:

@@ -87,7 +87,6 @@ Run `covgate` in your CI pipeline after your tests generate coverage artifacts. 
 * `--fail-uncovered-branches <MAX>`: Fails if the raw count of uncovered branches exceeds this limit
 * `--fail-uncovered-functions <MAX>`: Fails if the raw count of uncovered functions exceeds this limit
 * `--markdown-output <FILE>`: Write a Markdown summary for CI interfaces like GitHub Actions
-* `--allow-dirty-worktree`: Skip the default clean-worktree guard when diffing against a Git base
 
 `covgate` also supports a dedicated agent-workflow command:
 
@@ -109,7 +108,7 @@ In cloud agent environments, base branches like `origin/main` are intentionally 
 
 When `--base` is omitted, `covgate` automatically checks `refs/worktree/covgate/base` before checking standard fallback refs (`origin/HEAD`, `origin/main`, `main`). Explicit `--base` still takes precedence.
 
-`covgate` also protects agent workflows by default when diffing against a Git base: it fails fast on dirty worktrees so local runs match commit-based CI behavior. Use `--allow-dirty-worktree` (or `allow_dirty_worktree = true`) only when you intentionally want uncommitted edits included.
+When diffing against a Git base, `covgate` compares the merge-base snapshot to your current worktree. This includes committed changes plus staged/unstaged tracked edits, so local diagnosis reflects in-progress work.
 
 The recorded base is kept per branch so separate agent task branches keep separate stable diff anchors.
 
@@ -131,13 +130,10 @@ The Codex Cloud environment settings maintenance script should include `covgate 
 `covgate` reads repository-local defaults from `covgate.toml` at the repository root so teams can keep their gate configuration checked in with the code. CLI flags always override config values.
 
 You can specify a default `base` and `markdown_output` at the top level, along with minimum percentage (`fail_under_*`) and maximum uncovered count (`fail_uncovered_*`) rules under `[gates]`.
-Set `allow_dirty_worktree = true` only when you intentionally want `covgate` to include uncommitted local edits in workflows that diff against a Git base.
-
 ```toml
 # Set a default comparison base and output file
 base = "origin/main"
 markdown_output = "summary.md"
-allow_dirty_worktree = false
 
 [gates]
 # Percentage-based gates

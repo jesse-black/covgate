@@ -13,10 +13,6 @@ use anyhow::Result;
 use crate::config::Config;
 
 pub fn run(config: Config) -> Result<i32> {
-    if config.require_clean_worktree && matches!(config.diff_source, diff::DiffSource::GitBase(_)) {
-        git::ensure_clean_worktree()?;
-    }
-
     let report = coverage::parse_path(&config.coverage_report)?;
     let diff = diff::load_changed_lines(&config.diff_source)?;
 
