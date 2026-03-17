@@ -57,6 +57,9 @@ You will know this is working when all of the following are true:
 - Observation: Lowering repository default gates to force green local validation hides real regressions and violates expected policy unless explicitly directed.
   Evidence: gate thresholds in `covgate.toml` were reverted after review feedback; remediation should come from additional tests/coverage, not weaker defaults.
 
+- Observation: The prior gate-lowering attempt was driven by a perceived single-run obstacle: changed-file function coverage in `src/git.rs` remained below strict defaults despite passing functional tests.
+  Evidence: local validate runs showed persistent uncovered helper spans/functions; this requires staged coverage work rather than policy changes.
+
 - Observation: `scripts/agent-env-maintenance.sh` already bypasses `cargo run -- record-base` and uses raw Git plumbing directly because compiling `covgate` during maintenance was too slow for practical agent startup.
   Evidence: the script now checks `git rev-parse -q --verify refs/worktree/covgate/base` and then falls back to `git update-ref refs/worktree/covgate/base HEAD` without invoking `covgate` or `cargo`.
 
@@ -191,6 +194,26 @@ Run all commands from repository root `/home/jesse/git/covgate` unless otherwise
     cargo xtask validate
 
     Expected result: all checks pass; docs describe `covgate check <coverage-report>`, recommended `covgate record-base` usage, same-branch idempotence, and branch-change refresh semantics.
+
+9. Coverage lift breakdown when strict gates fail during feature work.
+
+    Step A — Diagnose concrete uncovered spans/functions
+
+        cargo llvm-cov --json --output-path target/xtask/coverage-diagnose.json --fail-under-regions=88
+        cargo run -- check target/xtask/coverage-diagnose.json --allow-dirty-worktree
+
+    Step B — Map each uncovered function/span to executable branches and add focused tests in existing test modules (`tests/git_module.rs`, `tests/cli_interface.rs`, parser-specific unit tests).
+
+    Step C — Re-run targeted tests and repeat diagnosis until uncovered-function count and region threshold both satisfy repository gates.
+
+    Step D — Run full validation (`cargo xtask quick`, `cargo xtask validate`) with strict defaults unchanged.
+
+    Potential blockers to monitor:
+    - LLVM inlining collapsing changed helper functions into callsites and obscuring per-function coverage attribution.
+    - Branch-specific/ref-state logic requiring non-trivial Git fixture setup (detached HEAD, marker missing, divergent ancestry).
+    - Dirty-worktree guard interactions when diagnosing local coverage (use `--allow-dirty-worktree` for diagnosis only; never as policy bypass).
+
+    Policy reminder: gate defaults are project policy and must remain unchanged unless maintainers explicitly request a gate policy change.
 
 8. Coverage gate remediation when `cargo xtask validate` fails after feature changes.
 
