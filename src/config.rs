@@ -17,7 +17,7 @@ const CONFIG_FILE_NAME: &str = "covgate.toml";
 
 #[derive(Debug, Clone)]
 pub struct Config {
-    pub coverage_json: PathBuf,
+    pub coverage_report: PathBuf,
     pub diff_source: DiffSource,
     pub rules: Vec<GateRule>,
     pub markdown_output: Option<PathBuf>,
@@ -64,9 +64,7 @@ impl TryFrom<Args> for Config {
                 .unwrap_or(false);
 
         Ok(Self {
-            coverage_json: args
-                .coverage_json
-                .context("--coverage-json <FILE> is required when running coverage gates")?,
+            coverage_report: args.coverage_report,
             diff_source,
             rules,
             markdown_output,
@@ -253,7 +251,7 @@ mod tests {
     fn parses_region_cli_rules() {
         let rules = resolve_rules(
             &Args {
-                coverage_json: Some("coverage.json".into()),
+                coverage_report: "coverage.json".into(),
                 base: None,
                 diff_file: None,
                 fail_under_regions: Some(90.0),
@@ -290,7 +288,7 @@ mod tests {
         .expect("config should parse");
 
         let args = Args {
-            coverage_json: Some("coverage.json".into()),
+            coverage_report: "coverage.json".into(),
             base: Some("release".to_string()),
             diff_file: None,
             fail_under_regions: Some(90.0),
@@ -332,7 +330,7 @@ mod tests {
         .expect("config should parse");
 
         let args = Args {
-            coverage_json: Some("coverage.json".into()),
+            coverage_report: "coverage.json".into(),
             base: None,
             diff_file: None,
             fail_under_regions: None,
@@ -374,7 +372,7 @@ mod tests {
         .expect("config should parse");
 
         let args = Args {
-            coverage_json: Some("coverage.json".into()),
+            coverage_report: "coverage.json".into(),
             base: None,
             diff_file: None,
             fail_under_regions: None,
@@ -410,7 +408,7 @@ mod tests {
         .expect("config should parse");
 
         let args = Args {
-            coverage_json: Some("coverage.json".into()),
+            coverage_report: "coverage.json".into(),
             base: None,
             diff_file: Some("scenario.diff".into()),
             fail_under_regions: None,
@@ -471,7 +469,7 @@ mod tests {
     #[test]
     fn cli_allow_dirty_worktree_disables_clean_requirement() {
         let args = Args {
-            coverage_json: Some("coverage.json".into()),
+            coverage_report: "coverage.json".into(),
             base: Some("main".into()),
             diff_file: None,
             fail_under_regions: Some(90.0),
@@ -497,7 +495,7 @@ mod tests {
         )
         .expect("config should parse");
         let args = Args {
-            coverage_json: Some("coverage.json".into()),
+            coverage_report: "coverage.json".into(),
             base: None,
             diff_file: None,
             fail_under_regions: None,
@@ -524,7 +522,7 @@ mod tests {
         assert!(
             resolve_rules(
                 &Args {
-                    coverage_json: Some("coverage.json".into()),
+                    coverage_report: "coverage.json".into(),
                     base: None,
                     diff_file: None,
                     fail_under_regions: None,

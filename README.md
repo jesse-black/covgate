@@ -75,7 +75,7 @@ Run `covgate` in your CI pipeline after your tests generate coverage artifacts. 
 
 ### CLI Surface
 
-* `--coverage-json <FILE>`: Path to native JSON coverage export
+* `check <coverage-report>`: Run coverage gates for the provided report
 * `--base <REF>`: Git base reference to diff against
 * `--diff-file <FILE>`: Precomputed unified diff file
 * `--fail-under-regions <PERCENT>`: Fails if changed-region coverage is below this threshold
@@ -100,7 +100,7 @@ Run `covgate` in your CI pipeline after your tests generate coverage artifacts. 
 cargo llvm-cov --json --output-path coverage.json
 
 # Run covgate against the origin/main branch, failing if uncovered regions > 1
-covgate --coverage-json coverage.json --base origin/main --fail-uncovered-regions 1
+covgate check coverage.json --base origin/main --fail-uncovered-regions 1
 ```
 
 ### Autonomous Agent Workflows: Recording a Stable Base
@@ -121,7 +121,7 @@ covgate record-base
 
 # Generate coverage and gate locally against the recorded base
 cargo llvm-cov --json --output-path coverage.json
-covgate --coverage-json coverage.json --fail-under-regions 90
+covgate check coverage.json --fail-under-regions 90
 ```
 
 The Codex Cloud environment settings maintenance script should include `covgate record-base` so coverage gating can validate the task reliably. Jules does not have a maintenance-script setting, so `AGENTS` instructions should require running `covgate record-base` before every task.
@@ -155,7 +155,7 @@ With `covgate.toml` checked in, local invocations become frictionless:
 
 ```bash
 # Run covgate using the thresholds and base defined in covgate.toml
-covgate --coverage-json coverage.json
+covgate check coverage.json
 ```
 
 ## GitHub Actions
@@ -167,7 +167,7 @@ Generate native JSON coverage, run `covgate`, and seamlessly write the results t
   run: cargo llvm-cov --json --output-path coverage.json
 
 - name: Gate Pull Request
-  run: covgate --coverage-json coverage.json --markdown-output "$GITHUB_STEP_SUMMARY"
+  run: covgate check coverage.json --markdown-output "$GITHUB_STEP_SUMMARY"
 ```
 
 Because `covgate` supports repository-local defaults, a checked-in `covgate.toml` guarantees local hooks and CI pipelines enforce the exact same thresholds.

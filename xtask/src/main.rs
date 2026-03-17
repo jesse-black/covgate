@@ -74,14 +74,7 @@ fn validate() -> Result<()> {
 
     run(
         "cargo",
-        &[
-            "run",
-            "--bin",
-            "covgate",
-            "--",
-            "--coverage-json",
-            coverage_json_str,
-        ],
+        &["run", "--bin", "covgate", "--", "check", coverage_json_str],
     )?;
 
     run("cargo-machete", &["."])?;

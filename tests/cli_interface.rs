@@ -47,20 +47,31 @@ fn record_base_fails_outside_git_repo() {
 }
 
 #[test]
-fn missing_coverage_json_is_reported_as_clap_usage_error() {
+fn missing_check_subcommand_is_reported_as_clap_usage_error() {
     let temp = tempdir().expect("tempdir should exist");
 
     let output = run_covgate_raw(temp.path(), &[]);
     assert_eq!(output.status.code(), Some(2));
     let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
     assert!(
-        stderr.contains("the following required arguments were not provided:"),
+        stderr.contains("Usage: covgate <COMMAND>"),
         "stderr={stderr}"
     );
+    assert!(stderr.contains("Commands:"), "stderr={stderr}");
+}
+
+#[test]
+fn missing_check_coverage_report_is_reported_as_clap_usage_error() {
+    let temp = tempdir().expect("tempdir should exist");
+
+    let output = run_covgate_raw(temp.path(), &["check".to_string()]);
+    assert_eq!(output.status.code(), Some(2));
+    let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
     assert!(
-        stderr.contains("--coverage-json <COVERAGE_JSON>"),
+        stderr.contains("the following required arguments were not provided"),
         "stderr={stderr}"
     );
+    assert!(stderr.contains("<COVERAGE_REPORT>"), "stderr={stderr}");
 }
 
 #[test]
@@ -71,6 +82,7 @@ fn help_lists_record_base_as_subcommand() {
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
     assert!(stdout.contains("Commands:"), "stdout={stdout}");
+    assert!(stdout.contains("check"), "stdout={stdout}");
     assert!(stdout.contains("record-base"), "stdout={stdout}");
 }
 

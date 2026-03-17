@@ -17,7 +17,7 @@ pub fn run(config: Config) -> Result<i32> {
         git::ensure_clean_worktree()?;
     }
 
-    let report = coverage::parse_path(&config.coverage_json)?;
+    let report = coverage::parse_path(&config.coverage_report)?;
     let diff = diff::load_changed_lines(&config.diff_source)?;
 
     let mut metrics = Vec::new();
