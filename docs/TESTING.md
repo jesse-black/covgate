@@ -4,17 +4,7 @@ This document defines the canonical testing process for `covgate`. Treat it as t
 
 ## Core Process
 
-Run tests from the repository root unless a test explicitly requires another working directory.
-
-1. Format and static quality gates:
-   - `cargo fmt`
-   - `cargo check`
-   - `cargo clippy --all-targets --all-features -- -D warnings`
-2. Run automated tests:
-   - `cargo test`
-3. Validate coverage floor for the tool itself:
-   - `cargo llvm-cov --summary-only`
-   - Keep total coverage at or above 80%.
+Run `cargo xtask validate` from the repository root to perform all format checks, linting, test execution, coverage validation, dependency checks, and self-coverage analysis.
 
 ## Live-Scenario Testing Philosophy
 
