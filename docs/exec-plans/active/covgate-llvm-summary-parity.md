@@ -99,7 +99,7 @@ Finally, add unit tests close to the repaired logic so the root cause is covered
 
 ## Concrete Steps
 
-Run all commands from repository root `/home/jesse/git/covgate`.
+Run all commands from the repository root (the directory containing `Cargo.toml`, `src/`, `tests/`, and `docs/`).
 
 1. Inspect the current total-calculation path and existing fixture capability helpers.
 
