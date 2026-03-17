@@ -1,15 +1,31 @@
-use clap::Parser;
+use clap::{Args as ClapArgs, Parser, Subcommand};
 use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
 #[command(
     name = "covgate",
     about = "Diff-focused coverage gate",
+    subcommand_negates_reqs = true,
     after_help = "Repository-local defaults may be read from ./covgate.toml.\nCLI flags override config values. Supported defaults in v1:\n  base = \"origin/main\"\n  [gates]\n  fail_under_regions = 90\n  fail_uncovered_regions = 1\n\nAgent workflow:\n  covgate record-base\nthen run covgate without --base to auto-discover refs/worktree/covgate/base."
 )]
+pub struct Cli {
+    #[command(subcommand)]
+    pub command: Option<Command>,
+
+    #[command(flatten)]
+    pub args: Args,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum Command {
+    /// Record HEAD into refs/worktree/covgate/base when it is not already set.
+    RecordBase,
+}
+
+#[derive(Debug, ClapArgs)]
 pub struct Args {
     #[arg(long)]
-    pub coverage_json: PathBuf,
+    pub coverage_json: Option<PathBuf>,
 
     #[arg(long, conflicts_with = "diff_file")]
     pub base: Option<String>,
