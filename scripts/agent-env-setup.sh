@@ -83,6 +83,33 @@ ensure_cargo_tool() {
 	fi
 }
 
+ensure_cargo_tool_binary() {
+	local binary_name="$1"
+	local repo="$2"
+	local version="$3"
+
+	if ! command -v "$binary_name" >/dev/null 2>&1; then
+		echo "${SETUP_LABEL}: downloading ${binary_name} ${version}"
+		local filename
+		if [[ "$binary_name" == "cargo-machete" ]]; then
+			filename="${binary_name}-${version}-x86_64-unknown-linux-gnu.tar.gz"
+		else
+			filename="${binary_name}-x86_64-unknown-linux-gnu.tar.gz"
+		fi
+		local url="https://github.com/${repo}/releases/download/${version}/${filename}"
+		mkdir -p ~/.cargo/bin
+		curl -fsSL "$url" | tar -xz -C ~/.cargo/bin --strip-components=1 "${binary_name}"
+		chmod +x ~/.cargo/bin/"$binary_name"
+	else
+		echo "${SETUP_LABEL}: ${binary_name} already installed"
+	fi
+}
+
+get_latest_release() {
+	local repo="$1"
+	curl -s "https://api.github.com/repos/$repo/releases/latest" | jq -r '.tag_name'
+}
+
 has_pkg() {
 	local pkg="$1"
 	printf '%s\n' "${APT_PACKAGES[@]}" | grep -qx "$pkg"
@@ -185,8 +212,8 @@ else
 	rustup component add llvm-tools-preview || true
 fi
 
-ensure_cargo_tool "llvm-cov" "cargo-llvm-cov"
-ensure_cargo_tool "machete" "cargo-machete"
-ensure_cargo_tool "deny" "cargo-deny"
+ensure_cargo_tool_binary "cargo-llvm-cov" "taiki-e/cargo-llvm-cov" "$(get_latest_release 'taiki-e/cargo-llvm-cov')"
+ensure_cargo_tool_binary "cargo-machete" "bnjbvr/cargo-machete" "$(get_latest_release 'bnjbvr/cargo-machete')"
+ensure_cargo_tool_binary "cargo-deny" "EmbarkStudios/cargo-deny" "$(get_latest_release 'EmbarkStudios/cargo-deny')"
 
 echo "${SETUP_LABEL}: Complete!"
