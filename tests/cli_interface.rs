@@ -206,40 +206,11 @@ fn llvm_region_totals_match_llvm_cov_summary_counting() {
     let worktree = setup_fixture_worktree(temp.path(), fixture);
     let diff_file = write_worktree_diff(temp.path(), &worktree);
     let markdown_output = temp.path().join("summary.md");
-    let coverage_json = temp.path().join("coverage.json");
 
-    let coverage = serde_json::json!({
-        "data": [
-            {
-                "files": [
-                    {
-                        "filename": "src/lib.rs",
-                        "summary": {
-                            "regions": {
-                                "count": 1,
-                                "covered": 0,
-                                "notcovered": 1,
-                                "percent": 0.0
-                            }
-                        },
-                        "segments": [
-                            [1, 1, 0, true, false, false],
-                            [2, 1, 1, true, true, true],
-                            [3, 1, 0, true, true, false],
-                            [4, 1, 0, false, false, false]
-                        ]
-                    }
-                ],
-                "functions": []
-            }
-        ]
-    });
-    fs::write(
-        &coverage_json,
-        serde_json::to_vec_pretty(&coverage).expect("coverage json should serialize"),
+    let coverage: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(fixture.coverage_json()).expect("coverage fixture should be readable"),
     )
-    .expect("coverage json should write");
-
+    .expect("coverage fixture should parse");
     let llvm_summary_regions = coverage["data"][0]["files"][0]["summary"]["regions"]["covered"]
         .as_u64()
         .expect("summary covered should be a number");
@@ -247,9 +218,9 @@ fn llvm_region_totals_match_llvm_cov_summary_counting() {
         .as_u64()
         .expect("summary total should be a number");
 
-    let output = run_covgate_with_coverage(
+    let output = run_covgate(
         &worktree,
-        &coverage_json,
+        fixture,
         &[
             "--diff-file".to_string(),
             diff_file.to_string_lossy().into_owned(),
@@ -264,13 +235,12 @@ fn llvm_region_totals_match_llvm_cov_summary_counting() {
 
     let markdown = fs::read_to_string(markdown_output).expect("markdown should be readable");
     let expected_row = format!(
-        "| `src/lib.rs` | {} | {} | 0.00% |",
+        "| `src/lib.rs` | {} | {} | 100.00% |",
         llvm_summary_regions, llvm_summary_total
     );
     assert!(
         markdown.contains(&expected_row),
-        "expected markdown row `{expected_row}`, markdown=
-{markdown}"
+        "expected markdown row `{expected_row}`, markdown=\n{markdown}"
     );
 }
 
