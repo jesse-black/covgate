@@ -8,6 +8,6 @@
 - `src/` – Rust code for the `covgate` linter.
 
 ## Rust Workflow
-- Use `cargo xtask quick` for the normal edit-build-test loop. It is the fastest repository-supported check that still runs formatting, Clippy, and the Rust test suite.
+- Use `cargo xtask quick` for the test/check step of the edit-build-test loop during development.
 - Run `cargo xtask validate` before considering work complete.
 - Address bug reports and review findings with TDD: first reproduce the issue in a failing test, then fix the issue and rerun the relevant tests until they pass.
