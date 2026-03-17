@@ -17,8 +17,8 @@ See `docs/reference/environment-execution-contexts.md` for deeper rationale, sou
 
 ### Base-ref maintenance for cloud agents
 
-- `scripts/agent-env-setup.sh` installs and updates tools only; it no longer tries to fetch `origin/main`.
-- `scripts/agent-env-maintenance.sh` runs `covgate record-base` when available so agent worktrees can record a stable base ref without relying on remote-tracking branches.
+- `scripts/agent-env-setup.sh` installs and updates tools.
+- `scripts/agent-env-maintenance.sh` uses raw Git plumbing to ensure `refs/worktree/covgate/base` exists without building `covgate`.
 
 ### Available in devcontainer
 
