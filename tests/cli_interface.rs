@@ -47,6 +47,17 @@ fn record_base_fails_outside_git_repo() {
 }
 
 #[test]
+fn help_lists_record_base_as_subcommand() {
+    let temp = tempdir().expect("tempdir should exist");
+
+    let output = run_covgate_raw(temp.path(), &["--help".to_string()]);
+    assert_eq!(output.status.code(), Some(0));
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+    assert!(stdout.contains("Commands:"), "stdout={stdout}");
+    assert!(stdout.contains("record-base"), "stdout={stdout}");
+}
+
+#[test]
 fn record_base_is_idempotent() {
     let fixture = rust_basic_pass_fixture();
     let temp = tempdir().expect("tempdir should exist");

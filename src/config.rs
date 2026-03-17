@@ -55,7 +55,9 @@ impl TryFrom<Args> for Config {
             .or_else(|| file_config.and_then(|config| config.markdown_output));
 
         Ok(Self {
-            coverage_json: args.coverage_json,
+            coverage_json: args
+                .coverage_json
+                .context("--coverage-json <FILE> is required when running coverage gates")?,
             diff_source,
             rules,
             markdown_output,
@@ -240,7 +242,7 @@ mod tests {
     fn parses_region_cli_rules() {
         let rules = resolve_rules(
             &Args {
-                coverage_json: "coverage.json".into(),
+                coverage_json: Some("coverage.json".into()),
                 base: None,
                 diff_file: None,
                 fail_under_regions: Some(90.0),
@@ -276,7 +278,7 @@ mod tests {
         .expect("config should parse");
 
         let args = Args {
-            coverage_json: "coverage.json".into(),
+            coverage_json: Some("coverage.json".into()),
             base: Some("release".to_string()),
             diff_file: None,
             fail_under_regions: Some(90.0),
@@ -317,7 +319,7 @@ mod tests {
         .expect("config should parse");
 
         let args = Args {
-            coverage_json: "coverage.json".into(),
+            coverage_json: Some("coverage.json".into()),
             base: None,
             diff_file: None,
             fail_under_regions: None,
@@ -358,7 +360,7 @@ mod tests {
         .expect("config should parse");
 
         let args = Args {
-            coverage_json: "coverage.json".into(),
+            coverage_json: Some("coverage.json".into()),
             base: None,
             diff_file: None,
             fail_under_regions: None,
@@ -393,7 +395,7 @@ mod tests {
         .expect("config should parse");
 
         let args = Args {
-            coverage_json: "coverage.json".into(),
+            coverage_json: Some("coverage.json".into()),
             base: None,
             diff_file: Some("scenario.diff".into()),
             fail_under_regions: None,
@@ -456,7 +458,7 @@ mod tests {
         assert!(
             resolve_rules(
                 &Args {
-                    coverage_json: "coverage.json".into(),
+                    coverage_json: Some("coverage.json".into()),
                     base: None,
                     diff_file: None,
                     fail_under_regions: None,
