@@ -200,6 +200,81 @@ fn markdown_summary_rust_fixture() {
 }
 
 #[test]
+fn llvm_region_totals_match_llvm_cov_summary_counting() {
+    let fixture = rust_basic_pass_fixture();
+    let temp = tempdir().expect("tempdir should exist");
+    let worktree = setup_fixture_worktree(temp.path(), fixture);
+    let diff_file = write_worktree_diff(temp.path(), &worktree);
+    let markdown_output = temp.path().join("summary.md");
+    let coverage_json = temp.path().join("coverage.json");
+
+    let coverage = serde_json::json!({
+        "data": [
+            {
+                "files": [
+                    {
+                        "filename": "src/lib.rs",
+                        "summary": {
+                            "regions": {
+                                "count": 1,
+                                "covered": 0,
+                                "notcovered": 1,
+                                "percent": 0.0
+                            }
+                        },
+                        "segments": [
+                            [1, 1, 0, true, false, false],
+                            [2, 1, 1, true, true, true],
+                            [3, 1, 0, true, true, false],
+                            [4, 1, 0, false, false, false]
+                        ]
+                    }
+                ],
+                "functions": []
+            }
+        ]
+    });
+    fs::write(
+        &coverage_json,
+        serde_json::to_vec_pretty(&coverage).expect("coverage json should serialize"),
+    )
+    .expect("coverage json should write");
+
+    let llvm_summary_regions = coverage["data"][0]["files"][0]["summary"]["regions"]["covered"]
+        .as_u64()
+        .expect("summary covered should be a number");
+    let llvm_summary_total = coverage["data"][0]["files"][0]["summary"]["regions"]["count"]
+        .as_u64()
+        .expect("summary total should be a number");
+
+    let output = run_covgate_with_coverage(
+        &worktree,
+        &coverage_json,
+        &[
+            "--diff-file".to_string(),
+            diff_file.to_string_lossy().into_owned(),
+            "--fail-under-regions".to_string(),
+            "0".to_string(),
+            "--markdown-output".to_string(),
+            markdown_output.to_string_lossy().into_owned(),
+        ],
+    );
+
+    assert_eq!(output.status.code(), Some(0));
+
+    let markdown = fs::read_to_string(markdown_output).expect("markdown should be readable");
+    let expected_row = format!(
+        "| `src/lib.rs` | {} | {} | 0.00% |",
+        llvm_summary_regions, llvm_summary_total
+    );
+    assert!(
+        markdown.contains(&expected_row),
+        "expected markdown row `{expected_row}`, markdown=
+{markdown}"
+    );
+}
+
+#[test]
 fn absolute_llvm_paths_match_diff_fixture() {
     let fixture = rust_basic_pass_fixture();
     let temp = tempdir().expect("tempdir should exist");
