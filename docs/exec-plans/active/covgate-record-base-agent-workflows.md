@@ -27,9 +27,10 @@ You will know this is working when all of the following are true:
 - [ ] Refresh local branches and reset implementation context before making code changes for the updated task-boundary behavior.
 - [ ] Reshape the CLI so `covgate check <coverage-report>` and `covgate record-base` are separate subcommands owned entirely by `src/cli.rs`.
 - [x] (2026-03-17 21:05Z) Implemented `covgate record-base` branch-aware refresh semantics via a persisted branch marker: same-branch reruns remain idempotent while branch changes refresh `refs/worktree/covgate/base`.
-- [ ] Extend automatic base discovery to prefer `refs/worktree/covgate/base` when `--base` is omitted.
+- [x] (2026-03-17 21:35Z) Confirmed and retained automatic base discovery preference ordering with `refs/worktree/covgate/base` first when `--base` is omitted.
 - [x] (2026-03-17 21:12Z) Aligned `scripts/agent-env-maintenance.sh` raw Git fallback with `covgate record-base` semantics by adding the same branch-marker-based refresh behavior.
 - [x] (2026-03-17 21:15Z) Updated README and tooling/context docs to describe same-branch idempotence, branch-change refreshes, and branch-aware raw Git maintenance flow.
+- [x] (2026-03-17 22:05Z) Added default-on dirty-worktree protection in `covgate` for Git-base diff mode, with CLI/config opt-outs and explicit diff-file bypass behavior verified by tests.
 - [x] (2026-03-17 21:26Z) Added branch-refresh regression coverage and passed full repository validation, including `cargo xtask validate`.
 
 ## Surprises & Discoveries
@@ -48,6 +49,9 @@ You will know this is working when all of the following are true:
 
 - Observation: A lightweight branch marker file under the Git worktree path (`refs/worktree/covgate/base.branch`) gives deterministic same-branch idempotence and branch-change refreshes without requiring remote refs.
   Evidence: updated `src/git.rs` and `scripts/agent-env-maintenance.sh` both compare current branch identity against this marker before deciding whether to refresh `refs/worktree/covgate/base`.
+
+- Observation: Local validate runs can produce misleading “no changed files” results when a Git-base diff is used against `HEAD` while task edits remain uncommitted.
+  Evidence: introducing a default-on clean-worktree guard in `covgate` and adding a diff-file bypass test eliminated this discrepancy and codified the intended behavior.
 
 - Observation: `scripts/agent-env-maintenance.sh` already bypasses `cargo run -- record-base` and uses raw Git plumbing directly because compiling `covgate` during maintenance was too slow for practical agent startup.
   Evidence: the script now checks `git rev-parse -q --verify refs/worktree/covgate/base` and then falls back to `git update-ref refs/worktree/covgate/base HEAD` without invoking `covgate` or `cargo`.

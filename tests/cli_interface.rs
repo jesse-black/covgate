@@ -206,6 +206,32 @@ fn covgate_allows_dirty_worktree_with_flag() {
 }
 
 #[test]
+fn diff_file_mode_skips_dirty_worktree_guard() {
+    let fixture = rust_basic_pass_fixture();
+    let temp = tempdir().expect("tempdir should exist");
+    let worktree = setup_fixture_worktree(temp.path(), fixture);
+    let diff_file = write_worktree_diff(temp.path(), &worktree);
+
+    let output = run_covgate_with_coverage(
+        &worktree,
+        &fixture.coverage_json(),
+        &[
+            "--diff-file".to_string(),
+            diff_file.to_string_lossy().into_owned(),
+            "--fail-under-regions".to_string(),
+            "90".to_string(),
+        ],
+    );
+
+    assert_eq!(output.status.code(), Some(0));
+    let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
+    assert!(
+        !stderr.contains("working tree has uncommitted changes"),
+        "stderr={stderr}"
+    );
+}
+
+#[test]
 fn automatic_base_prefers_recorded_worktree_ref() {
     let fixture = rust_basic_pass_fixture();
     let temp = tempdir().expect("tempdir should exist");
