@@ -8,29 +8,27 @@ if [[ "${DEBUG:-}" == "1" ]]; then
 fi
 
 record_base_ref() {
+	local recorded_sha
+
 	if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-		echo "${SETUP_LABEL}: not a git worktree; skipping covgate record-base"
+		echo "${SETUP_LABEL}: not a git worktree; skipping base ref maintenance"
 		return 0
 	fi
 
-	if ! command -v covgate >/dev/null 2>&1; then
-		if ! command -v cargo >/dev/null 2>&1; then
-			echo "${SETUP_LABEL}: covgate and cargo not found; skipping covgate record-base" >&2
-			return 0
-		fi
+	if recorded_sha="$(git rev-parse -q --verify refs/worktree/covgate/base 2>/dev/null)"; then
+		echo "${SETUP_LABEL}: stable base ref already existed at ${recorded_sha}"
+		return 0
+	fi
 
-		if cargo run --quiet -- record-base; then
-			echo "${SETUP_LABEL}: recorded stable base ref via cargo run"
+	if git update-ref refs/worktree/covgate/base HEAD; then
+		recorded_sha="$(git rev-parse -q --verify refs/worktree/covgate/base 2>/dev/null || true)"
+		if [[ -n "${recorded_sha}" ]]; then
+			echo "${SETUP_LABEL}: created stable base ref at ${recorded_sha}"
 		else
-			echo "${SETUP_LABEL}: cargo run -- record-base failed; continuing" >&2
+			echo "${SETUP_LABEL}: created stable base ref"
 		fi
-		return 0
-	fi
-
-	if covgate record-base; then
-		echo "${SETUP_LABEL}: recorded stable base ref"
 	else
-		echo "${SETUP_LABEL}: covgate record-base failed; continuing" >&2
+		echo "${SETUP_LABEL}: failed to record stable base ref; continuing" >&2
 	fi
 }
 
