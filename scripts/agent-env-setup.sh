@@ -91,15 +91,25 @@ ensure_cargo_tool_binary() {
 	if ! command -v "$binary_name" >/dev/null 2>&1; then
 		echo "${SETUP_LABEL}: downloading ${binary_name} ${version}"
 		local filename
-		if [[ "$binary_name" == "cargo-machete" ]]; then
-			filename="${binary_name}-${version}-x86_64-unknown-linux-gnu.tar.gz"
+		if [[ "$binary_name" == "cargo-machete" || "$binary_name" == "cargo-deny" ]]; then
+			filename="${binary_name}-${version}-x86_64-unknown-linux-musl.tar.gz"
 		else
 			filename="${binary_name}-x86_64-unknown-linux-gnu.tar.gz"
 		fi
 		local url="https://github.com/${repo}/releases/download/${version}/${filename}"
 		mkdir -p ~/.cargo/bin
-		curl -fsSL "$url" | tar -xz -C ~/.cargo/bin --strip-components=1 "${binary_name}"
+		local tmp_dir="$(mktemp -d)"
+		curl -fsSL "$url" -o "${tmp_dir}/archive.tar.gz"
+		tar -xzf "${tmp_dir}/archive.tar.gz" -C "$tmp_dir"
+		local binary_path="$(find "$tmp_dir" -name "$binary_name" -type f -executable | head -1)"
+		if [[ -z "$binary_path" ]]; then
+			echo "${SETUP_LABEL}: error: binary $binary_name not found in archive" >&2
+			rm -rf "$tmp_dir"
+			exit 1
+		fi
+		mv "$binary_path" ~/.cargo/bin/
 		chmod +x ~/.cargo/bin/"$binary_name"
+		rm -rf "$tmp_dir"
 	else
 		echo "${SETUP_LABEL}: ${binary_name} already installed"
 	fi
