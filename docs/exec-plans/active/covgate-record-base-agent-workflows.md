@@ -32,6 +32,7 @@ You will know this is working when all of the following are true:
 - [x] (2026-03-17 21:15Z) Updated README and tooling/context docs to describe same-branch idempotence, branch-change refreshes, and branch-aware raw Git maintenance flow.
 - [x] (2026-03-17 22:05Z) Added default-on dirty-worktree protection in `covgate` for Git-base diff mode, with CLI/config opt-outs and explicit diff-file bypass behavior verified by tests.
 - [x] (2026-03-17 21:26Z) Added branch-refresh regression coverage and passed full repository validation, including `cargo xtask validate`.
+- [ ] Coverage-gate hardening follow-up: raise changed-file test coverage to satisfy `cargo xtask validate` without reducing repository default gates.
 
 ## Surprises & Discoveries
 
@@ -52,6 +53,9 @@ You will know this is working when all of the following are true:
 
 - Observation: Local validate runs can produce misleading “no changed files” results when a Git-base diff is used against `HEAD` while task edits remain uncommitted.
   Evidence: introducing a default-on clean-worktree guard in `covgate` and adding a diff-file bypass test eliminated this discrepancy and codified the intended behavior.
+
+- Observation: Lowering repository default gates to force green local validation hides real regressions and violates expected policy unless explicitly directed.
+  Evidence: gate thresholds in `covgate.toml` were reverted after review feedback; remediation should come from additional tests/coverage, not weaker defaults.
 
 - Observation: `scripts/agent-env-maintenance.sh` already bypasses `cargo run -- record-base` and uses raw Git plumbing directly because compiling `covgate` during maintenance was too slow for practical agent startup.
   Evidence: the script now checks `git rev-parse -q --verify refs/worktree/covgate/base` and then falls back to `git update-ref refs/worktree/covgate/base HEAD` without invoking `covgate` or `cargo`.
@@ -84,6 +88,10 @@ You will know this is working when all of the following are true:
 - Decision: Reshape the CLI to use explicit subcommands `covgate check <coverage-report>` and `covgate record-base`.
   Rationale: This keeps command parsing and required-argument handling inside `src/cli.rs`, removes the need for `src/main.rs` to manufacture Clap errors, and better matches the repository’s mostly scripted CI-oriented usage. Because coverage format is auto-detected, the primary input should be a generic required coverage-report path rather than a flag named `--coverage-json`.
   Date/Author: 2026-03-17 / Codex
+
+- Decision: Never lower gate defaults without explicit instruction.
+  Rationale: Validation failures from insufficient changed-file coverage must be fixed with tests or implementation changes; weakening `covgate.toml` defaults changes project policy and can mask regressions.
+  Date/Author: 2026-03-18 / Codex
 
 ## Outcomes & Retrospective
 
@@ -184,6 +192,16 @@ Run all commands from repository root `/home/jesse/git/covgate` unless otherwise
 
     Expected result: all checks pass; docs describe `covgate check <coverage-report>`, recommended `covgate record-base` usage, same-branch idempotence, and branch-change refresh semantics.
 
+8. Coverage gate remediation when `cargo xtask validate` fails after feature changes.
+
+    cargo llvm-cov --json --output-path /tmp/covgate-validate.json --fail-under-regions=88
+    cargo run -- check /tmp/covgate-validate.json --allow-dirty-worktree
+    cargo test git_module -- --nocapture
+
+    Expected result: uncovered changed spans/functions are identified in the touched files; follow-up commits add tests that execute those paths until `cargo xtask validate` passes.
+
+    Policy constraint: Do not lower `covgate.toml` gate defaults to force validation green unless maintainers explicitly request a policy change.
+
 ## Validation and Acceptance
 
 Acceptance is complete only when the behavior is observable end to end.
@@ -201,6 +219,8 @@ When running `covgate check <coverage-report> --base <REF>`, explicit `--base` m
 When no automatic base candidate exists, user-facing error/help text must mention `covgate record-base` as a remediation alongside explicit `--base` guidance.
 
 Script acceptance requires that `scripts/agent-env-setup.sh` and `scripts/agent-env-maintenance.sh` no longer perform `git fetch ... origin/main` bootstrap attempts. The maintenance script must keep using raw Git plumbing, not compile `covgate`, and must still follow the same task-boundary semantics as `covgate record-base`.
+
+Gate-policy acceptance: if validation fails due to changed-file coverage, remediation must add coverage/tests in changed files. Lowering `covgate.toml` gate defaults is out of scope unless explicitly requested by maintainers.
 
 Documentation acceptance requires README coverage of:
 
