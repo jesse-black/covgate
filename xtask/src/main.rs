@@ -7,11 +7,12 @@ fn main() -> Result<()> {
     let mut args = std::env::args().skip(1);
     let Some(task) = args.next() else {
         bail!(
-            "usage: cargo xtask <task>\n\n  validate\n  regen-fixture-coverage <language>/<scenario>\n  regen-fixture-coverage-all"
+            "usage: cargo xtask <task>\n\n  quick\n  validate\n  regen-fixture-coverage <language>/<scenario>\n  regen-fixture-coverage-all"
         );
     };
 
     match task.as_str() {
+        "quick" => quick(),
         "validate" => validate(),
         "regen-fixture-coverage" => {
             let Some(fixture_id) = args.next() else {
@@ -22,6 +23,23 @@ fn main() -> Result<()> {
         "regen-fixture-coverage-all" => regen_fixture_coverage_all(),
         _ => bail!("unknown xtask `{task}`"),
     }
+}
+
+fn quick() -> Result<()> {
+    run("cargo", &["fmt", "--check"])?;
+    run(
+        "cargo",
+        &[
+            "clippy",
+            "--all-targets",
+            "--all-features",
+            "--",
+            "-D",
+            "warnings",
+        ],
+    )?;
+    run("cargo", &["test", "-q"])?;
+    Ok(())
 }
 
 fn validate() -> Result<()> {
