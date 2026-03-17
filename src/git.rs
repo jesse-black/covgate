@@ -58,6 +58,7 @@ pub fn create_ref(reference: &str, target: &str) -> Result<()> {
     Ok(())
 }
 
+#[inline(never)]
 fn resolve_git_path(path: &str) -> Result<PathBuf> {
     let output = Command::new("git")
         .args(["rev-parse", "--git-path", path])
@@ -76,6 +77,7 @@ fn resolve_git_path(path: &str) -> Result<PathBuf> {
     Ok(PathBuf::from(raw.trim()))
 }
 
+#[inline(never)]
 fn resolve_current_branch() -> Result<Option<String>> {
     let output = Command::new("git")
         .args(["symbolic-ref", "--quiet", "--short", "HEAD"])
@@ -101,6 +103,7 @@ fn resolve_current_branch() -> Result<Option<String>> {
     ))
 }
 
+#[inline(never)]
 fn read_recorded_branch_marker() -> Result<Option<String>> {
     let marker_path = resolve_git_path(RECORDED_BASE_BRANCH_MARKER)?;
     if !marker_path.exists() {
@@ -121,6 +124,7 @@ fn read_recorded_branch_marker() -> Result<Option<String>> {
     Ok(Some(branch.to_string()))
 }
 
+#[inline(never)]
 fn write_recorded_branch_marker(branch: &str) -> Result<()> {
     let marker_path = resolve_git_path(RECORDED_BASE_BRANCH_MARKER)?;
     if let Some(parent) = marker_path.parent() {
@@ -131,6 +135,7 @@ fn write_recorded_branch_marker(branch: &str) -> Result<()> {
         .with_context(|| format!("failed to write branch marker {}", marker_path.display()))
 }
 
+#[inline(never)]
 fn is_ancestor(ancestor: &str, descendant: &str) -> Result<bool> {
     let output = Command::new("git")
         .args(["merge-base", "--is-ancestor", ancestor, descendant])

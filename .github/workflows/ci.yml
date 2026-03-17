@@ -26,7 +26,7 @@ jobs:
       - name: Coverage Summary
         run: cargo llvm-cov report
       - name: Dogfood covgate
-        run: cargo run -- --coverage-json coverage.json --markdown-output "$GITHUB_STEP_SUMMARY"
+        run: cargo run -- check coverage.json --markdown-output "$GITHUB_STEP_SUMMARY"
 
   dependency-hygiene:
     runs-on: ubuntu-latest

@@ -119,6 +119,89 @@ fn clean_worktree_check_detects_pending_changes() {
 }
 
 #[test]
+fn record_base_recreates_missing_branch_marker_without_refreshing_ref() {
+    with_temp_git_repo(|repo| {
+        run_git(repo, &["branch", "-M", "main"]);
+        let recorded = record_base_ref().expect("record-base should succeed");
+
+        let marker_path_output = std::process::Command::new("git")
+            .args([
+                "rev-parse",
+                "--git-path",
+                "refs/worktree/covgate/base.branch",
+            ])
+            .current_dir(repo)
+            .output()
+            .expect("git rev-parse should run");
+        assert!(marker_path_output.status.success());
+        let marker_path = String::from_utf8(marker_path_output.stdout)
+            .expect("marker path should be utf8")
+            .trim()
+            .to_string();
+        fs::remove_file(&marker_path).expect("marker should be removable");
+
+        let second = record_base_ref().expect("record-base should still succeed");
+        assert_eq!(second, recorded);
+
+        let marker_branch = fs::read_to_string(marker_path).expect("marker should be rewritten");
+        assert_eq!(marker_branch.trim(), "main");
+    });
+}
+
+#[test]
+fn record_base_detached_head_uses_ancestor_check_path() {
+    with_temp_git_repo(|repo| {
+        run_git(repo, &["branch", "-M", "main"]);
+        let recorded = record_base_ref().expect("record-base should succeed");
+
+        run_git(repo, &["checkout", "--detach", "HEAD"]);
+
+        let second = record_base_ref().expect("record-base should remain stable on detached head");
+        assert_eq!(second, recorded);
+    });
+}
+
+#[test]
+fn record_base_detached_head_refreshes_when_recorded_commit_is_not_ancestor() {
+    with_temp_git_repo(|repo| {
+        run_git(repo, &["branch", "-M", "main"]);
+
+        fs::write(
+            repo.join("main-a.txt"),
+            "main-a
+",
+        )
+        .expect("file should write");
+        run_git(repo, &["add", "."]);
+        run_git(repo, &["commit", "-m", "main a"]);
+        let main_a = resolve_ref_sha("HEAD")
+            .expect("head should resolve")
+            .expect("head sha should exist");
+        record_base_ref().expect("record-base should succeed on main");
+
+        run_git(repo, &["checkout", "-b", "side", "HEAD~1"]);
+        fs::write(
+            repo.join("side-b.txt"),
+            "side-b
+",
+        )
+        .expect("file should write");
+        run_git(repo, &["add", "."]);
+        run_git(repo, &["commit", "-m", "side b"]);
+        let side_b = resolve_ref_sha("HEAD")
+            .expect("head should resolve")
+            .expect("head sha should exist");
+        assert_ne!(side_b, main_a);
+
+        run_git(repo, &["checkout", "--detach", "HEAD"]);
+
+        let refreshed =
+            record_base_ref().expect("record-base should refresh on detached divergent commit");
+        assert_eq!(refreshed, side_b);
+    });
+}
+
+#[test]
 fn discover_base_prefers_recorded_ref() {
     with_temp_git_repo(|repo| {
         let main_sha = resolve_ref_sha("HEAD")
