@@ -208,6 +208,8 @@ Run all commands from repository root `/home/jesse/git/covgate` unless otherwise
 
     Step D — Run full validation (`cargo xtask quick`, `cargo xtask validate`) with strict defaults unchanged.
 
+    ⚠️ Untracked-files warning: `covgate check` in Git-base mode reflects committed + tracked worktree edits. New untracked source files are invisible to `git diff <merge-base>` until added to the index intent state (for example `git add -N <path>`).
+
     Potential blockers to monitor:
     - LLVM inlining collapsing changed helper functions into callsites and obscuring per-function coverage attribution.
     - Branch-specific/ref-state logic requiring non-trivial Git fixture setup (detached HEAD, marker missing, divergent ancestry).
