@@ -63,6 +63,15 @@ You will know this work is complete when all of the following are true:
 - Observation: LLVM's per-file `summary` blocks match the live `cargo llvm-cov` totals for the real export even when `covgate`'s opportunity-derived file totals do not.
   Evidence: after changing the adapter to populate `totals_by_file` from `LlvmFile.summary` when present, the real export parity test and the existing `overall_summary` suite both pass without changing changed-coverage opportunity derivation.
 
+- Observation: That summary-backed adapter change was intentionally reverted because it violated the plan's core constraint. After reverting it, the real LLVM parity repro is red again with the same three mismatches, so the branch is back in a truth-seeking state.
+  Evidence: `tests/llvm_real_parity.rs` again fails with native totals `region 3285/3408`, `line 2890/2957`, and `function 160/165` versus `covgate` totals `region 3252/3355`, `line 2865/2910`, and `function 159/164`.
+
+- Observation: LLVM `expansions` are not the missing source here; the real export currently has zero expansions on the files whose totals drift.
+  Evidence: inspecting `tests/fixtures/llvm-real/covgate-self-full.json` shows `expansions: []` for representative mismatching files such as `src/config.rs`, `src/coverage/mod.rs`, and `src/metrics.rs`.
+
+- Observation: Simple raw-data alternatives overshoot badly. Counting all non-gap segments or deriving region totals directly from function-region tuples produces totals far above LLVM's native summaries, not just a small correction.
+  Evidence: exploratory analysis on the real export showed, for example, `src/config.rs` native region totals `395/436` versus `507/538` when counting all `has_count` non-gap segment windows and `501/624` when counting raw function-region tuples.
+
 
 ## Decision Log
 
@@ -247,3 +256,5 @@ Revision note: Added a follow-up task for rendering all available metrics in sum
 Revision note: Added a checked-in real LLVM export fixture plus a failing integration test that reproduces the current parity gap for region, line, and function totals. This replaces the earlier abstract concern about weak fixtures with a concrete regression target on the branch.
 
 Revision note: Recorded the LLVM adapter fix that prefers per-file native summary totals for overall metric totals, along with the rationale for separating those overall totals from diff-opportunity derivation. The real LLVM parity repro now passes with that design.
+
+Revision note: Reverted the summary-backed adapter change after the user correctly pointed out that it violated the plan's requirement to restore confidence in `covgate`'s own calculations. The real LLVM parity repro is intentionally failing again while investigation continues.
