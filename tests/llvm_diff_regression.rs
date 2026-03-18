@@ -12,7 +12,8 @@ use tempfile::tempdir;
 use crate::support::{
     cpp_basic_fail_fixture, cpp_basic_pass_fixture, run_covgate_raw, rust_basic_fail_fixture,
     rust_basic_pass_fixture, setup_fixture_worktree, swift_basic_fail_fixture,
-    swift_basic_pass_fixture, write_absolute_path_coverage_fixture, write_worktree_diff,
+    swift_basic_pass_fixture, write_absolute_path_coverage_fixture,
+    write_rebased_real_llvm_fixture, write_worktree_diff,
 };
 
 static CWD_LOCK: Mutex<()> = Mutex::new(());
@@ -56,11 +57,8 @@ fn load_real_fixture_changed_metric(
     let temp = tempdir()?;
     let diff_file = temp.path().join("scenario.diff");
     std::fs::write(&diff_file, diff_text)?;
-    let coverage_json = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests")
-        .join("fixtures")
-        .join("llvm-real")
-        .join("covgate-self-full.json");
+    let coverage_json = temp.path().join("covgate-self-full-rebased.json");
+    write_rebased_real_llvm_fixture(&coverage_json);
 
     let _lock = CWD_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
     let original_cwd = env::current_dir()?;
@@ -87,11 +85,8 @@ fn run_real_fixture_gate(diff_text: &str, args: &[&str]) -> std::process::Output
     let diff_file = temp.path().join("scenario.diff");
     std::fs::write(&diff_file, diff_text).expect("diff file should be written");
     let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let coverage_json = repo_root
-        .join("tests")
-        .join("fixtures")
-        .join("llvm-real")
-        .join("covgate-self-full.json");
+    let coverage_json = temp.path().join("covgate-self-full-rebased.json");
+    write_rebased_real_llvm_fixture(&coverage_json);
 
     let mut covgate_args = vec![
         "check".to_string(),

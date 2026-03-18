@@ -266,6 +266,33 @@ pub fn write_absolute_path_coverage_fixture(fixture: Fixture, worktree: &Path, d
     fs::write(destination, updated).expect("absolute-path coverage fixture should be written");
 }
 
+pub fn write_rebased_real_llvm_fixture(destination: &Path) {
+    let template = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("fixtures")
+        .join("llvm-real")
+        .join("covgate-self-full.json");
+    let text = fs::read_to_string(&template).expect("real llvm fixture should be readable");
+    let parsed: serde_json::Value =
+        serde_json::from_str(&text).expect("real llvm fixture should parse as json");
+
+    let old_manifest_path = parsed
+        .get("cargo_llvm_cov")
+        .and_then(|value| value.get("manifest_path"))
+        .and_then(serde_json::Value::as_str)
+        .expect("real llvm fixture should include cargo_llvm_cov.manifest_path");
+    let old_root = Path::new(old_manifest_path)
+        .parent()
+        .expect("manifest path should have parent");
+    let new_root = Path::new(env!("CARGO_MANIFEST_DIR"));
+
+    let updated = text.replace(
+        &old_root.display().to_string(),
+        &new_root.display().to_string(),
+    );
+    fs::write(destination, updated).expect("rebased real llvm fixture should be written");
+}
+
 pub fn init_git_repo(path: &Path) {
     run_git(path, &["init"]);
     run_git(path, &["config", "user.email", "covgate@example.com"]);
