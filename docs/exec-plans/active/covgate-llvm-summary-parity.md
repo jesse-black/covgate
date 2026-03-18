@@ -92,6 +92,12 @@ You will know this work is complete when all of the following are true:
 - Observation: The repository now has LLVM integration tests that assert exact changed-opportunity membership and covered-state on real fixture diffs across the small Rust, C++, and Swift basic fixtures.
   Evidence: `tests/llvm_diff_regression.rs` verifies exact changed line, region, and function opportunities for Rust, C++, and Swift basic LLVM fixtures, plus exact changed branch opportunities for the C++ fixture, by parsing coverage, loading the real unified diff, and asserting on `compute_changed_metric()`.
 
+- Observation: The repository now also has richer diff-focused regressions against the checked-in real multi-file LLVM export for two high-drift source files.
+  Evidence: `tests/llvm_diff_regression.rs` now feeds synthetic diffs into `tests/fixtures/llvm-real/covgate-self-full.json` and asserts exact changed line, region, and function outcomes for `src/config.rs` and `src/coverage/llvm_json.rs`. These cases exercise denser real-export shapes than the small language fixtures and keep the confidence target anchored on diff gating rather than summary pass-through.
+
+- Observation: The repository now has end-to-end CLI gate regressions on richer real-export diff slices, not just parser-level changed-opportunity checks.
+  Evidence: `tests/llvm_diff_regression.rs` now runs `covgate check` against the checked-in real LLVM export plus synthetic diffs for `src/config.rs`, `src/coverage/coverlet_json.rs`, and `src/render/markdown.rs`, asserting the expected pass/fail outcomes for percent and uncovered-count rules.
+
 
 ## Decision Log
 
@@ -125,6 +131,10 @@ You will know this work is complete when all of the following are true:
 
 - Decision: Shift the confidence target for the remaining LLVM work toward changed-opportunity correctness for diff gating, with summary parity treated as strong but secondary evidence where LLVM semantics are ambiguous.
   Rationale: gate outcomes are computed from changed opportunities and span overlap, not from overall summary rows alone. If LLVM exports multiple competing line views, the direct proof for `covgate` is that changed opportunities match the concrete gating semantics we can observe.
+  Date/Author: 2026-03-18 / Codex
+
+- Decision: Keep normal `covgate` summaries calculation-backed rather than passing through LLVM native summary totals.
+  Rationale: the investigation now shows LLVM exposes competing report semantics for the same run, including JSON summary totals, text-rendered executable lines, and LCOV concrete `DA:` lines. Passing native LLVM summaries through production output would make the CLI look aligned while hiding whether `covgate`'s own calculation model is coherent. The stronger confidence target for this project is that `covgate` computes changed opportunities and gate outcomes correctly from its owned model. The expanded `tests/llvm_diff_regression.rs` coverage now gives direct evidence for that path across small LLVM fixtures, richer real-export slices, and end-to-end CLI gate outcomes. Keeping summaries calculation-backed preserves that integrity and avoids conflating `covgate` totals with LLVM's separate summary-reporting semantics.
   Date/Author: 2026-03-18 / Codex
 
 ## Outcomes & Retrospective

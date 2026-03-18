@@ -384,6 +384,8 @@ The first step in that direction now exists:
 
 - `tests/llvm_diff_regression.rs` parses real LLVM fixture coverage for Rust, C++, and Swift basic fixtures, loads the actual unified diff for each fixture worktree, and asserts exact changed line, region, and function opportunities through `compute_changed_metric()`
 - the C++ fixture regression also asserts exact changed branch opportunities
+- `tests/llvm_diff_regression.rs` now also uses the checked-in real multi-file LLVM export with synthetic diffs for `src/config.rs` and `src/coverage/llvm_json.rs`, asserting exact changed line, region, and function outcomes on higher-complexity report shapes
+- `tests/llvm_diff_regression.rs` also runs end-to-end `covgate check` assertions on real-export diff slices for `src/config.rs`, `src/coverage/coverlet_json.rs`, and `src/render/markdown.rs`, proving the actual rule pass/fail outcomes users see for percent and uncovered-count gates
 
 That does not resolve the harder live-summary ambiguity yet, but it is the right shape of proof for trusting diff gating.
 
