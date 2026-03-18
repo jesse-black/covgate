@@ -4,6 +4,7 @@ use std::{
 };
 
 use anyhow::{Context, Result};
+use rustc_demangle::try_demangle;
 use serde::Deserialize;
 
 use crate::model::{
@@ -25,7 +26,7 @@ pub(crate) fn parse_str_with_repo_root(input: &str, repo_root: &Path) -> Result<
             .map(|file| normalize_path(&file.filename, repo_root))
             .collect();
 
-        let mut function_records_by_file: BTreeMap<PathBuf, BTreeMap<FunctionSpanKey, bool>> =
+        let mut function_records_by_file: BTreeMap<PathBuf, BTreeMap<FunctionKey, bool>> =
             BTreeMap::new();
         for function in data.functions {
             if function.filenames.is_empty() {
@@ -46,10 +47,19 @@ pub(crate) fn parse_str_with_repo_root(input: &str, repo_root: &Path) -> Result<
                 continue;
             };
             let entry = function_records_by_file.entry(path).or_default();
-            let key = FunctionSpanKey {
-                start_line,
-                end_line,
-            };
+            let key = function
+                .name
+                .as_deref()
+                .map(normalize_llvm_function_name)
+                .map(|normalized_name| FunctionKey::NormalizedName {
+                    normalized_name,
+                    start_line,
+                    end_line,
+                })
+                .unwrap_or(FunctionKey::Span {
+                    start_line,
+                    end_line,
+                });
             let covered = function.count > 0 || region_covered;
             entry
                 .entry(key)
@@ -147,7 +157,18 @@ pub(crate) fn parse_str_with_repo_root(input: &str, repo_root: &Path) -> Result<
             if let Some(function_records) = function_records_by_file.remove(&path) {
                 let mut function_covered = 0usize;
                 let function_total = function_records.len();
-                for (span, covered) in function_records {
+                for (key, covered) in function_records {
+                    let (start_line, end_line) = match key {
+                        FunctionKey::Span {
+                            start_line,
+                            end_line,
+                        } => (start_line, end_line),
+                        FunctionKey::NormalizedName {
+                            start_line,
+                            end_line,
+                            ..
+                        } => (start_line, end_line),
+                    };
                     if covered {
                         function_covered += 1;
                     }
@@ -155,8 +176,8 @@ pub(crate) fn parse_str_with_repo_root(input: &str, repo_root: &Path) -> Result<
                         kind: OpportunityKind::Function,
                         span: SourceSpan {
                             path: path.clone(),
-                            start_line: span.start_line,
-                            end_line: span.end_line,
+                            start_line,
+                            end_line,
                         },
                         covered,
                     });
@@ -251,6 +272,8 @@ struct LlvmFunction {
     #[serde(default)]
     filenames: Vec<String>,
     #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
     regions: Vec<LlvmFunctionRegion>,
 }
 
@@ -274,10 +297,23 @@ struct LlvmFunctionRegion {
     _kind: u32,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-struct FunctionSpanKey {
-    start_line: u32,
-    end_line: u32,
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+enum FunctionKey {
+    Span {
+        start_line: u32,
+        end_line: u32,
+    },
+    NormalizedName {
+        normalized_name: String,
+        start_line: u32,
+        end_line: u32,
+    },
+}
+
+fn normalize_llvm_function_name(name: &str) -> String {
+    try_demangle(name)
+        .map(|demangled| format!("{demangled:#}"))
+        .unwrap_or_else(|_| name.to_string())
 }
 
 fn de_u32_from_i64<'de, D>(deserializer: D) -> Result<u32, D::Error>
@@ -450,7 +486,7 @@ fn bool_at(values: &[serde_json::Value], index: usize) -> Option<bool> {
 mod tests {
     use std::path::{Path, PathBuf};
 
-    use super::{normalize_path, parse_str_with_repo_root};
+    use super::{normalize_llvm_function_name, normalize_path, parse_str_with_repo_root};
 
     fn parse_str(input: &str) -> anyhow::Result<crate::model::CoverageReport> {
         parse_str_with_repo_root(input, Path::new("/workspace/covgate"))
@@ -878,6 +914,114 @@ mod tests {
 
         assert_eq!(totals.covered, 1);
         assert_eq!(totals.total, 1);
+    }
+
+    #[test]
+    fn keeps_rust_functions_with_different_crate_hashes_as_one_name_based_record() {
+        let input = r#"
+        {
+          "data": [
+            {
+              "functions": [
+                {
+                  "count": 1,
+                  "name": "_RNvNtCsAAAA_7covgate7metrics22compute_changed_metric",
+                  "filenames": ["src/lib.rs"],
+                  "regions": [[20,1,25,1,1,0,0,0]]
+                },
+                {
+                  "count": 1,
+                  "name": "_RNvNtCsBBBB_7covgate7metrics22compute_changed_metric",
+                  "filenames": ["src/lib.rs"],
+                  "regions": [[20,1,25,1,1,0,0,0]]
+                }
+              ],
+              "files": [
+                {
+                  "filename": "src/lib.rs",
+                  "segments": [
+                    [20, 1, 1, true, false, false],
+                    [25, 1, 0, false, false, false]
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+        "#;
+
+        let report = parse_str(input).expect("llvm export should parse");
+        let totals = report
+            .totals_by_file
+            .get(&crate::model::MetricKind::Function)
+            .expect("function totals should exist")
+            .get(&PathBuf::from("src/lib.rs"))
+            .expect("file totals should exist");
+
+        assert_eq!(totals.covered, 1);
+        assert_eq!(totals.total, 1);
+
+        let function_opportunities: Vec<_> = report
+            .opportunities
+            .iter()
+            .filter(|op| op.kind == crate::model::OpportunityKind::Function)
+            .collect();
+        assert_eq!(function_opportunities.len(), 1);
+        assert_eq!(function_opportunities[0].span.start_line, 20);
+        assert_eq!(function_opportunities[0].span.end_line, 25);
+    }
+
+    #[test]
+    fn demangles_rust_llvm_function_names_for_identity() {
+        let normalized = normalize_llvm_function_name(
+            "_RNvNtCs6ZlX2b1lC0o_7covgate7metrics22compute_changed_metric",
+        );
+        assert_eq!(normalized, "covgate::metrics::compute_changed_metric");
+    }
+
+    #[test]
+    fn leaves_non_rust_function_names_unchanged() {
+        let normalized = normalize_llvm_function_name("plain_c_symbol_name");
+        assert_eq!(normalized, "plain_c_symbol_name");
+    }
+
+    #[test]
+    fn demangles_real_repro_rust_symbol_set_into_eight_identities() {
+        let raw_names = [
+            "_RNCNCNvNtCs6ZlX2b1lC0o_7covgate7metrics22compute_changed_metric00B7_",
+            "_RNCNCNvNtCs6ZlX2b1lC0o_7covgate7metrics22compute_changed_metrics0_00B7_",
+            "_RNCNvNtCs6ZlX2b1lC0o_7covgate7metrics22compute_changed_metric0B5_",
+            "_RNCNvNtCs6ZlX2b1lC0o_7covgate7metrics22compute_changed_metrics0_0B5_",
+            "_RNCNvNtCs6ZlX2b1lC0o_7covgate7metrics22compute_changed_metrics_0B5_",
+            "_RNvNtCs6ZlX2b1lC0o_7covgate7metrics22compute_changed_metric",
+            "_RNvNtCsiqc4wHYDJq1_7covgate7metrics22compute_changed_metric",
+            "_RNvNtNtCsiqc4wHYDJq1_7covgate7metrics5testss_30computes_changed_region_metric",
+            "_RNvNtNtCsiqc4wHYDJq1_7covgate7metrics5testss_54metric_with_only_zero_totals_is_treated_as_unavailable",
+            "_RNCNCNvNtCsiqc4wHYDJq1_7covgate7metrics22compute_changed_metric00B7_",
+            "_RNCNCNvNtCsiqc4wHYDJq1_7covgate7metrics22compute_changed_metrics0_00B7_",
+            "_RNCNvNtCsiqc4wHYDJq1_7covgate7metrics22compute_changed_metric0B5_",
+            "_RNCNvNtCsiqc4wHYDJq1_7covgate7metrics22compute_changed_metrics0_0B5_",
+            "_RNCNvNtCsiqc4wHYDJq1_7covgate7metrics22compute_changed_metrics_0B5_",
+        ];
+
+        let normalized: std::collections::BTreeSet<_> = raw_names
+            .into_iter()
+            .map(normalize_llvm_function_name)
+            .collect();
+
+        let expected = std::collections::BTreeSet::from([
+            "covgate::metrics::compute_changed_metric::{closure#0}::{closure#0}".to_string(),
+            "covgate::metrics::compute_changed_metric::{closure#0}".to_string(),
+            "covgate::metrics::compute_changed_metric".to_string(),
+            "covgate::metrics::compute_changed_metric::{closure#1}".to_string(),
+            "covgate::metrics::compute_changed_metric::{closure#2}".to_string(),
+            "covgate::metrics::compute_changed_metric::{closure#2}::{closure#0}".to_string(),
+            "covgate::metrics::tests::computes_changed_region_metric".to_string(),
+            "covgate::metrics::tests::metric_with_only_zero_totals_is_treated_as_unavailable"
+                .to_string(),
+        ]);
+
+        assert_eq!(normalized, expected);
     }
 
     #[test]

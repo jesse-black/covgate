@@ -30,6 +30,8 @@ You will know this work is complete when all of the following are true:
 - [x] Try the tempting shortcut of using LLVM per-file summary totals, then explicitly revert it after confirming it violates the purpose of this plan.
 - [ ] Expand LLVM-focused tests so they cover multi-file reports, non-trivial function populations, and mixed segment flag combinations rather than only one-file fixtures with `functions.count == 1`.
 - [ ] Identify the real calculation defect in LLVM normalization or aggregation and fix it without passing through summary fields.
+  Completed: function parity now matches LLVM on the real repro after switching LLVM function deduplication from pure span identity to normalized function-name identity when a stable LLVM name is available.
+  Remaining: region and line parity still fail on the real repro.
 - [ ] Run the targeted suites and full validation (`cargo xtask validate`) after the real calculation fix lands.
 - [ ] Follow up separately on summary UX so Markdown output can render every metric available in the loaded report, even when only a subset is actively gated.
 
@@ -49,6 +51,15 @@ You will know this work is complete when all of the following are true:
 
 - Observation: `covgate` currently renders only metrics selected by active rules. That is a UX issue worth fixing later, but it is not the correctness fix tracked here.
   Evidence: `run()` derives `requested_metrics` from `config.rules` before rendering.
+
+- Observation: LLVM function totals for Rust files align better with normalized LLVM function names than with pure source-span identity.
+  Evidence: on the real LLVM repro, `src/metrics.rs` had 14 raw function records, 7 unique spans, and a native function total of 8. Normalizing LLVM names by removing the crate-hash disambiguator produced 8 stable function identities, which matches the native total.
+
+- Observation: After fixing function identity, the honest real repro is now red only for regions and lines.
+  Evidence: `tests/llvm_real_parity.rs` now reports only `region native=3285/3408 vs covgate=3252/3355` and `line native=2890/2957 vs covgate=2865/2910`.
+
+- Observation: The remaining live line mismatch is concentrated in LLVM segment semantics, especially in `src/coverage/llvm_json.rs`, rather than in shared line aggregation everywhere.
+  Evidence: comparing the validate export against LLVM's annotated text output showed `src/metrics.rs` and `src/render/markdown.rs` line sets already match LLVM's executable-line view, while `src/coverage/llvm_json.rs` still diverges substantially.
 
 
 ## Decision Log
@@ -73,11 +84,15 @@ You will know this work is complete when all of the following are true:
   Rationale: a failing real repro is more valuable than a green test that only proves we can copy LLVM's answers.
   Date/Author: 2026-03-18 / Codex
 
+- Decision: Use normalized LLVM function names, when present, as the primary function identity for LLVM totals and opportunities, with span fallback only when a stable name is unavailable.
+  Rationale: the real repro showed that pure span-based deduplication undercounts Rust LLVM function totals, while normalized-name identity matches LLVM's native function totals without relying on summary pass-through.
+  Date/Author: 2026-03-18 / Codex
+
 ## Outcomes & Retrospective
 
 Implementation is still in progress. The useful outcome so far is not a fix; it is a better problem statement. The repository now has a real LLVM parity repro that fails for the right reason, and the plan is explicit that making summaries look right is not enough.
 
-The biggest lesson from this churn is that the regression surface matters. A green test against tiny fixtures or passed-through summary data can create false confidence. This plan now treats that as a primary risk and keeps the branch focused on proving the calculations.
+The biggest lesson from this churn is that the regression surface matters. A green test against tiny fixtures or passed-through summary data can create false confidence. This plan now treats that as a primary risk and keeps the branch focused on proving the calculations. The first honest calculation fix has now landed on the function side, which narrows the remaining investigation to LLVM region and line semantics.
 
 ## Context and Orientation
 
@@ -113,6 +128,13 @@ The current bug report specifically shows LLVM region totals diverging from `car
 3. Prefer fixes that make one internally owned calculation path correct for both overall totals and diff coverage.
 4. Add focused unit tests near the actual bug in addition to the large parity repro.
 5. Treat any production use of LLVM `summary` data as a rejected shortcut unless it is part of a proven calculation model owned by `covgate`.
+
+Near-term next steps:
+
+1. Keep the new function-identity fix and use it as the baseline.
+2. Focus the remaining investigation on LLVM line and region semantics in `src/coverage/llvm_json.rs`, especially where `covgate`'s derived executable-line set still diverges from LLVM's annotated text output for `src/coverage/llvm_json.rs`.
+3. Add one or more targeted parser tests for the concrete segment patterns that appear in the real export once the exact line/region rule is understood.
+4. Re-run `tests/llvm_real_parity.rs`, `cargo xtask quick`, and then `cargo xtask validate` after each real parser fix attempt.
 
 ## Concrete Steps
 
@@ -231,3 +253,5 @@ Revision note: Added a follow-up task for rendering all available metrics in sum
 Revision note: Added a checked-in real LLVM export fixture plus a failing integration test that reproduces the current parity gap for region, line, and function totals. This replaced the earlier weak fixture-only regression surface.
 
 Revision note: A temporary summary-backed adapter change was tried and then reverted. The plan now states this explicitly so future work does not confuse “output matches LLVM” with “`covgate` calculations are proven correct.”
+
+Revision note: Recorded the first honest calculation fix: LLVM function identity now uses normalized LLVM names rather than pure span deduplication when names are available, which resolves the function mismatch in the real repro. The remaining work is now explicitly scoped to region and line semantics.
