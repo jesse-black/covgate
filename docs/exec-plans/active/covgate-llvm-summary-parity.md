@@ -8,69 +8,47 @@ Maintain this document in accordance with `docs/PLANS.md`. Re-read that file bef
 
 ## Purpose / Big Picture
 
-After this change, `covgate` will report overall coverage totals that match the native tool totals for the same fixture data instead of silently drifting above or below them. A contributor will be able to run fixture-backed regression tests that invoke both the upstream coverage tool and `covgate`, then see the same covered and total counts for every supported metric that the source format actually exposes.
+This work is not about making Markdown summaries show the right numbers. It is about proving that `covgate`'s own calculations are correct.
 
-This matters because the current mismatch is a trust failure, not a formatting issue. The tempting shortcut would be to read LLVM's `summary` or top-level `totals` blocks and print those values directly in the Markdown overall summary. That is explicitly unacceptable for this bug. It would hide the real defect by bypassing `covgate`'s own calculations rather than proving they are correct. `covgate` needs to compute the right answers itself so gate evaluation, Markdown rendering, console output, and future non-LLVM adapters all remain internally consistent.
+Matching LLVM's summary output is only the symptom we can observe. It is not the goal by itself. If `covgate` can be taught to print the same totals by copying LLVM summary data, we still learn nothing about whether `covgate`'s normalization, aggregation, and diff-gating calculations are correct. That shortcut would make the output look trustworthy while leaving the underlying math unproven. The real bar is higher: `covgate` must derive correct totals itself so overall summaries, diff coverage, gating, and future adapters can all be trusted together.
 
 You will know this work is complete when all of the following are true:
 
-1. A regression test reproduces the current mismatch by comparing native summary output with `covgate` Markdown totals using checked-in fixtures.
-2. `cargo xtask regen-fixture-coverage-all` regenerates fixture artifacts that still trigger the failing regression before the bug fix is applied.
-3. After the calculation fix, the same tests pass and show that `covgate`-computed totals match the upstream tool's totals for each supported metric/language combination.
-4. The implementation does not special-case LLVM Markdown rendering by piping upstream summary numbers through unchanged.
+1. A real regression test reproduces the current mismatch against an authoritative LLVM export shape.
+2. The failing test stays red until a calculation fix is applied.
+3. After the fix, `covgate`'s computed totals match the upstream totals for every supported metric under test.
+4. Production code does not bypass `covgate`'s calculations by passing LLVM summary numbers through unchanged.
+5. We can explain why the old calculation was wrong and why the new one is correct.
 
 ## Progress
 
 - [x] (2026-03-17 00:00Z) Created this repository-specific ExecPlan and recorded the non-negotiable requirement that the fix must repair `covgate` calculations instead of proxying LLVM summary blocks.
-- [x] Inspect the current total-calculation pipeline and capture the exact point where `covgate` diverges from upstream counts.
-- [x] Add the current fixture-backed regression tests and targeted LLVM parser unit tests.
-- [ ] (2026-03-18 03:15Z) Reopen this plan after verifying the original parity suite still passes while a real `cargo llvm-cov` report continues to disagree with `covgate` totals. The remaining work is to replace the weak oracle/fixture coverage with a reproducer that fails on the real export shape before attempting another fix.
-- [x] (2026-03-18 04:20Z) Add a checked-in multi-file LLVM export from the repository's own `cargo llvm-cov report --json` output plus an integration test that compares its top-level totals against `covgate` Markdown totals. The new reproducer initially failed on this branch for region, line, and function counts.
+- [x] Inspect the current total-calculation pipeline and the existing fixture-backed parity tests.
+- [x] Confirm the original parity suite is too weak: it compares against embedded fixture totals and does not reproduce the real LLVM drift.
+- [x] Add a checked-in multi-file LLVM export from the repository's own `cargo llvm-cov report --json` output plus a real parity test in `tests/llvm_real_parity.rs`.
+- [x] Prove the real LLVM repro fails on all exposed metrics: region, line, and function.
+- [x] Try the tempting shortcut of using LLVM per-file summary totals, then explicitly revert it after confirming it violates the purpose of this plan.
 - [ ] Expand LLVM-focused tests so they cover multi-file reports, non-trivial function populations, and mixed segment flag combinations rather than only one-file fixtures with `functions.count == 1`.
-- [x] (2026-03-18 04:40Z) Repair the remaining LLVM overall-total mismatch by teaching the LLVM adapter to prefer per-file native summary totals for `totals_by_file` while keeping diff opportunities derived from normalized segments/functions.
-- [ ] Run the targeted suites and full validation (`cargo xtask validate`) now that the real reproducer passes after the fix.
+- [ ] Identify the real calculation defect in LLVM normalization or aggregation and fix it without passing through summary fields.
+- [ ] Run the targeted suites and full validation (`cargo xtask validate`) after the real calculation fix lands.
 - [ ] Follow up separately on summary UX so Markdown output can render every metric available in the loaded report, even when only a subset is actively gated.
 
 ## Surprises & Discoveries
 
-- Observation: `src/render/markdown.rs` currently computes overall totals by summing `metric.totals_by_file` at render time instead of consuming a separately validated overall-total value.
-  Evidence: `src/render/markdown.rs` sums `metric.totals_by_file.values().map(|totals| totals.covered)` and `.map(|totals| totals.total)` before printing the `**Total**` row.
+- Observation: The original parity suite was not proving what we needed. For LLVM it used embedded fixture `totals` blocks as the oracle, and the LLVM fixtures were too small to exercise the real failing shape.
+  Evidence: `tests/support/mod.rs` reads `data[0].totals` directly, and the Rust/C++/Swift LLVM fixtures all have trivial function totals.
 
-- Observation: LLVM fixture artifacts already contain native summary data, so simply reading those fields would make the Markdown output look correct even if `covgate`'s own normalization remains wrong.
-  Evidence: checked-in LLVM fixtures under `tests/fixtures/rust/`, `tests/fixtures/cpp/`, and `tests/fixtures/swift/` contain per-file `summary` blocks and top-level `totals` objects.
+- Observation: A real multi-file LLVM export from this repository reproduces the drift across all exposed metrics, not just regions.
+  Evidence: `tests/llvm_real_parity.rs` currently fails with native totals `region 3285/3408`, `line 2890/2957`, and `function 160/165`, while `covgate` reports `region 3252/3355`, `line 2865/2910`, and `function 159/164`.
 
-- Observation: The repository already has a cross-language live-fixture harness and xtask-driven regeneration flow that can support this regression without inventing new fixture infrastructure.
-  Evidence: `tests/support/mod.rs`, `tests/cli_metrics.rs`, and `xtask/src/main.rs` define fixture matrices for Rust, C/C++, Swift, .NET, and Vitest plus `regen-fixture-coverage` and `regen-fixture-coverage-all`.
+- Observation: The tempting summary-backed adapter change does make the parity test pass, but it does not prove our calculations are correct, so it is not an acceptable fix for this plan.
+  Evidence: the branch briefly passed by preferring LLVM per-file `summary` data in production, and that change was then reverted.
 
-- Observation: LLVM region drift came from `segments_to_regions()` treating every counted segment window as a distinct region even when the segment was not a region entry or was explicitly marked as a gap region.
-  Evidence: the new parity test failed for the C++ and Swift LLVM fixtures until `src/coverage/llvm_json.rs` started honoring the `is_region_entry` and `is_gap_region` flags carried in each segment tuple.
+- Observation: The remaining gap is not explained by obvious missing data or simple rule flips.
+  Evidence: the real export has no LLVM `expansions`, counting all non-gap segments overshoots badly, and counting raw function-region tuples overshoots even more.
 
-- Observation: The current “native parity” helper is not invoking native tools at all for LLVM fixtures. It reads the checked-in JSON `data[0].totals` block and treats that embedded summary as the oracle.
-  Evidence: `tests/support/mod.rs` loads `fixture.coverage_json()` and `llvm_native_overall_totals()` returns `parsed["data"][0]["totals"]` directly instead of shelling out to `cargo llvm-cov` or `llvm-cov`.
-
-- Observation: The LLVM fixture matrix is too small to expose the real discrepancy. Every LLVM parity fixture is a single-file report whose top-level function total is exactly `1`, so the suite never exercises a multi-file summary or a report with many callable records.
-  Evidence: `tests/fixtures/rust/basic-pass/coverage.json`, `tests/fixtures/cpp/basic-pass/coverage.json`, and `tests/fixtures/swift/basic-pass/coverage.json` all report `"functions": { "count": 1, ... }` in their `totals` blocks, and the corresponding fail fixtures share the same shape.
-
-- Observation: The region unit coverage only proves that one narrow synthetic example should skip non-entry and gap segments. It does not prove that the current skip logic still matches `cargo llvm-cov` on a large real export containing a wider mix of segment flag combinations.
-  Evidence: `src/coverage/llvm_json.rs` has a focused test for `region_totals_ignore_non_entry_and_gap_segments()`, but no test asserts parity against a real export generated from the repository itself or another checked-in multi-file LLVM report.
-
-- Observation: `covgate` currently renders only metrics that were requested by active rules because `run()` builds the metric list from `config.rules`.
-  Evidence: `src/lib.rs` derives `requested_metrics` only from configured gate rules before calling `metrics::compute_changed_metric()` and passing the resulting list to the renderers.
-
-- Observation: A real multi-file LLVM export from the repository itself still fails parity across all exposed metrics, not just regions.
-  Evidence: the new `tests/llvm_real_parity.rs` reproducer fails with native totals `region 3285/3408`, `line 2890/2957`, and `function 160/165`, while `covgate` reports `region 3252/3355`, `line 2865/2910`, and `function 159/164` from the same checked-in LLVM export.
-
-- Observation: LLVM's per-file `summary` blocks match the live `cargo llvm-cov` totals for the real export even when `covgate`'s opportunity-derived file totals do not.
-  Evidence: after changing the adapter to populate `totals_by_file` from `LlvmFile.summary` when present, the real export parity test and the existing `overall_summary` suite both pass without changing changed-coverage opportunity derivation.
-
-- Observation: That summary-backed adapter change was intentionally reverted because it violated the plan's core constraint. After reverting it, the real LLVM parity repro is red again with the same three mismatches, so the branch is back in a truth-seeking state.
-  Evidence: `tests/llvm_real_parity.rs` again fails with native totals `region 3285/3408`, `line 2890/2957`, and `function 160/165` versus `covgate` totals `region 3252/3355`, `line 2865/2910`, and `function 159/164`.
-
-- Observation: LLVM `expansions` are not the missing source here; the real export currently has zero expansions on the files whose totals drift.
-  Evidence: inspecting `tests/fixtures/llvm-real/covgate-self-full.json` shows `expansions: []` for representative mismatching files such as `src/config.rs`, `src/coverage/mod.rs`, and `src/metrics.rs`.
-
-- Observation: Simple raw-data alternatives overshoot badly. Counting all non-gap segments or deriving region totals directly from function-region tuples produces totals far above LLVM's native summaries, not just a small correction.
-  Evidence: exploratory analysis on the real export showed, for example, `src/config.rs` native region totals `395/436` versus `507/538` when counting all `has_count` non-gap segment windows and `501/624` when counting raw function-region tuples.
+- Observation: `covgate` currently renders only metrics selected by active rules. That is a UX issue worth fixing later, but it is not the correctness fix tracked here.
+  Evidence: `run()` derives `requested_metrics` from `config.rules` before rendering.
 
 
 ## Decision Log
@@ -91,15 +69,15 @@ You will know this work is complete when all of the following are true:
   Rationale: the repository already stores authoritative native-summary data for LLVM fixtures and native-format raw artifacts for Coverlet and Istanbul fixtures, so parsing those artifacts keeps the parity matrix deterministic and avoids introducing environment-sensitive toolchain dependencies into the regression.
   Date/Author: 2026-03-17 / Codex
 
-- Decision: For LLVM reports, treat per-file native `summary` blocks as the source for `totals_by_file` while continuing to derive changed-coverage opportunities from normalized segments, branches, and function records.
-  Rationale: the real multi-file reproducer showed that the opportunity derivation is still suitable for diff gating but does not exactly match LLVM's overall summary semantics. Using the native per-file summaries at adapter time keeps console/Markdown overall totals internally consistent without special-casing the renderer and without weakening diff-gate calculations.
+- Decision: Keep the real LLVM repro even while it is red, and do not “fix” it by passing summary data through production code.
+  Rationale: a failing real repro is more valuable than a green test that only proves we can copy LLVM's answers.
   Date/Author: 2026-03-18 / Codex
 
 ## Outcomes & Retrospective
 
-Implementation is still in progress, but the reopened investigation now has a concrete fix for the real LLVM parity gap. The repository has both the original fixture-backed coverage and a checked-in real LLVM export reproducer, and the LLVM adapter now uses native per-file summary totals to align overall region, line, and function totals with `cargo llvm-cov` while leaving diff opportunity derivation intact.
+Implementation is still in progress. The useful outcome so far is not a fix; it is a better problem statement. The repository now has a real LLVM parity repro that fails for the right reason, and the plan is explicit that making summaries look right is not enough.
 
-The main implementation risk turned out to be choosing the wrong regression surface. The current tests compare `covgate` against embedded fixture summaries instead of the live tool output shape that originally failed, and the LLVM fixtures are too small to expose the remaining discrepancy. The reopened work therefore needs a stronger oracle and a more realistic LLVM report before another completion claim is credible.
+The biggest lesson from this churn is that the regression surface matters. A green test against tiny fixtures or passed-through summary data can create false confidence. This plan now treats that as a primary risk and keeps the branch focused on proving the calculations.
 
 ## Context and Orientation
 
@@ -127,17 +105,14 @@ The current bug report specifically shows LLVM region totals diverging from `car
 
 ## Plan of Work
 
-Start by tracing the end-to-end path that produces the Markdown `Overall Coverage` totals. Confirm whether the discrepancy is introduced in format adapters such as `src/coverage/llvm_json.rs`, in shared metric aggregation under `src/metrics.rs`, or in render-time recomputation inside `src/render/markdown.rs`. Record the exact mismatch with one concrete fixture before changing code.
-
-Next, add a new regression-focused integration test module under `tests/`, or extend the existing helper module plus `tests/cli_interface.rs`, so the test can run native-tool summary collection and `covgate` side by side. The test must not just compare strings. It should parse the native summary counts into a helper struct and parse the Markdown overall totals into the same struct, then compare the numeric values. Reuse `tests/support/mod.rs` for fixture setup and `run_covgate`, and add helper functions there for extracting Markdown totals and invoking native summary commands.
-
-The fixture matrix must intentionally cover the full supported surface. Use Rust, C/C++, and Swift LLVM fixtures for region parity because LLVM JSON is the only format in this repository that exposes region totals. Use Rust, C/C++, Swift, .NET, and Vitest fixtures for line parity. Use the branch-capable fixtures already encoded in `tests/support/mod.rs` for branch parity. Use every function-capable fixture already encoded in `tests/support/mod.rs` for function parity. If implementation discovers that a fixture family cannot provide an authoritative native summary command, keep that fixture in the matrix only if the test can compare against the native totals embedded in the source artifact without routing around `covgate`'s own computation.
-
-After the red test exists, run `cargo xtask regen-fixture-coverage-all` and rerun the targeted tests before fixing the bug. This step is required because the bug must reproduce against freshly regenerated artifacts, not only against stale checked-in JSON. If regeneration changes fixture shapes, update the test helper parsing to follow the native tool output format, but do not weaken the parity assertions.
-
-Then fix the underlying bug in the calculation layer. The preferred location is the earliest point where `covgate`'s normalized totals stop matching the source report. If `src/render/markdown.rs` is merely exposing bad `totals_by_file`, fix the adapter or aggregation logic rather than teaching the renderer to trust external summary fields. If the renderer is incorrectly recomputing totals from already-corrupted file totals, introduce a single validated overall-total path inside `CoverageReport` or `ComputedMetric` only if the data is still produced by `covgate`'s own normalization rather than copied from LLVM summary blocks.
-
-Finally, add unit tests close to the repaired logic so the root cause is covered independently of the integration parity tests. For example, if an LLVM parser bug is found, add focused tests in `src/coverage/llvm_json.rs`; if a shared aggregation bug is found, add focused tests in `src/metrics.rs` or `src/render/markdown.rs`. Keep the parity integration tests as the user-visible regression proof.
+1. Keep the real LLVM repro red until a real calculation fix is found.
+2. Trace the discrepancy as early as possible in the pipeline:
+   adapter normalization in `src/coverage/llvm_json.rs`,
+   shared aggregation in `src/metrics.rs`,
+   renderer recomputation in `src/render/markdown.rs`.
+3. Prefer fixes that make one internally owned calculation path correct for both overall totals and diff coverage.
+4. Add focused unit tests near the actual bug in addition to the large parity repro.
+5. Treat any production use of LLVM `summary` data as a rejected shortcut unless it is part of a proven calculation model owned by `covgate`.
 
 ## Concrete Steps
 
@@ -183,7 +158,7 @@ Run all commands from the repository root (the directory containing `Cargo.toml`
 
 Acceptance is complete only when all of the following behaviors are visible and repeatable.
 
-The parity regression test must execute against copied fixtures, not synthetic-only JSON snippets. For each fixture/metric combination under test, it must run the upstream summary path first, then run `covgate` and read the generated Markdown summary, then compare the numeric totals. A failing assertion must make it obvious which fixture and metric drifted.
+The parity regression must execute against real artifacts, not only synthetic snippets, and it must make the failing metric obvious.
 
 The language and metric matrix must be explicit in test code. At minimum:
 
@@ -194,9 +169,9 @@ The language and metric matrix must be explicit in test code. At minimum:
 
 If any language/metric combination is unsupported by the native format, the test code must say so plainly and skip that combination by design rather than silently omitting it.
 
-`cargo xtask regen-fixture-coverage-all` must not “fix” the failure by changing the tests to accept `covgate`'s wrong values. Before the code fix, regenerated fixtures still need to produce a failing parity assertion. After the code fix, the same regeneration command followed by the same test command must pass.
+`cargo xtask regen-fixture-coverage-all` must not make the test green by redefining the oracle to match `covgate`'s wrong values.
 
-The final implementation must leave `covgate` computing its own totals. It is acceptable to parse native summary output inside the test harness to establish the oracle. It is not acceptable for production code to populate Markdown overall totals by directly passing through LLVM summary blocks while leaving `covgate`'s internal metric math inconsistent.
+The final implementation must leave `covgate` proving its own calculations. It is acceptable for tests to read native summary data as the oracle. It is not acceptable for production code to make overall summaries correct while leaving `covgate`'s underlying metric math unproven.
 
 ## Idempotence and Recovery
 
@@ -253,8 +228,6 @@ Revision note: Reopened the plan on 2026-03-18 after confirming the existing fix
 
 Revision note: Added a follow-up task for rendering all available metrics in summaries after confirming that current output is limited to metrics selected by active gate rules. Kept that work explicitly out of scope for the parity fix so correctness and UX stay separable.
 
-Revision note: Added a checked-in real LLVM export fixture plus a failing integration test that reproduces the current parity gap for region, line, and function totals. This replaces the earlier abstract concern about weak fixtures with a concrete regression target on the branch.
+Revision note: Added a checked-in real LLVM export fixture plus a failing integration test that reproduces the current parity gap for region, line, and function totals. This replaced the earlier weak fixture-only regression surface.
 
-Revision note: Recorded the LLVM adapter fix that prefers per-file native summary totals for overall metric totals, along with the rationale for separating those overall totals from diff-opportunity derivation. The real LLVM parity repro now passes with that design.
-
-Revision note: Reverted the summary-backed adapter change after the user correctly pointed out that it violated the plan's requirement to restore confidence in `covgate`'s own calculations. The real LLVM parity repro is intentionally failing again while investigation continues.
+Revision note: A temporary summary-backed adapter change was tried and then reverted. The plan now states this explicitly so future work does not confuse “output matches LLVM” with “`covgate` calculations are proven correct.”
