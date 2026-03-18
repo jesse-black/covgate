@@ -1,15 +1,29 @@
-use std::{fs, path::PathBuf, process::Command};
+use std::{
+    fs,
+    path::PathBuf,
+    process::{Command, Output},
+};
 
 use anyhow::{Context, Result, bail};
 
 pub const RECORDED_BASE_REF: &str = "refs/worktree/covgate/base";
 const RECORDED_BASE_BRANCH_MARKER: &str = "refs/worktree/covgate/base.branch";
 
+fn git_output(args: &[&str], context: &'static str) -> Result<Output> {
+    Command::new("git").args(args).output().context(context)
+}
+
+fn stdout_utf8(output: Output, context: &'static str) -> Result<String> {
+    String::from_utf8(output.stdout)
+        .context(context)
+        .map(|text| text.trim().to_string())
+}
+
 pub fn resolve_head_sha() -> Result<String> {
-    let output = Command::new("git")
-        .args(["rev-parse", "--verify", "HEAD^{commit}"])
-        .output()
-        .context("failed to run git rev-parse for HEAD")?;
+    let output = git_output(
+        &["rev-parse", "--verify", "HEAD^{commit}"],
+        "failed to run git rev-parse for HEAD",
+    )?;
 
     if !output.status.success() {
         bail!(
@@ -18,35 +32,27 @@ pub fn resolve_head_sha() -> Result<String> {
         );
     }
 
-    Ok(String::from_utf8(output.stdout)
-        .context("git rev-parse output was not valid utf-8")?
-        .trim()
-        .to_string())
+    stdout_utf8(output, "git rev-parse output was not valid utf-8")
 }
 
 pub fn resolve_ref_sha(reference: &str) -> Result<Option<String>> {
-    let output = Command::new("git")
-        .args(["rev-parse", "--verify", "--quiet", reference])
-        .output()
-        .with_context(|| format!("failed to run git rev-parse for {reference}"))?;
+    let output = git_output(
+        &["rev-parse", "--verify", "--quiet", reference],
+        "failed to run git rev-parse for reference",
+    )?;
 
     if output.status.success() {
-        return Ok(Some(
-            String::from_utf8(output.stdout)
-                .context("git rev-parse output was not valid utf-8")?
-                .trim()
-                .to_string(),
-        ));
+        return stdout_utf8(output, "git rev-parse output was not valid utf-8").map(Some);
     }
 
     Ok(None)
 }
 
 pub fn create_ref(reference: &str, target: &str) -> Result<()> {
-    let output = Command::new("git")
-        .args(["update-ref", reference, target])
-        .output()
-        .with_context(|| format!("failed to run git update-ref for {reference}"))?;
+    let output = git_output(
+        &["update-ref", reference, target],
+        "failed to run git update-ref",
+    )?;
 
     if !output.status.success() {
         bail!(
@@ -60,10 +66,10 @@ pub fn create_ref(reference: &str, target: &str) -> Result<()> {
 
 #[inline(never)]
 fn resolve_git_path(path: &str) -> Result<PathBuf> {
-    let output = Command::new("git")
-        .args(["rev-parse", "--git-path", path])
-        .output()
-        .context("failed to run git rev-parse for requested git path")?;
+    let output = git_output(
+        &["rev-parse", "--git-path", path],
+        "failed to run git rev-parse for requested git path",
+    )?;
 
     if !output.status.success() {
         bail!(
@@ -72,17 +78,15 @@ fn resolve_git_path(path: &str) -> Result<PathBuf> {
         );
     }
 
-    let raw =
-        String::from_utf8(output.stdout).context("git rev-parse output was not valid utf-8")?;
-    Ok(PathBuf::from(raw.trim()))
+    stdout_utf8(output, "git rev-parse output was not valid utf-8").map(PathBuf::from)
 }
 
 #[inline(never)]
 fn resolve_current_branch() -> Result<Option<String>> {
-    let output = Command::new("git")
-        .args(["symbolic-ref", "--quiet", "--short", "HEAD"])
-        .output()
-        .context("failed to run git symbolic-ref for HEAD")?;
+    let output = git_output(
+        &["symbolic-ref", "--quiet", "--short", "HEAD"],
+        "failed to run git symbolic-ref for HEAD",
+    )?;
 
     if !output.status.success() {
         if output.status.code() == Some(1) {
@@ -95,12 +99,7 @@ fn resolve_current_branch() -> Result<Option<String>> {
         );
     }
 
-    Ok(Some(
-        String::from_utf8(output.stdout)
-            .context("git symbolic-ref output was not valid utf-8")?
-            .trim()
-            .to_string(),
-    ))
+    stdout_utf8(output, "git symbolic-ref output was not valid utf-8").map(Some)
 }
 
 #[inline(never)]
@@ -132,40 +131,12 @@ fn write_recorded_branch_marker(branch: &str) -> Result<()> {
 
 #[inline(never)]
 fn is_ancestor(ancestor: &str, descendant: &str) -> Result<bool> {
-    let output = Command::new("git")
-        .args(["merge-base", "--is-ancestor", ancestor, descendant])
-        .output()
-        .context("failed to run git merge-base --is-ancestor")?;
+    let output = git_output(
+        &["merge-base", "--is-ancestor", ancestor, descendant],
+        "failed to run git merge-base --is-ancestor",
+    )?;
 
     Ok(output.status.success())
-}
-
-pub fn ensure_clean_worktree() -> Result<()> {
-    let output = Command::new("git")
-        .args(["status", "--porcelain", "--untracked-files=all"])
-        .output()
-        .context("failed to run git status to inspect worktree state")?;
-
-    if !output.status.success() {
-        bail!(
-            "failed to inspect git worktree state: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        );
-    }
-
-    let status =
-        String::from_utf8(output.stdout).context("git status output was not valid utf-8")?;
-    if !status.trim().is_empty() {
-        bail!(
-            "working tree has uncommitted changes. Commit or stash changes before running covgate.
-
-Pending changes:
-{}",
-            status.trim_end()
-        );
-    }
-
-    Ok(())
 }
 
 pub fn discover_base_ref() -> Result<Option<String>> {
