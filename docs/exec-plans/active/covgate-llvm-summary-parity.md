@@ -29,6 +29,7 @@ You will know this work is complete when all of the following are true:
 - [x] Prove the real LLVM repro fails on all exposed metrics: region, line, and function.
 - [x] Try the tempting shortcut of using LLVM per-file summary totals, then explicitly revert it after confirming it violates the purpose of this plan.
 - [ ] Expand LLVM-focused tests so they cover multi-file reports, non-trivial function populations, and mixed segment flag combinations rather than only one-file fixtures with `functions.count == 1`.
+- [x] Add initial diff-focused LLVM regression tests that assert exact changed opportunities for the small Rust basic fixtures instead of only asserting threshold-based pass/fail behavior.
 - [ ] Identify the real calculation defect in LLVM normalization or aggregation and fix it without passing through summary fields.
   Completed: function parity now matches LLVM on the real repro after switching LLVM function deduplication from pure span identity to normalized function-name identity when a stable LLVM name is available.
   Remaining: region and line parity still fail on the real repro, and the investigation now has to answer whether LLVM summary semantics for those metrics are fully derivable from exported detail at all.
@@ -70,6 +71,27 @@ You will know this work is complete when all of the following are true:
 - Observation: Upstream LLVM users have already reported that exact line-covered sets are not fully exposed in JSON export detail today.
   Evidence: llvm/llvm-project issue `#126307` asks LLVM to expose which lines it considers covered because tools such as `cargo-llvm-cov` currently have to infer them imperfectly from JSON export data.
 
+- Observation: Replacing file-segment line derivation with a simple union of function-region lines does not resolve the remaining repro gap for the highest-drift files.
+  Evidence: on the checked-in real repro, `src/coverage/llvm_json.rs`, `src/config.rs`, and `src/metrics.rs` all produced the same line totals from segment windows and from function-region union, while still disagreeing with LLVM file summaries.
+
+- Observation: The high-drift live files have no LLVM `expansions` or `branches`, so those fields are not hiding the remaining line mismatch there.
+  Evidence: the inspected live files `src/metrics.rs`, `src/config.rs`, and `src/coverage/llvm_json.rs` all had `expansions = []` and `branches = []`, yet summary line totals still exceeded both segment-derived and function-region-union line sets.
+
+- Observation: On the live files with the largest region drift, gap segments are absent and counting all non-entry segments would overshoot badly.
+  Evidence: `src/config.rs`, `src/coverage/llvm_json.rs`, and `src/coverage/coverlet_json.rs` all had `gap = 0`, but their summary-region deltas over the current parser were only `+9` to `+11` compared with dozens of non-entry segments.
+
+- Observation: LLVM's LCOV export also carries two different line views: `LF/LH` matches JSON summary line totals, while concrete `DA:` line entries are fewer and track the executable-line-style view instead.
+  Evidence: on the same live run, `src/metrics.rs` had LCOV `LF/LH = 133/133` with only `127` `DA:` entries; `src/config.rs` had `LF/LH = 342/309` with `337` `DA:` entries; and `src/coverage/llvm_json.rs` had `LF/LH = 834/832` with `822` `DA:` entries.
+
+- Observation: `covgate`'s actual diff gate is driven by changed opportunities plus diff-line overlap, not by overall summary totals alone.
+  Evidence: `src/metrics.rs::compute_changed_metric` filters `CoverageOpportunity` records by `SourceSpan::overlaps_line_range`, computes changed covered/total counts from those opportunities, and `src/gate.rs::evaluate` uses that changed metric for pass/fail decisions.
+
+- Observation: The current integration suite mostly proves whole-fixture threshold behavior, not the exact changed-opportunity set in the hardest LLVM cases.
+  Evidence: `tests/cli_metrics.rs` runs threshold-based pass/fail checks across fixtures, while only `src/metrics.rs` unit tests directly assert changed-opportunity counting on small synthetic inputs.
+
+- Observation: The repository now has its first LLVM integration tests that assert exact changed-opportunity membership and covered-state on real fixture diffs.
+  Evidence: `tests/llvm_diff_regression.rs` verifies exact changed line, region, and function opportunities for the Rust `basic-fail` and `basic-pass` LLVM fixtures by parsing coverage, loading the real unified diff, and asserting on `compute_changed_metric()`.
+
 
 ## Decision Log
 
@@ -99,6 +121,10 @@ You will know this work is complete when all of the following are true:
 
 - Decision: Treat remaining line and region parity as a semantics investigation first, not as permission to keep tweaking parser heuristics blindly.
   Rationale: the live evidence now shows that LLVM JSON detail, LLVM rendered text, and LLVM summary counts are not trivially interchangeable. We need to establish which semantics are actually recoverable from exported detail before claiming any parser fix proves `covgate` is correct.
+  Date/Author: 2026-03-18 / Codex
+
+- Decision: Shift the confidence target for the remaining LLVM work toward changed-opportunity correctness for diff gating, with summary parity treated as strong but secondary evidence where LLVM semantics are ambiguous.
+  Rationale: gate outcomes are computed from changed opportunities and span overlap, not from overall summary rows alone. If LLVM exports multiple competing line views, the direct proof for `covgate` is that changed opportunities match the concrete gating semantics we can observe.
   Date/Author: 2026-03-18 / Codex
 
 ## Outcomes & Retrospective
@@ -148,9 +174,10 @@ Near-term next steps:
 2. Separate the remaining investigation into two questions:
    first, which line/region semantics are recoverable from LLVM export detail and therefore fair game for `covgate` to compute itself;
    second, whether the current parser matches those recoverable semantics.
-3. Compare live LLVM text output, live LLVM file summaries, and exported detail side-by-side for the highest-drift files in `src/coverage/llvm_json.rs`, `src/coverage/coverlet_json.rs`, `src/coverage/istanbul_json.rs`, and `src/config.rs`.
-4. Add one or more targeted parser tests only after the exact recoverable rule is understood from that comparison.
-5. Re-run `tests/llvm_real_parity.rs`, `cargo xtask quick`, and then `cargo xtask validate` after each real parser fix attempt.
+3. Compare live LLVM text output, LCOV concrete `DA:` entries, live LLVM file summaries, and exported detail side-by-side for the highest-drift files in `src/coverage/llvm_json.rs`, `src/coverage/coverlet_json.rs`, `src/coverage/istanbul_json.rs`, and `src/config.rs`.
+4. Add changed-diff-focused tests that prove line, region, and function opportunities are included or excluded correctly for real changed lines, even before full summary parity is resolved.
+5. Add one or more targeted parser tests only after the exact recoverable rule is understood from that comparison.
+6. Re-run `tests/llvm_real_parity.rs`, `cargo xtask quick`, and then `cargo xtask validate` after each real parser fix attempt.
 
 ## Concrete Steps
 
@@ -196,6 +223,10 @@ Run all commands from the repository root (the directory containing `Cargo.toml`
 
     Expected result: the plan states clearly whether remaining parity failure is a parser bug, a missing export-detail limitation, or both.
 
+7. Add or expand diff-focused regression tests that exercise real changed-line scenarios against LLVM-backed fixtures and prove the gate decision itself is correct for line, region, and function metrics.
+
+    Expected result: the repository has tests that fail when `CoverageOpportunity` extraction, covered-state assignment, or diff-overlap logic is wrong, even if overall summary semantics remain partially ambiguous.
+
 ## Validation and Acceptance
 
 Acceptance is complete only when all of the following behaviors are visible and repeatable.
@@ -216,6 +247,8 @@ If any language/metric combination is unsupported by the native format, the test
 The final implementation must leave `covgate` proving its own calculations. It is acceptable for tests to read native summary data as the oracle. It is not acceptable for production code to make overall summaries correct while leaving `covgate`'s underlying metric math unproven.
 
 If the investigation shows that LLVM export detail does not actually expose enough information to derive the same line or region totals that LLVM summary reports, the plan must say so plainly and adjust the acceptance criteria around what `covgate` can honestly prove. That would still reject summary pass-through as a fake fix; it would simply acknowledge an upstream visibility limitation rather than pretending the current JSON export contains more semantic detail than it does.
+
+For the diff gate itself, acceptance should increasingly focus on whether changed opportunities are extracted, marked covered or uncovered, and overlapped against changed lines correctly. That is the direct path to trustworthy gate results in `covgate`, even if LLVM summary totals remain only partially reproducible.
 
 ## Idempotence and Recovery
 
@@ -294,3 +327,15 @@ Revision note: A temporary summary-backed adapter change was tried and then reve
 Revision note: Recorded the first honest calculation fix: LLVM function identity now uses normalized LLVM names rather than pure span deduplication when names are available, which resolves the function mismatch in the real repro. The remaining work is now explicitly scoped to region and line semantics.
 
 Revision note: Added live-investigation evidence that LLVM text rendering and LLVM summary totals can disagree for the same file, and linked that investigation to `docs/reference/llvm-export-semantics-investigation.md` so future work does not assume exported detail, text views, and summary counts are automatically equivalent.
+
+Revision note: Recorded that switching line derivation from file segments to simple function-region union does not fix the remaining real repro gap, so the next step must isolate a smaller LLVM semantic pattern rather than just swapping one whole-model heuristic for another.
+
+Revision note: Added more negative findings from the live investigation: the largest-drift files do not use expansions or branch records, and the remaining region gap is too small to justify counting all non-entry segments. The plan now explicitly requires a narrower LLVM semantic rule before any production parser change.
+
+Revision note: Added LCOV evidence that LLVM itself exports summary-style line counts (`LF/LH`) separately from concrete listed line entries (`DA:`), reinforcing that summary parity and executable-line derivation are not automatically the same problem.
+
+Revision note: Refocused the remaining confidence question around changed-opportunity correctness for diff gating, because `covgate`'s actual pass/fail logic is driven by changed opportunities plus span overlap rather than by overall summary totals alone.
+
+Revision note: Recorded the current testing gap: most integration coverage tests assert whole-fixture pass/fail behavior, so the next high-value LLVM regressions should assert exact changed opportunities for explicit diff scenarios rather than only threshold outcomes.
+
+Revision note: Added `tests/llvm_diff_regression.rs` as the first diff-focused LLVM integration regression file. It locks down exact changed line, region, and function opportunities for the Rust basic fixtures and gives the plan a direct gating-correctness proof path that does not depend on overall summary parity.
