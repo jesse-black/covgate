@@ -332,6 +332,11 @@ fn markdown_summary_rust_fixture() {
         "| File | Covered Changed Regions | Changed Regions | Coverage | Missed Changed Spans |"
     ));
     assert!(markdown.contains("### Overall Coverage"));
+    assert!(markdown.contains("#### Region"));
+    assert!(markdown.contains("#### Line"));
+    assert!(markdown.contains("#### Function"));
+    assert!(markdown.contains("| File | Covered Regions | Regions | Missed Regions | Coverage |"));
+    assert!(markdown.contains("| **Total** | **"));
 }
 
 #[test]
