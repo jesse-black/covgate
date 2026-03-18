@@ -61,8 +61,14 @@ fn real_multi_file_llvm_export_markdown_totals_match_covgate_calculations() {
     let covgate_function = parse_markdown_totals(&markdown, "Function")
         .expect("markdown function totals should exist");
 
-    assert_eq!(covgate_region, report_totals(&report.totals_by_file, MetricKind::Region));
-    assert_eq!(covgate_line, report_totals(&report.totals_by_file, MetricKind::Line));
+    assert_eq!(
+        covgate_region,
+        report_totals(&report.totals_by_file, MetricKind::Region)
+    );
+    assert_eq!(
+        covgate_line,
+        report_totals(&report.totals_by_file, MetricKind::Line)
+    );
     assert_eq!(
         covgate_function,
         report_totals(&report.totals_by_file, MetricKind::Function)
