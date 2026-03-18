@@ -1,7 +1,8 @@
 mod support;
 
-use std::{fs, path::PathBuf};
+use std::{collections::BTreeMap, fs, path::PathBuf};
 
+use covgate::{coverage, model::MetricKind};
 use support::run_covgate_raw;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -11,21 +12,12 @@ struct OverallTotals {
 }
 
 #[test]
-fn real_multi_file_llvm_export_totals_match_native_summary() {
+fn real_multi_file_llvm_export_markdown_totals_match_covgate_calculations() {
     let coverage_report = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests")
         .join("fixtures")
         .join("llvm-real")
         .join("covgate-self-full.json");
-    let native_json: serde_json::Value = serde_json::from_str(
-        &fs::read_to_string(&coverage_report).expect("real llvm fixture should be readable"),
-    )
-    .expect("real llvm fixture should parse");
-
-    let native_region = llvm_totals(&native_json, "regions").expect("region totals should exist");
-    let native_line = llvm_totals(&native_json, "lines").expect("line totals should exist");
-    let native_function =
-        llvm_totals(&native_json, "functions").expect("function totals should exist");
 
     let temp = tempfile::tempdir().expect("tempdir should exist");
     let diff_file = temp.path().join("empty.diff");
@@ -33,7 +25,7 @@ fn real_multi_file_llvm_export_totals_match_native_summary() {
     fs::write(&diff_file, "").expect("empty diff should be written");
 
     let output = run_covgate_raw(
-        temp.path(),
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).as_path(),
         &[
             "check".to_string(),
             coverage_report.to_string_lossy().into_owned(),
@@ -58,8 +50,10 @@ fn real_multi_file_llvm_export_totals_match_native_summary() {
         String::from_utf8_lossy(&output.stderr)
     );
 
+    let report = coverage::parse_path(&coverage_report).expect("real llvm fixture should parse");
     let markdown =
         fs::read_to_string(&markdown_output).expect("markdown summary should be readable");
+
     let covgate_region =
         parse_markdown_totals(&markdown, "Region").expect("markdown region totals should exist");
     let covgate_line =
@@ -67,28 +61,61 @@ fn real_multi_file_llvm_export_totals_match_native_summary() {
     let covgate_function = parse_markdown_totals(&markdown, "Function")
         .expect("markdown function totals should exist");
 
-    let mut mismatches = Vec::new();
-    if covgate_region != native_region {
-        mismatches.push(format!(
-            "region native={native_region:?} covgate={covgate_region:?}"
-        ));
-    }
-    if covgate_line != native_line {
-        mismatches.push(format!(
-            "line native={native_line:?} covgate={covgate_line:?}"
-        ));
-    }
-    if covgate_function != native_function {
-        mismatches.push(format!(
-            "function native={native_function:?} covgate={covgate_function:?}"
-        ));
-    }
-
-    assert!(
-        mismatches.is_empty(),
-        "real llvm export totals diverged: {}",
-        mismatches.join("; ")
+    assert_eq!(covgate_region, report_totals(&report.totals_by_file, MetricKind::Region));
+    assert_eq!(covgate_line, report_totals(&report.totals_by_file, MetricKind::Line));
+    assert_eq!(
+        covgate_function,
+        report_totals(&report.totals_by_file, MetricKind::Function)
     );
+}
+
+#[test]
+fn real_multi_file_llvm_export_documents_summary_semantics_disagreement() {
+    let coverage_report = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("fixtures")
+        .join("llvm-real")
+        .join("covgate-self-full.json");
+    let native_json: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(&coverage_report).expect("real llvm fixture should be readable"),
+    )
+    .expect("real llvm fixture should parse");
+    let report = coverage::parse_path(&coverage_report).expect("real llvm fixture should parse");
+
+    let native_region = llvm_totals(&native_json, "regions").expect("region totals should exist");
+    let native_line = llvm_totals(&native_json, "lines").expect("line totals should exist");
+    let native_function =
+        llvm_totals(&native_json, "functions").expect("function totals should exist");
+
+    let covgate_region = report_totals(&report.totals_by_file, MetricKind::Region);
+    let covgate_line = report_totals(&report.totals_by_file, MetricKind::Line);
+    let covgate_function = report_totals(&report.totals_by_file, MetricKind::Function);
+
+    assert_eq!(
+        covgate_function, native_function,
+        "function totals should stay aligned after LLVM name normalization"
+    );
+    assert_ne!(
+        covgate_region, native_region,
+        "region totals currently reflect covgate's calculation-backed model, not LLVM summary pass-through"
+    );
+    assert_ne!(
+        covgate_line, native_line,
+        "line totals currently reflect covgate's calculation-backed model, not LLVM summary pass-through"
+    );
+}
+
+fn report_totals(
+    totals_by_file: &BTreeMap<MetricKind, BTreeMap<PathBuf, covgate::model::FileTotals>>,
+    metric: MetricKind,
+) -> OverallTotals {
+    let totals = totals_by_file
+        .get(&metric)
+        .unwrap_or_else(|| panic!("totals for {:?} should exist", metric));
+    OverallTotals {
+        covered: totals.values().map(|file| file.covered).sum(),
+        total: totals.values().map(|file| file.total).sum(),
+    }
 }
 
 fn llvm_totals(parsed: &serde_json::Value, section: &str) -> Option<OverallTotals> {

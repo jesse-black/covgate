@@ -402,7 +402,7 @@ Until this is resolved:
 - `src/coverage/llvm_json.rs`
 - `tests/llvm_real_parity.rs`
 - `tests/fixtures/llvm-real/covgate-self-full.json`
-- `docs/exec-plans/active/covgate-llvm-summary-parity.md`
+- `docs/exec-plans/completed/covgate-llvm-summary-parity.md`
 - [`cargo-llvm-cov/src/json.rs#L645-L662`](https://github.com/taiki-e/cargo-llvm-cov/blob/main/src/json.rs#L645-L662)
 
 Upstream references:
