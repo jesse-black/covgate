@@ -382,7 +382,8 @@ So the next high-value tests should be diff-focused assertions over explicit cha
 
 The first step in that direction now exists:
 
-- `tests/llvm_diff_regression.rs` parses real Rust LLVM fixture coverage, loads the actual unified diff for the fixture worktree, and asserts exact changed line, region, and function opportunities through `compute_changed_metric()`
+- `tests/llvm_diff_regression.rs` parses real LLVM fixture coverage for Rust, C++, and Swift basic fixtures, loads the actual unified diff for each fixture worktree, and asserts exact changed line, region, and function opportunities through `compute_changed_metric()`
+- the C++ fixture regression also asserts exact changed branch opportunities
 
 That does not resolve the harder live-summary ambiguity yet, but it is the right shape of proof for trusting diff gating.
 

@@ -43,45 +43,81 @@ fn quick() -> Result<()> {
 }
 
 fn validate() -> Result<()> {
-    run("cargo", &["fmt", "--check"])?;
-    run(
-        "cargo",
-        &[
-            "clippy",
-            "--all-targets",
-            "--all-features",
-            "--",
-            "-D",
-            "warnings",
-        ],
-    )?;
+    let mut failures = Vec::new();
+
+    record_validation_step(&mut failures, "fmt", run("cargo", &["fmt", "--check"]));
+    record_validation_step(
+        &mut failures,
+        "clippy",
+        run(
+            "cargo",
+            &[
+                "clippy",
+                "--all-targets",
+                "--all-features",
+                "--",
+                "-D",
+                "warnings",
+            ],
+        ),
+    );
 
     let coverage_json = coverage_path();
     let coverage_json_str = coverage_json
         .to_str()
         .context("coverage output path contained non-utf8 characters")?;
 
-    run(
-        "cargo",
-        &[
-            "llvm-cov",
-            "--json",
-            "--output-path",
-            coverage_json_str,
-            "--fail-under-regions=88",
-        ],
-    )?;
+    record_validation_step(
+        &mut failures,
+        "llvm-cov",
+        run(
+            "cargo",
+            &[
+                "llvm-cov",
+                "--json",
+                "--output-path",
+                coverage_json_str,
+                "--fail-under-regions=88",
+            ],
+        ),
+    );
 
-    run(
-        "cargo",
-        &["run", "--bin", "covgate", "--", "check", coverage_json_str],
-    )?;
+    record_validation_step(
+        &mut failures,
+        "covgate-check",
+        if coverage_json.exists() {
+            run(
+                "cargo",
+                &["run", "--bin", "covgate", "--", "check", coverage_json_str],
+            )
+        } else {
+            Err(anyhow::anyhow!(
+                "coverage json was not produced by llvm-cov: {}",
+                coverage_json.display()
+            ))
+        },
+    );
 
-    run("cargo-machete", &["."])?;
-    run("cargo-deny", &["check"])?;
+    record_validation_step(&mut failures, "cargo-machete", run("cargo-machete", &["."]));
+    record_validation_step(&mut failures, "cargo-deny", run("cargo-deny", &["check"]));
 
     std::fs::remove_file(&coverage_json).ok();
-    Ok(())
+
+    if failures.is_empty() {
+        eprintln!("validate summary: all checks passed");
+        return Ok(());
+    }
+
+    let failure_summary = failures
+        .iter()
+        .map(|(step, error)| format!("- {step}: {error:#}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    bail!(
+        "validate summary: {} step(s) failed\n{}",
+        failures.len(),
+        failure_summary
+    );
 }
 
 #[derive(Clone, Copy)]
@@ -632,6 +668,20 @@ fn chrono_like_timestamp() -> u128 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|duration| duration.as_millis())
         .unwrap_or(0)
+}
+
+fn record_validation_step(
+    failures: &mut Vec<(String, anyhow::Error)>,
+    label: &str,
+    result: Result<()>,
+) {
+    match result {
+        Ok(()) => eprintln!("validate [{label}]: PASS"),
+        Err(error) => {
+            eprintln!("validate [{label}]: FAIL");
+            failures.push((label.to_string(), error));
+        }
+    }
 }
 
 fn run(program: &str, args: &[&str]) -> Result<()> {

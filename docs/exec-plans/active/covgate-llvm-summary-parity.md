@@ -29,7 +29,7 @@ You will know this work is complete when all of the following are true:
 - [x] Prove the real LLVM repro fails on all exposed metrics: region, line, and function.
 - [x] Try the tempting shortcut of using LLVM per-file summary totals, then explicitly revert it after confirming it violates the purpose of this plan.
 - [ ] Expand LLVM-focused tests so they cover multi-file reports, non-trivial function populations, and mixed segment flag combinations rather than only one-file fixtures with `functions.count == 1`.
-- [x] Add initial diff-focused LLVM regression tests that assert exact changed opportunities for the small Rust basic fixtures instead of only asserting threshold-based pass/fail behavior.
+- [x] Add initial diff-focused LLVM regression tests that assert exact changed opportunities for the small Rust, C++, and Swift basic LLVM fixtures instead of only asserting threshold-based pass/fail behavior.
 - [ ] Identify the real calculation defect in LLVM normalization or aggregation and fix it without passing through summary fields.
   Completed: function parity now matches LLVM on the real repro after switching LLVM function deduplication from pure span identity to normalized function-name identity when a stable LLVM name is available.
   Remaining: region and line parity still fail on the real repro, and the investigation now has to answer whether LLVM summary semantics for those metrics are fully derivable from exported detail at all.
@@ -89,8 +89,8 @@ You will know this work is complete when all of the following are true:
 - Observation: The current integration suite mostly proves whole-fixture threshold behavior, not the exact changed-opportunity set in the hardest LLVM cases.
   Evidence: `tests/cli_metrics.rs` runs threshold-based pass/fail checks across fixtures, while only `src/metrics.rs` unit tests directly assert changed-opportunity counting on small synthetic inputs.
 
-- Observation: The repository now has its first LLVM integration tests that assert exact changed-opportunity membership and covered-state on real fixture diffs.
-  Evidence: `tests/llvm_diff_regression.rs` verifies exact changed line, region, and function opportunities for the Rust `basic-fail` and `basic-pass` LLVM fixtures by parsing coverage, loading the real unified diff, and asserting on `compute_changed_metric()`.
+- Observation: The repository now has LLVM integration tests that assert exact changed-opportunity membership and covered-state on real fixture diffs across the small Rust, C++, and Swift basic fixtures.
+  Evidence: `tests/llvm_diff_regression.rs` verifies exact changed line, region, and function opportunities for Rust, C++, and Swift basic LLVM fixtures, plus exact changed branch opportunities for the C++ fixture, by parsing coverage, loading the real unified diff, and asserting on `compute_changed_metric()`.
 
 
 ## Decision Log
@@ -338,4 +338,4 @@ Revision note: Refocused the remaining confidence question around changed-opport
 
 Revision note: Recorded the current testing gap: most integration coverage tests assert whole-fixture pass/fail behavior, so the next high-value LLVM regressions should assert exact changed opportunities for explicit diff scenarios rather than only threshold outcomes.
 
-Revision note: Added `tests/llvm_diff_regression.rs` as the first diff-focused LLVM integration regression file. It locks down exact changed line, region, and function opportunities for the Rust basic fixtures and gives the plan a direct gating-correctness proof path that does not depend on overall summary parity.
+Revision note: Expanded `tests/llvm_diff_regression.rs` from the initial Rust-only version to cover Rust, C++, and Swift basic LLVM fixtures, including branch opportunity assertions for C++. The plan now has direct changed-opportunity proofs across multiple LLVM language shapes even while overall line/region summary parity remains unresolved.

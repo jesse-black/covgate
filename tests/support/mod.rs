@@ -250,6 +250,7 @@ pub fn run_covgate_with_coverage(
 pub fn write_absolute_path_coverage_fixture(fixture: Fixture, worktree: &Path, destination: &Path) {
     let template = fixture.coverage_json();
     let relative_source = match fixture.language {
+        "cpp" => "src/lib.cpp",
         "swift" => "Sources/CovgateDemo/CovgateDemo.swift",
         "dotnet" => "src/CovgateDemo/MathOps.cs",
         "vitest" => "src/math.js",
