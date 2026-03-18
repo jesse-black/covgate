@@ -31,7 +31,7 @@ You will know this work is complete when all of the following are true:
 - [ ] Expand LLVM-focused tests so they cover multi-file reports, non-trivial function populations, and mixed segment flag combinations rather than only one-file fixtures with `functions.count == 1`.
 - [ ] Identify the real calculation defect in LLVM normalization or aggregation and fix it without passing through summary fields.
   Completed: function parity now matches LLVM on the real repro after switching LLVM function deduplication from pure span identity to normalized function-name identity when a stable LLVM name is available.
-  Remaining: region and line parity still fail on the real repro.
+  Remaining: region and line parity still fail on the real repro, and the investigation now has to answer whether LLVM summary semantics for those metrics are fully derivable from exported detail at all.
 - [ ] Run the targeted suites and full validation (`cargo xtask validate`) after the real calculation fix lands.
 - [ ] Follow up separately on summary UX so Markdown output can render every metric available in the loaded report, even when only a subset is actively gated.
 
@@ -61,6 +61,15 @@ You will know this work is complete when all of the following are true:
 - Observation: The remaining live line mismatch is concentrated in LLVM segment semantics, especially in `src/coverage/llvm_json.rs`, rather than in shared line aggregation everywhere.
   Evidence: comparing the validate export against LLVM's annotated text output showed `src/metrics.rs` and `src/render/markdown.rs` line sets already match LLVM's executable-line view, while `src/coverage/llvm_json.rs` still diverges substantially.
 
+- Observation: LLVM's own rendered text view and LLVM per-file summary counts do not always agree on line totals for the same live coverage run.
+  Evidence: on a live `cargo llvm-cov report` run, `src/config.rs` rendered as `322/337` covered/total executable lines in the text report while the JSON file summary reported `309/342`. `src/coverage/llvm_json.rs` showed `786/788` in the text view versus `832/834` in the file summary.
+
+- Observation: This means a parser can match LLVM's visible executable-line rendering for a file and still disagree with LLVM summary totals.
+  Evidence: reproducing `src/config.rs` from the live export showed `covgate`'s current line derivation matched the text report exactly for that file, but still disagreed with `summary.lines`.
+
+- Observation: Upstream LLVM users have already reported that exact line-covered sets are not fully exposed in JSON export detail today.
+  Evidence: llvm/llvm-project issue `#126307` asks LLVM to expose which lines it considers covered because tools such as `cargo-llvm-cov` currently have to infer them imperfectly from JSON export data.
+
 
 ## Decision Log
 
@@ -88,11 +97,15 @@ You will know this work is complete when all of the following are true:
   Rationale: the real repro showed that pure span-based deduplication undercounts Rust LLVM function totals, while normalized-name identity matches LLVM's native function totals without relying on summary pass-through.
   Date/Author: 2026-03-18 / Codex
 
+- Decision: Treat remaining line and region parity as a semantics investigation first, not as permission to keep tweaking parser heuristics blindly.
+  Rationale: the live evidence now shows that LLVM JSON detail, LLVM rendered text, and LLVM summary counts are not trivially interchangeable. We need to establish which semantics are actually recoverable from exported detail before claiming any parser fix proves `covgate` is correct.
+  Date/Author: 2026-03-18 / Codex
+
 ## Outcomes & Retrospective
 
 Implementation is still in progress. The useful outcome so far is not a fix; it is a better problem statement. The repository now has a real LLVM parity repro that fails for the right reason, and the plan is explicit that making summaries look right is not enough.
 
-The biggest lesson from this churn is that the regression surface matters. A green test against tiny fixtures or passed-through summary data can create false confidence. This plan now treats that as a primary risk and keeps the branch focused on proving the calculations. The first honest calculation fix has now landed on the function side, which narrows the remaining investigation to LLVM region and line semantics.
+The biggest lesson from this churn is that the regression surface matters. A green test against tiny fixtures or passed-through summary data can create false confidence. This plan now treats that as a primary risk and keeps the branch focused on proving the calculations. The first honest calculation fix has now landed on the function side, which narrows the remaining investigation to LLVM region and line semantics. The newest lesson is that even LLVM's own exported detail and summary views may not encode the same information directly, so the next milestone must establish what can actually be proven from the JSON export before we call any line/region change a fix.
 
 ## Context and Orientation
 
@@ -132,9 +145,12 @@ The current bug report specifically shows LLVM region totals diverging from `car
 Near-term next steps:
 
 1. Keep the new function-identity fix and use it as the baseline.
-2. Focus the remaining investigation on LLVM line and region semantics in `src/coverage/llvm_json.rs`, especially where `covgate`'s derived executable-line set still diverges from LLVM's annotated text output for `src/coverage/llvm_json.rs`.
-3. Add one or more targeted parser tests for the concrete segment patterns that appear in the real export once the exact line/region rule is understood.
-4. Re-run `tests/llvm_real_parity.rs`, `cargo xtask quick`, and then `cargo xtask validate` after each real parser fix attempt.
+2. Separate the remaining investigation into two questions:
+   first, which line/region semantics are recoverable from LLVM export detail and therefore fair game for `covgate` to compute itself;
+   second, whether the current parser matches those recoverable semantics.
+3. Compare live LLVM text output, live LLVM file summaries, and exported detail side-by-side for the highest-drift files in `src/coverage/llvm_json.rs`, `src/coverage/coverlet_json.rs`, `src/coverage/istanbul_json.rs`, and `src/config.rs`.
+4. Add one or more targeted parser tests only after the exact recoverable rule is understood from that comparison.
+5. Re-run `tests/llvm_real_parity.rs`, `cargo xtask quick`, and then `cargo xtask validate` after each real parser fix attempt.
 
 ## Concrete Steps
 
@@ -176,6 +192,10 @@ Run all commands from the repository root (the directory containing `Cargo.toml`
 
     Expected result: all targeted and full-project checks pass, confirming the fix does not regress existing coverage semantics or output behavior.
 
+6. If the investigation shows that LLVM summary line or region totals are not derivable from exported detail with enough fidelity, record that explicitly and revisit the acceptance bar for “proof of correctness” in this plan before changing production code.
+
+    Expected result: the plan states clearly whether remaining parity failure is a parser bug, a missing export-detail limitation, or both.
+
 ## Validation and Acceptance
 
 Acceptance is complete only when all of the following behaviors are visible and repeatable.
@@ -194,6 +214,8 @@ If any language/metric combination is unsupported by the native format, the test
 `cargo xtask regen-fixture-coverage-all` must not make the test green by redefining the oracle to match `covgate`'s wrong values.
 
 The final implementation must leave `covgate` proving its own calculations. It is acceptable for tests to read native summary data as the oracle. It is not acceptable for production code to make overall summaries correct while leaving `covgate`'s underlying metric math unproven.
+
+If the investigation shows that LLVM export detail does not actually expose enough information to derive the same line or region totals that LLVM summary reports, the plan must say so plainly and adjust the acceptance criteria around what `covgate` can honestly prove. That would still reject summary pass-through as a fake fix; it would simply acknowledge an upstream visibility limitation rather than pretending the current JSON export contains more semantic detail than it does.
 
 ## Idempotence and Recovery
 
@@ -231,6 +253,21 @@ Representative Markdown parsing target:
 
 The exact totals will depend on the fixture and regenerated artifact. The important property is parity between the native tool and `covgate`, not any hard-coded number from this document.
 
+Representative semantic-blocker evidence from the live investigation:
+
+    $ cargo llvm-cov report --text --output-dir /tmp/llvmtext-covgate
+    $ cargo llvm-cov report --json --output-path /tmp/liveexport.json
+
+    src/config.rs
+      text executable lines:    covered=322 total=337
+      file summary lines:       covered=309 total=342
+
+    src/coverage/llvm_json.rs
+      text executable lines:    covered=786 total=788
+      file summary lines:       covered=832 total=834
+
+This evidence means “match the visible text view” and “match the summary totals” are not automatically the same task.
+
 ## Interfaces and Dependencies
 
 Use the existing Rust integration-test stack and fixture helpers. Do not add a new test framework.
@@ -255,3 +292,5 @@ Revision note: Added a checked-in real LLVM export fixture plus a failing integr
 Revision note: A temporary summary-backed adapter change was tried and then reverted. The plan now states this explicitly so future work does not confuse “output matches LLVM” with “`covgate` calculations are proven correct.”
 
 Revision note: Recorded the first honest calculation fix: LLVM function identity now uses normalized LLVM names rather than pure span deduplication when names are available, which resolves the function mismatch in the real repro. The remaining work is now explicitly scoped to region and line semantics.
+
+Revision note: Added live-investigation evidence that LLVM text rendering and LLVM summary totals can disagree for the same file, and linked that investigation to `docs/reference/llvm-export-semantics-investigation.md` so future work does not assume exported detail, text views, and summary counts are automatically equivalent.
