@@ -1023,4 +1023,55 @@ mod tests {
         assert_eq!(function_totals.covered, 2);
         assert_eq!(function_totals.total, 3);
     }
+
+    #[test]
+    fn uses_summary_totals_for_branch_and_function_only_files() {
+        let input = r#"
+        {
+          "data": [
+            {
+              "files": [
+                {
+                  "filename": "src/lib.rs",
+                  "segments": [
+                    [1, 1, 1, true, true, false],
+                    [2, 1, 0, false, false, false]
+                  ],
+                  "branches": [
+                    [1, 1, 0, true],
+                    [1, 5, 1, true]
+                  ],
+                  "summary": {
+                    "branches": {"count": 4, "covered": 3},
+                    "functions": {"count": 2, "covered": 1},
+                    "lines": {"count": 1, "covered": 1},
+                    "regions": {"count": 1, "covered": 1}
+                  }
+                }
+              ]
+            }
+          ]
+        }
+        "#;
+
+        let report = parse_str(input).expect("llvm export should parse");
+
+        let branch_totals = report
+            .totals_by_file
+            .get(&crate::model::MetricKind::Branch)
+            .expect("branch totals should exist")
+            .get(&PathBuf::from("src/lib.rs"))
+            .expect("branch file totals should exist");
+        assert_eq!(branch_totals.covered, 3);
+        assert_eq!(branch_totals.total, 4);
+
+        let function_totals = report
+            .totals_by_file
+            .get(&crate::model::MetricKind::Function)
+            .expect("function totals should exist")
+            .get(&PathBuf::from("src/lib.rs"))
+            .expect("function file totals should exist");
+        assert_eq!(function_totals.covered, 1);
+        assert_eq!(function_totals.total, 2);
+    }
 }
