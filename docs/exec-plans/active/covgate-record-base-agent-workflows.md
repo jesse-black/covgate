@@ -33,6 +33,7 @@ You will know this is working when all of the following are true:
 - [x] (2026-03-17 22:05Z) Added default-on dirty-worktree protection in `covgate` for Git-base diff mode, with CLI/config opt-outs and explicit diff-file bypass behavior verified by tests.
 - [x] (2026-03-17 21:26Z) Added branch-refresh regression coverage and passed full repository validation, including `cargo xtask validate`.
 - [ ] Coverage-gate hardening follow-up: raise changed-file test coverage to satisfy `cargo xtask validate` without reducing repository default gates.
+- [ ] (2026-03-18 00:45Z) Blocked while hardening changed-file coverage: several uncovered regions are private Git-helper subprocess failure paths that cannot be deterministically exercised from public integration tests without test seams.
 
 ## Surprises & Discoveries
 
@@ -56,6 +57,9 @@ You will know this is working when all of the following are true:
 
 - Observation: Lowering repository default gates to force green local validation hides real regressions and violates expected policy unless explicitly directed.
   Evidence: gate thresholds in `covgate.toml` were reverted after review feedback; remediation should come from additional tests/coverage, not weaker defaults.
+
+- Observation: Some changed uncovered regions in `src/git.rs` are private helper error paths (for example subprocess spawn failures in `resolve_git_path`) that are difficult to reach through public APIs, creating a coverage hardening blocker under strict changed-file gates.
+  Evidence: `cargo xtask validate` reports uncovered changed regions in private helper branches despite full test-suite pass, and attempts to cover them via in-file tests inflated changed regions further.
 
 - Observation: The prior gate-lowering attempt was driven by a perceived single-run obstacle: changed-file function coverage in `src/git.rs` remained below strict defaults despite passing functional tests.
   Evidence: local validate runs showed persistent uncovered helper spans/functions; this requires staged coverage work rather than policy changes.
@@ -209,6 +213,10 @@ Run all commands from repository root `/home/jesse/git/covgate` unless otherwise
     Step D — Run full validation (`cargo xtask quick`, `cargo xtask validate`) with strict defaults unchanged.
 
     ⚠️ Untracked-files warning: `covgate check` in Git-base mode reflects committed + tracked worktree edits. New untracked source files are invisible to `git diff <merge-base>` until added to the index intent state (for example `git add -N <path>`).
+
+    Step E — If strict-gate blockers persist due to private helper error paths, pause feature edits and introduce a minimal test seam for Git subprocess execution (for example a small injectable command-runner trait or function pointer gated to tests) so failure branches can be exercised from integration tests without changing gate policy.
+
+    Step F — After seam introduction, add focused regression tests for each previously unreachable error branch and rerun `cargo xtask validate` to confirm changed-region and uncovered-function gates pass.
 
     Potential blockers to monitor:
     - LLVM inlining collapsing changed helper functions into callsites and obscuring per-function coverage attribution.

@@ -63,7 +63,7 @@ fn resolve_git_path(path: &str) -> Result<PathBuf> {
     let output = Command::new("git")
         .args(["rev-parse", "--git-path", path])
         .output()
-        .with_context(|| format!("failed to run git rev-parse for git path {path}"))?;
+        .context("failed to run git rev-parse for requested git path")?;
 
     if !output.status.success() {
         bail!(
@@ -110,12 +110,8 @@ fn read_recorded_branch_marker() -> Result<Option<String>> {
         return Ok(None);
     }
 
-    let branch = fs::read_to_string(&marker_path).with_context(|| {
-        format!(
-            "failed to read branch marker from {}",
-            marker_path.display()
-        )
-    })?;
+    let branch =
+        fs::read_to_string(&marker_path).context("failed to read recorded base branch marker")?;
     let branch = branch.trim();
     if branch.is_empty() {
         return Ok(None);
@@ -128,11 +124,10 @@ fn read_recorded_branch_marker() -> Result<Option<String>> {
 fn write_recorded_branch_marker(branch: &str) -> Result<()> {
     let marker_path = resolve_git_path(RECORDED_BASE_BRANCH_MARKER)?;
     if let Some(parent) = marker_path.parent() {
-        fs::create_dir_all(parent)
-            .with_context(|| format!("failed to create marker directory {}", parent.display()))?;
+        fs::create_dir_all(parent).context("failed to create recorded branch marker directory")?;
     }
     fs::write(&marker_path, format!("{branch}\n"))
-        .with_context(|| format!("failed to write branch marker {}", marker_path.display()))
+        .context("failed to write recorded base branch marker")
 }
 
 #[inline(never)]
