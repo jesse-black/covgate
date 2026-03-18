@@ -1,89 +1,167 @@
-# Function coverage debugging notes (LLVM / `covgate`)
+# LLVM function normalization in `covgate`
 
-This note documents why `covgate` reported unexpectedly high uncovered-function counts during dogfooding even when changed-region coverage was very high, and what was changed to fix it.
+This document records the LLVM-specific function discrepancy uncovered during the summary parity investigation, why it happened, and how the current fix works.
 
-## Symptom seen in dogfooding
+## Big picture
 
-Observed behavior during PR validation was:
+This work is about validating `covgate`'s own calculations, not teaching `covgate` to print the same summary numbers as LLVM by passing native summary data through unchanged.
 
-- Changed region coverage near 100%.
-- Changed function coverage materially lower (for example a few uncovered functions in `src/coverage/llvm_json.rs` and `src/model.rs`).
+That distinction matters because summary parity alone does not prove diff coverage is correct. If `covgate` cannot derive the same underlying opportunities and covered-state from native data, matching rendered totals would create false confidence.
 
-At first glance this seemed impossible because regions are more granular than functions. In practice, the mismatch came from how LLVM function records were normalized before gating.
+The function fix documented here is acceptable because it improves `covgate`'s own normalization logic. It does **not** rely on LLVM summary pass-through.
 
-## What was going on
+## Why the discrepancy happened
 
-Two parser-level issues in LLVM function normalization were contributing noise to function totals.
+`covgate` originally deduplicated LLVM functions by source span:
 
-1. Covered-state source mismatch
+- `(path, start_line, end_line)`
 
-`llvm-cov` function records can carry both:
+That works for many fixtures, but it undercounts real Rust LLVM exports.
 
-- a top-level function `count`, and
-- per-region execution counts in each function region tuple.
+In the failing repro, LLVM emitted multiple raw function records that shared the same source span but represented different symbol identities. Those Rust symbols were LLVM-exported mangled names, and crate-hash disambiguators were part of that mangled form.
 
-Some callable records were effectively executed (non-zero region execution count) while function `count` was still zero in the raw record shape we consumed. Using only top-level `count` could misclassify those as uncovered.
+That created a mismatch:
 
-Fix applied:
+- raw LLVM records were not all unique by span
+- native LLVM totals still counted more callable records than `covgate`
+- `covgate` collapsed too aggressively and reported one fewer function than LLVM
 
-- Function covered-state is now computed as covered when either:
-  - `function.count > 0`, or
-  - any function region has `execution_count > 0`.
+On the real repro fixture, one representative file had:
 
-2. Duplicate callable entries at the same source span
+- 14 raw function records
+- 7 unique source spans
+- 8 native LLVM functions
 
-LLVM exports can contain multiple callable records that normalize to the same file + line span. Treating each record independently can double-count one span (for example one uncovered variant + one covered variant), which inflates uncovered-function counts.
+So span-only identity was too coarse, but treating every raw record as distinct would have overcounted.
 
-Fix applied:
+For `src/metrics.rs`, the raw LLVM function record names were:
 
-- During parsing, callable records are deduplicated by `(path, start_line, end_line)`.
-- Covered-state for duplicates is merged with OR semantics (`covered` if any variant is covered).
+1. `_RNCNCNvNtCs6ZlX2b1lC0o_7covgate7metrics22compute_changed_metric00B7_`
+2. `_RNCNCNvNtCs6ZlX2b1lC0o_7covgate7metrics22compute_changed_metrics0_00B7_`
+3. `_RNCNvNtCs6ZlX2b1lC0o_7covgate7metrics22compute_changed_metric0B5_`
+4. `_RNCNvNtCs6ZlX2b1lC0o_7covgate7metrics22compute_changed_metrics0_0B5_`
+5. `_RNCNvNtCs6ZlX2b1lC0o_7covgate7metrics22compute_changed_metrics_0B5_`
+6. `_RNvNtCs6ZlX2b1lC0o_7covgate7metrics22compute_changed_metric`
+7. `_RNvNtCsiqc4wHYDJq1_7covgate7metrics22compute_changed_metric`
+8. `_RNvNtNtCsiqc4wHYDJq1_7covgate7metrics5testss_30computes_changed_region_metric`
+9. `_RNvNtNtCsiqc4wHYDJq1_7covgate7metrics5testss_54metric_with_only_zero_totals_is_treated_as_unavailable`
+10. `_RNCNCNvNtCsiqc4wHYDJq1_7covgate7metrics22compute_changed_metric00B7_`
+11. `_RNCNCNvNtCsiqc4wHYDJq1_7covgate7metrics22compute_changed_metrics0_00B7_`
+12. `_RNCNvNtCsiqc4wHYDJq1_7covgate7metrics22compute_changed_metric0B5_`
+13. `_RNCNvNtCsiqc4wHYDJq1_7covgate7metrics22compute_changed_metrics0_0B5_`
+14. `_RNCNvNtCsiqc4wHYDJq1_7covgate7metrics22compute_changed_metrics_0B5_`
 
-3. Ambiguous path suffix fallback (earlier related fix)
+If `covgate` collapses those records by source span alone, they reduce to 7 span groups:
 
-When mapping function filenames to known file entries, a naive first-suffix match could pick the wrong file if paths shared suffixes.
+1. `5..72`
+   `_RNvNtCs6ZlX2b1lC0o_7covgate7metrics22compute_changed_metric`
+   `_RNvNtCsiqc4wHYDJq1_7covgate7metrics22compute_changed_metric`
+2. `13..13`
+   `_RNCNCNvNtCs6ZlX2b1lC0o_7covgate7metrics22compute_changed_metric00B7_`
+   `_RNCNvNtCs6ZlX2b1lC0o_7covgate7metrics22compute_changed_metric0B5_`
+   `_RNCNCNvNtCsiqc4wHYDJq1_7covgate7metrics22compute_changed_metric00B7_`
+   `_RNCNvNtCsiqc4wHYDJq1_7covgate7metrics22compute_changed_metric0B5_`
+3. `14..19`
+   `_RNCNvNtCs6ZlX2b1lC0o_7covgate7metrics22compute_changed_metrics_0B5_`
+   `_RNCNvNtCsiqc4wHYDJq1_7covgate7metrics22compute_changed_metrics_0B5_`
+4. `31..37`
+   `_RNCNvNtCs6ZlX2b1lC0o_7covgate7metrics22compute_changed_metrics0_0B5_`
+   `_RNCNvNtCsiqc4wHYDJq1_7covgate7metrics22compute_changed_metrics0_0B5_`
+5. `36..36`
+   `_RNCNCNvNtCs6ZlX2b1lC0o_7covgate7metrics22compute_changed_metrics0_00B7_`
+   `_RNCNCNvNtCsiqc4wHYDJq1_7covgate7metrics22compute_changed_metrics0_00B7_`
+6. `86..135`
+   `_RNvNtNtCsiqc4wHYDJq1_7covgate7metrics5testss_30computes_changed_region_metric`
+7. `138..160`
+   `_RNvNtNtCsiqc4wHYDJq1_7covgate7metrics5testss_54metric_with_only_zero_totals_is_treated_as_unavailable`
 
-Fix already applied before this note:
+After demangling those Rust symbols with hash-stripping formatting, the native LLVM-aligned function identities become:
 
-- Suffix fallback now chooses the longest valid suffix at a path-component boundary.
+1. `covgate::metrics::compute_changed_metric::{closure#0}::{closure#0}`
+2. `covgate::metrics::compute_changed_metrics::{closure#0}::{closure#0}`
+3. `covgate::metrics::compute_changed_metric::{closure#0}`
+4. `covgate::metrics::compute_changed_metrics::{closure#0}`
+5. `covgate::metrics::compute_changed_metrics`
+6. `covgate::metrics::compute_changed_metric`
+7. `covgate::metrics::tests::computes_changed_region_metric`
+8. `covgate::metrics::tests::metric_with_only_zero_totals_is_treated_as_unavailable`
 
-## Validation that this resolved the issue
+## Earlier function debugging that still applies
 
-We validated in three layers:
+Before the normalization fix below, two earlier function issues had already been corrected:
 
-1. Regression tests (TDD)
+- covered-state uses `function.count > 0` or any executed function-region count, so functions with zero top-level count but executed regions are still considered covered
+- path matching prefers the longest valid suffix when diff paths and LLVM paths disagree in prefix shape
 
-- Added test proving region execution count marks function as covered even when top-level function `count` is zero.
-- Added test proving duplicate function spans are merged and reported once.
-- Added test proving longest-suffix path resolution.
+Those fixes remain valid. They were not the cause of the final one-function summary drift.
 
-2. Repository test suite
+## How the fix works
 
-- `cargo test` passes with the new parser logic and regressions.
+`covgate` now keeps the native LLVM function name when parsing each function record and uses a normalized name as the primary deduplication key when a name is available.
 
-3. Coverage-tool sanity check
+Normalization now uses `rustc-demangle` instead of a hand-rolled mangled-name rewrite:
 
-- `cargo llvm-cov --summary-only` reports TOTAL functions and missed functions.
-- `cargo llvm-cov --json` totals (`data[].totals.functions`) were summed and matched the same covered/missed counts as the summary output in the same run.
+- input shape is the LLVM-exported Rust mangled symbol
+- demangling converts it into a stable Rust path-style name
+- alternate demangle formatting strips the crate hash, so hash-only variants collapse together
+- non-Rust or undecodable names fall back to the original string
 
-This confirms that post-fix function totals seen by our quick validation are consistent with LLVM's own summary view.
+In practice:
 
-## Practical takeaway
+1. Parse the optional LLVM function name into `LlvmFunction.name`.
+2. Demangle Rust LLVM symbols with `rustc-demangle` and strip the crate hash via alternate formatting.
+3. Deduplicate functions by:
+   - normalized name + span when a function name exists
+   - span only when no name exists
+4. Keep the source span on the emitted opportunity so diff filtering continues to work through the shared metric engine.
 
-The low function coverage was not caused by diff intersection rules in the gate engine. It was caused by parser normalization edge cases in LLVM callable records (covered-state derivation and duplicate span handling). After normalization fixes, function counts are materially more stable and better aligned with region-based expectations.
+This lands in `covgate`'s calculation path, not in summary rendering.
 
-## Cross-tool policy decision: include anonymous/unnamed callable units
+## Why this fixes the function mismatch
 
-As of the Istanbul + Coverlet expansion, `covgate` intentionally keeps function-threshold semantics aligned with upstream tool outputs instead of trying to infer a narrower “named functions only” model.
+The normalized-name key preserves distinctions that span-only deduplication erased, while still merging raw LLVM records that differ only by crate hash.
 
-Rationale:
+That gives `covgate` a function identity closer to LLVM's own semantics:
 
-- `cargo llvm-cov` function thresholds count LLVM function records, which can include callable units that are not source-level named functions.
-- Coverlet method thresholds are based on reported method records; they are not restricted to only user-authored named methods in every compiler/toolchain scenario.
-- Istanbul function metrics are based on `fnMap` entries and can include anonymous/inline callable units (for example arrow functions and callbacks).
+- different callable records that happen to share a span can remain distinct
+- hash-only variants of the same callable record still collapse together
 
-Decision:
+With that change, the real LLVM repro no longer has a function discrepancy.
 
-- `covgate` function gates (`--fail-under-functions`, `--fail-uncovered-functions`) should continue to count the callable opportunities reported by each native coverage format adapter, including anonymous/unnamed units where present.
-- We prefer parity and predictability versus ecosystem-native thresholds over tool-specific filtering heuristics that might hide real coverage-tool behavior.
+## What this does not prove
 
+This fix resolves only the function portion of the LLVM parity bug.
+
+The real repro still has region and line mismatches. That means the broader investigation remains open: we still do not fully understand LLVM's line/region opportunity semantics well enough to claim `covgate`'s derived calculations are correct end-to-end.
+
+So the current state is:
+
+- function calculation is improved and matches the native repro
+- region and line calculation are still under investigation
+- summary pass-through is still explicitly rejected as a false fix
+
+## Validation
+
+The function fix is covered by:
+
+- parser regression test:
+  - `keeps_rust_functions_with_different_crate_hashes_as_one_name_based_record`
+- parser suite:
+  - `cargo test llvm_json -- --nocapture`
+
+The real LLVM parity repro now fails only on non-function metrics:
+
+- region: native `3285/3408`, `covgate` `3252/3355`
+- line: native `2890/2957`, `covgate` `2865/2910`
+
+## Source pointers
+
+Implementation lives in:
+
+- `src/coverage/llvm_json.rs`
+
+Related investigation artifacts:
+
+- `tests/llvm_real_parity.rs`
+- `tests/fixtures/llvm-real/covgate-self-full.json`
+- `docs/exec-plans/completed/covgate-llvm-summary-parity.md`
