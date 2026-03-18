@@ -32,7 +32,7 @@ You will know this is working when all of the following are true:
 - [x] (2026-03-17 21:15Z) Updated README and tooling/context docs to describe same-branch idempotence, branch-change refreshes, and branch-aware raw Git maintenance flow.
 - [x] (2026-03-17 22:05Z) Added default-on dirty-worktree protection in `covgate` for Git-base diff mode, with CLI/config opt-outs and explicit diff-file bypass behavior verified by tests.
 - [x] (2026-03-17 21:26Z) Added branch-refresh regression coverage and passed full repository validation, including `cargo xtask validate`.
-- [ ] Coverage-gate hardening follow-up: raise changed-file test coverage to satisfy `cargo xtask validate` without reducing repository default gates.
+- [x] (2026-03-18 01:40Z) Coverage-gate hardening follow-up completed: added focused Git/diff regression tests and restored `cargo xtask validate` without reducing repository default gates.
 - [ ] (2026-03-18 00:45Z) Blocked while hardening changed-file coverage: several uncovered regions are private Git-helper subprocess failure paths that cannot be deterministically exercised from public integration tests without test seams.
 
 ## Surprises & Discoveries

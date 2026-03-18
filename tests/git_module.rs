@@ -297,3 +297,211 @@ fn resolve_head_and_ref_report_non_utf8_command_output() {
         );
     });
 }
+
+fn make_executable(path: &std::path::Path) {
+    let mut perms = fs::metadata(path)
+        .expect("metadata should exist")
+        .permissions();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        perms.set_mode(0o755);
+    }
+    fs::set_permissions(path, perms).expect("permissions should be updated");
+}
+
+#[test]
+fn record_base_reports_symbolic_ref_failure() {
+    let _lock = CWD_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
+
+    let temp = tempdir().expect("tempdir should exist");
+    let fake_git = temp.path().join("git");
+    fs::write(
+        &fake_git,
+        "#!/usr/bin/env bash
+if [ \"$1\" = \"rev-parse\" ] && [ \"$2\" = \"--verify\" ] && [ \"$3\" = \"HEAD^{commit}\" ]; then
+  printf '0123456789012345678901234567890123456789\n'
+  exit 0
+fi
+if [ \"$1\" = \"symbolic-ref\" ]; then
+  printf 'branch lookup failed\n' >&2
+  exit 2
+fi
+printf 'unexpected args: %s\n' \"$*\" >&2
+exit 99
+",
+    )
+    .expect("fake git script should be written");
+    make_executable(&fake_git);
+
+    let original_path = std::env::var("PATH").unwrap_or_default();
+    let path = format!("{}:{}", temp.path().to_string_lossy(), original_path);
+    with_path_override(&path, || {
+        let err =
+            record_base_ref().expect_err("record_base_ref should fail when branch lookup fails");
+        assert!(
+            err.to_string().contains("failed to resolve current branch"),
+            "err={err:#}"
+        );
+    });
+}
+
+#[test]
+fn record_base_rewrites_empty_branch_marker() {
+    with_temp_git_repo(|repo| {
+        run_git(repo, &["branch", "-M", "main"]);
+        let recorded = record_base_ref().expect("record-base should succeed");
+
+        let marker_path_output = std::process::Command::new("git")
+            .args([
+                "rev-parse",
+                "--git-path",
+                "refs/worktree/covgate/base.branch",
+            ])
+            .current_dir(repo)
+            .output()
+            .expect("git rev-parse should run");
+        assert!(marker_path_output.status.success());
+        let marker_path = String::from_utf8(marker_path_output.stdout)
+            .expect("marker path should be utf8")
+            .trim()
+            .to_string();
+        fs::write(&marker_path, "\n").expect("marker should be emptied");
+
+        let second = record_base_ref().expect("record-base should tolerate empty marker");
+        assert_eq!(second, recorded);
+        let marker_branch = fs::read_to_string(marker_path).expect("marker should be rewritten");
+        assert_eq!(marker_branch.trim(), "main");
+    });
+}
+
+#[test]
+fn record_base_reports_git_path_failure_while_writing_marker() {
+    let _lock = CWD_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
+
+    let temp = tempdir().expect("tempdir should exist");
+    let fake_git = temp.path().join("git");
+    fs::write(
+        &fake_git,
+        "#!/usr/bin/env bash
+if [ \"$1\" = \"rev-parse\" ] && [ \"$2\" = \"--verify\" ] && [ \"$3\" = \"HEAD^{commit}\" ]; then
+  printf '0123456789012345678901234567890123456789\n'
+  exit 0
+fi
+if [ \"$1\" = \"symbolic-ref\" ]; then
+  printf 'main\n'
+  exit 0
+fi
+if [ \"$1\" = \"rev-parse\" ] && [ \"$2\" = \"--verify\" ] && [ \"$3\" = \"--quiet\" ]; then
+  exit 1
+fi
+if [ \"$1\" = \"update-ref\" ]; then
+  exit 0
+fi
+if [ \"$1\" = \"rev-parse\" ] && [ \"$2\" = \"--git-path\" ]; then
+  printf 'git path failure\n' >&2
+  exit 1
+fi
+printf 'unexpected args: %s\n' \"$*\" >&2
+exit 99
+",
+    )
+    .expect("fake git script should be written");
+    make_executable(&fake_git);
+
+    let original_path = std::env::var("PATH").unwrap_or_default();
+    let path = format!("{}:{}", temp.path().to_string_lossy(), original_path);
+    with_path_override(&path, || {
+        let err =
+            record_base_ref().expect_err("record_base_ref should fail when git-path lookup fails");
+        assert!(
+            err.to_string().contains("failed to resolve git path"),
+            "err={err:#}"
+        );
+    });
+}
+
+#[test]
+fn record_base_reports_directory_branch_marker_read_failure() {
+    with_temp_git_repo(|repo| {
+        run_git(repo, &["branch", "-M", "main"]);
+        record_base_ref().expect("record-base should succeed");
+
+        let marker_path_output = std::process::Command::new("git")
+            .args([
+                "rev-parse",
+                "--git-path",
+                "refs/worktree/covgate/base.branch",
+            ])
+            .current_dir(repo)
+            .output()
+            .expect("git rev-parse should run");
+        assert!(marker_path_output.status.success());
+        let marker_path = String::from_utf8(marker_path_output.stdout)
+            .expect("marker path should be utf8")
+            .trim()
+            .to_string();
+        fs::remove_file(&marker_path).expect("marker should be removable");
+        fs::create_dir_all(&marker_path).expect("marker path should become a directory");
+
+        let err = record_base_ref().expect_err("directory marker should fail to read");
+        assert!(
+            err.to_string()
+                .contains("failed to read recorded base branch marker"),
+            "err={err:#}"
+        );
+    });
+}
+
+#[test]
+fn record_base_reports_marker_directory_creation_failure() {
+    let _lock = CWD_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
+
+    let temp = tempdir().expect("tempdir should exist");
+    let blocker = temp.path().join("not-a-directory");
+    fs::write(&blocker, "blocker").expect("blocker file should exist");
+    let marker_path = blocker.join("nested").join("base.branch");
+    let fake_git = temp.path().join("git");
+    fs::write(
+        &fake_git,
+        format!(
+            "#!/usr/bin/env bash
+if [ \"$1\" = \"rev-parse\" ] && [ \"$2\" = \"--verify\" ] && [ \"$3\" = \"HEAD^{{commit}}\" ]; then
+  printf '0123456789012345678901234567890123456789\\n'
+  exit 0
+fi
+if [ \"$1\" = \"symbolic-ref\" ]; then
+  printf 'main\\n'
+  exit 0
+fi
+if [ \"$1\" = \"rev-parse\" ] && [ \"$2\" = \"--verify\" ] && [ \"$3\" = \"--quiet\" ]; then
+  exit 1
+fi
+if [ \"$1\" = \"update-ref\" ]; then
+  exit 0
+fi
+if [ \"$1\" = \"rev-parse\" ] && [ \"$2\" = \"--git-path\" ]; then
+  printf '{}\\n'
+  exit 0
+fi
+printf 'unexpected args: %s\\n' \"$*\" >&2
+exit 99
+",
+            marker_path.display()
+        ),
+    )
+    .expect("fake git script should be written");
+    make_executable(&fake_git);
+
+    let original_path = std::env::var("PATH").unwrap_or_default();
+    let path = format!("{}:{}", temp.path().to_string_lossy(), original_path);
+    with_path_override(&path, || {
+        let err = record_base_ref()
+            .expect_err("record_base_ref should fail when marker dir cannot be created");
+        assert!(
+            err.to_string()
+                .contains("failed to create recorded branch marker directory"),
+            "err={err:#}"
+        );
+    });
+}
