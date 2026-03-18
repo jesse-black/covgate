@@ -22,11 +22,11 @@ You will know this work is complete when all of the following are true:
 ## Progress
 
 - [x] (2026-03-17 00:00Z) Created this repository-specific ExecPlan and recorded the non-negotiable requirement that the fix must repair `covgate` calculations instead of proxying LLVM summary blocks.
-- [ ] Inspect the current total-calculation pipeline and capture the exact point where `covgate` diverges from upstream counts.
-- [ ] Add failing regression tests that compare native coverage-tool summaries with `covgate` Markdown overall totals across the fixture matrix.
-- [ ] Confirm that fixture regeneration via `cargo xtask regen-fixture-coverage-all` still preserves a red test before the fix.
-- [ ] Repair the calculation bug in the normalization or aggregation layer so the parity tests pass without bypassing `covgate` logic.
-- [ ] Run the targeted suites and full validation (`cargo xtask validate`).
+- [x] Inspect the current total-calculation pipeline and capture the exact point where `covgate` diverges from upstream counts.
+- [x] Add failing regression tests that compare native coverage-tool summaries with `covgate` Markdown overall totals across the fixture matrix.
+- [x] Confirm that fixture regeneration via `cargo xtask regen-fixture-coverage-all` still preserves a red test before the fix.
+- [x] Repair the calculation bug in the normalization or aggregation layer so the parity tests pass without bypassing `covgate` logic.
+- [x] Run the targeted suites and full validation (`cargo xtask validate`).
 
 ## Surprises & Discoveries
 
@@ -38,6 +38,10 @@ You will know this work is complete when all of the following are true:
 
 - Observation: The repository already has a cross-language live-fixture harness and xtask-driven regeneration flow that can support this regression without inventing new fixture infrastructure.
   Evidence: `tests/support/mod.rs`, `tests/cli_metrics.rs`, and `xtask/src/main.rs` define fixture matrices for Rust, C/C++, Swift, .NET, and Vitest plus `regen-fixture-coverage` and `regen-fixture-coverage-all`.
+
+- Observation: LLVM region drift came from `segments_to_regions()` treating every counted segment window as a distinct region even when the segment was not a region entry or was explicitly marked as a gap region.
+  Evidence: the new parity test failed for the C++ and Swift LLVM fixtures until `src/coverage/llvm_json.rs` started honoring the `is_region_entry` and `is_gap_region` flags carried in each segment tuple.
+
 
 ## Decision Log
 
@@ -53,9 +57,13 @@ You will know this work is complete when all of the following are true:
   Rationale: `covgate` supports region, line, branch, and function metrics, but not every native format exposes every one of them. LLVM fixtures cover region, line, and function today; branch parity should run on the fixtures that emit branch data; .NET and Vitest should be included for line, branch, and function parity because the trust problem is about `covgate` calculations broadly, not LLVM alone.
   Date/Author: 2026-03-17 / Codex
 
+- Decision: Collect native overall totals from the checked-in fixture artifacts inside the test helper instead of shelling out to external coverage binaries.
+  Rationale: the repository already stores authoritative native-summary data for LLVM fixtures and native-format raw artifacts for Coverlet and Istanbul fixtures, so parsing those artifacts keeps the parity matrix deterministic and avoids introducing environment-sensitive toolchain dependencies into the regression.
+  Date/Author: 2026-03-17 / Codex
+
 ## Outcomes & Retrospective
 
-This planning pass is complete, but the bug remains unfixed. The main outcome here is a concrete, enforceable path that keeps the repository honest: first make the mismatch fail in tests, then fix the aggregation logic, then prove the fix survives fixture regeneration and full validation.
+Implementation is complete. The repository now has an explicit overall-summary parity regression matrix across LLVM, Coverlet, and Istanbul fixtures, and the LLVM adapter now respects segment region-entry and gap markers so its computed region totals match the native summaries again.
 
 The main implementation risk is choosing the wrong comparison surface. If tests only snapshot Markdown text without checking the underlying counts against native tool output, a future formatter change could reintroduce incorrect math. The plan therefore treats Markdown as the user-visible symptom while requiring parity assertions against the computed numeric totals that drive rendering.
 

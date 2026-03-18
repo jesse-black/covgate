@@ -336,7 +336,9 @@ impl LlvmFile {
 
             let count = number_at(start, 2)?;
             let has_count = bool_at(start, 3).unwrap_or(true);
-            if !has_count {
+            let is_region_entry = bool_at(start, 4).unwrap_or(true);
+            let is_gap_region = bool_at(start, 5).unwrap_or(false);
+            if !has_count || !is_region_entry || is_gap_region {
                 continue;
             }
 
@@ -476,13 +478,13 @@ mod tests {
                 {
                   "filename": "src/lib.rs",
                   "segments": [
-                    [1, 1, 1, true, false, false],
+                    [1, 1, 1, true, true, false],
                     [1, 2, 0, false, false, false],
-                    [2, 1, 1, true, false, false],
+                    [2, 1, 1, true, true, false],
                     [2, 2, 0, false, false, false],
-                    [3, 1, 0, true, false, false],
+                    [3, 1, 0, true, true, false],
                     [3, 2, 0, false, false, false],
-                    [4, 1, 0, true, false, false],
+                    [4, 1, 0, true, true, false],
                     [4, 2, 0, false, false, false]
                   ]
                 }
@@ -645,6 +647,41 @@ mod tests {
     #[test]
     fn rejects_invalid_json() {
         assert!(parse_str("{").is_err());
+    }
+
+    #[test]
+    fn region_totals_ignore_non_entry_and_gap_segments() {
+        let input = r#"
+        {
+          "data": [
+            {
+              "files": [
+                {
+                  "filename": "src/lib.rs",
+                  "segments": [
+                    [1, 1, 1, true, true, false],
+                    [2, 1, 1, true, false, false],
+                    [3, 1, 1, true, true, true],
+                    [4, 1, 1, true, true, false],
+                    [5, 1, 0, false, false, false]
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+        "#;
+
+        let report = parse_str(input).expect("llvm export should parse");
+        let totals = report
+            .totals_by_file
+            .get(&crate::model::MetricKind::Region)
+            .expect("region totals should exist")
+            .get(&PathBuf::from("src/lib.rs"))
+            .expect("file totals should exist");
+
+        assert_eq!(totals.covered, 2);
+        assert_eq!(totals.total, 2);
     }
 
     #[test]
