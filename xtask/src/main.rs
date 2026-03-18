@@ -74,14 +74,7 @@ fn validate() -> Result<()> {
 
     run(
         "cargo",
-        &[
-            "run",
-            "--bin",
-            "covgate",
-            "--",
-            "--coverage-json",
-            coverage_json_str,
-        ],
+        &["run", "--bin", "covgate", "--", "check", coverage_json_str],
     )?;
 
     run("cargo-machete", &["."])?;
@@ -621,13 +614,17 @@ fn project_root() -> Result<PathBuf> {
 }
 
 fn coverage_path() -> PathBuf {
-    let mut path = std::env::temp_dir();
-    path.push(format!(
+    let target_dir = project_root()
+        .unwrap_or_else(|_| PathBuf::from("."))
+        .join("target")
+        .join("xtask");
+    let _ = std::fs::create_dir_all(&target_dir);
+
+    target_dir.join(format!(
         "covgate-xtask-validate-{}-{}.json",
         std::process::id(),
         chrono_like_timestamp()
-    ));
-    path
+    ))
 }
 
 fn chrono_like_timestamp() -> u128 {

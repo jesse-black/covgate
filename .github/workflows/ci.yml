@@ -22,11 +22,11 @@ jobs:
       - name: Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
       - name: Test
-        run: cargo llvm-cov --json --output-path coverage.json
+        run: cargo llvm-cov --json --output-path target/coverage.json
       - name: Coverage Summary
         run: cargo llvm-cov report
       - name: Dogfood covgate
-        run: cargo run -- --coverage-json coverage.json --markdown-output "$GITHUB_STEP_SUMMARY"
+        run: cargo run -- check target/coverage.json --markdown-output "$GITHUB_STEP_SUMMARY"
 
   dependency-hygiene:
     runs-on: ubuntu-latest

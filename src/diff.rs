@@ -13,7 +13,7 @@ pub enum DiffSource {
 impl DiffSource {
     pub fn describe(&self) -> String {
         match self {
-            Self::GitBase(base) => format!("{base}...HEAD"),
+            Self::GitBase(base) => format!("{base}...WORKTREE"),
             Self::DiffFile(path) => path.display().to_string(),
         }
     }
@@ -22,13 +22,21 @@ impl DiffSource {
 pub fn load_changed_lines(source: &DiffSource) -> Result<Vec<ChangedFile>> {
     let text = match source {
         DiffSource::GitBase(base) => {
+            let merge_base = Command::new("git")
+                .args(["merge-base", base, "HEAD"])
+                .output()
+                .context("failed to run git merge-base")?;
+            if !merge_base.status.success() {
+                bail!("git merge-base failed with status {}", merge_base.status);
+            }
+
+            let merge_base_sha = String::from_utf8(merge_base.stdout)
+                .context("git merge-base output was not valid utf-8")?
+                .trim()
+                .to_string();
+
             let output = Command::new("git")
-                .args([
-                    "diff",
-                    "--unified=0",
-                    "--no-ext-diff",
-                    &format!("{base}...HEAD"),
-                ])
+                .args(["diff", "--unified=0", "--no-ext-diff", &merge_base_sha])
                 .output()
                 .context("failed to run git diff")?;
             if !output.status.success() {

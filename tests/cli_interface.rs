@@ -47,20 +47,31 @@ fn record_base_fails_outside_git_repo() {
 }
 
 #[test]
-fn missing_coverage_json_is_reported_as_clap_usage_error() {
+fn missing_check_subcommand_is_reported_as_clap_usage_error() {
     let temp = tempdir().expect("tempdir should exist");
 
     let output = run_covgate_raw(temp.path(), &[]);
     assert_eq!(output.status.code(), Some(2));
     let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
     assert!(
-        stderr.contains("the following required arguments were not provided:"),
+        stderr.contains("Usage: covgate <COMMAND>"),
         "stderr={stderr}"
     );
+    assert!(stderr.contains("Commands:"), "stderr={stderr}");
+}
+
+#[test]
+fn missing_check_coverage_report_is_reported_as_clap_usage_error() {
+    let temp = tempdir().expect("tempdir should exist");
+
+    let output = run_covgate_raw(temp.path(), &["check".to_string()]);
+    assert_eq!(output.status.code(), Some(2));
+    let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
     assert!(
-        stderr.contains("--coverage-json <COVERAGE_JSON>"),
+        stderr.contains("the following required arguments were not provided"),
         "stderr={stderr}"
     );
+    assert!(stderr.contains("<COVERAGE_REPORT>"), "stderr={stderr}");
 }
 
 #[test]
@@ -71,6 +82,7 @@ fn help_lists_record_base_as_subcommand() {
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
     assert!(stdout.contains("Commands:"), "stdout={stdout}");
+    assert!(stdout.contains("check"), "stdout={stdout}");
     assert!(stdout.contains("record-base"), "stdout={stdout}");
 }
 
@@ -108,6 +120,101 @@ fn record_base_is_idempotent() {
 }
 
 #[test]
+fn record_base_refreshes_after_branch_switch() {
+    let fixture = rust_basic_pass_fixture();
+    let temp = tempdir().expect("tempdir should exist");
+    let worktree = setup_fixture_worktree(temp.path(), fixture);
+    run_git(&worktree, &["branch", "-M", "main"]);
+
+    let first = run_covgate_raw(&worktree, &["record-base".to_string()]);
+    assert_eq!(first.status.code(), Some(0));
+    let first_ref = std::process::Command::new("git")
+        .args(["rev-parse", "--verify", "refs/worktree/covgate/base"])
+        .current_dir(&worktree)
+        .output()
+        .expect("git rev-parse should run");
+    let first_sha = String::from_utf8(first_ref.stdout).expect("sha should be utf8");
+
+    run_git(&worktree, &["checkout", "-b", "task/refresh"]);
+    fs::write(worktree.join("refresh.txt"), "refresh\n").expect("file should write");
+    run_git(&worktree, &["add", "."]);
+    run_git(&worktree, &["commit", "-m", "refresh branch work"]);
+
+    let second = run_covgate_raw(&worktree, &["record-base".to_string()]);
+    assert_eq!(second.status.code(), Some(0));
+    let second_stdout = String::from_utf8(second.stdout).expect("stdout should be utf8");
+    assert!(
+        second_stdout.contains("Refreshed base commit"),
+        "stdout={second_stdout}"
+    );
+    assert!(
+        second_stdout.contains("for branch task/refresh"),
+        "stdout={second_stdout}"
+    );
+
+    let second_ref = std::process::Command::new("git")
+        .args(["rev-parse", "--verify", "refs/worktree/covgate/base"])
+        .current_dir(&worktree)
+        .output()
+        .expect("git rev-parse should run");
+    let second_sha = String::from_utf8(second_ref.stdout).expect("sha should be utf8");
+    assert_ne!(second_sha.trim(), first_sha.trim());
+}
+
+#[test]
+fn covgate_includes_dirty_worktree_changes_by_default() {
+    let fixture = rust_basic_pass_fixture();
+    let temp = tempdir().expect("tempdir should exist");
+    let worktree = setup_fixture_worktree(temp.path(), fixture);
+
+    fs::write(
+        worktree.join("dirty.txt"),
+        "dirty
+",
+    )
+    .expect("dirty file should write");
+
+    let output = run_covgate(
+        &worktree,
+        fixture,
+        &["--fail-under-regions".to_string(), "90".to_string()],
+    );
+
+    assert_eq!(output.status.code(), Some(0));
+    let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
+    assert!(
+        !stderr.contains("working tree has uncommitted changes"),
+        "stderr={stderr}"
+    );
+}
+
+#[test]
+fn diff_file_mode_skips_dirty_worktree_guard() {
+    let fixture = rust_basic_pass_fixture();
+    let temp = tempdir().expect("tempdir should exist");
+    let worktree = setup_fixture_worktree(temp.path(), fixture);
+    let diff_file = write_worktree_diff(temp.path(), &worktree);
+
+    let output = run_covgate_with_coverage(
+        &worktree,
+        &fixture.coverage_json(),
+        &[
+            "--diff-file".to_string(),
+            diff_file.to_string_lossy().into_owned(),
+            "--fail-under-regions".to_string(),
+            "90".to_string(),
+        ],
+    );
+
+    assert_eq!(output.status.code(), Some(0));
+    let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
+    assert!(
+        !stderr.contains("working tree has uncommitted changes"),
+        "stderr={stderr}"
+    );
+}
+
+#[test]
 fn automatic_base_prefers_recorded_worktree_ref() {
     let fixture = rust_basic_pass_fixture();
     let temp = tempdir().expect("tempdir should exist");
@@ -135,7 +242,7 @@ fn automatic_base_prefers_recorded_worktree_ref() {
 
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-    assert!(stdout.contains("Diff: refs/worktree/covgate/base...HEAD"));
+    assert!(stdout.contains("Diff: refs/worktree/covgate/base...WORKTREE"));
 }
 
 #[test]
@@ -171,7 +278,7 @@ fn explicit_base_overrides_recorded_worktree_ref() {
 
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-    assert!(stdout.contains("Diff: main...HEAD"), "stdout={stdout}");
+    assert!(stdout.contains("Diff: main...WORKTREE"), "stdout={stdout}");
 }
 
 #[test]
@@ -284,7 +391,7 @@ fn pr_branch_against_main_fixture() {
 
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-    assert!(stdout.contains("Diff: main...HEAD"));
+    assert!(stdout.contains("Diff: main...WORKTREE"));
     assert!(stdout.contains("Diff Coverage: PASS"));
     assert!(stdout.contains("Coverage: 100.00%"));
 }
@@ -310,12 +417,14 @@ fn uses_repo_config_defaults_for_base_and_threshold() {
         "base = \"main\"\n[gates]\nfail_under_regions = 0.0\n",
     )
     .expect("config should be written");
+    run_git(&worktree, &["add", "covgate.toml"]);
+    run_git(&worktree, &["commit", "-m", "add covgate defaults"]);
 
     let output = run_covgate(&worktree, fixture, &[]);
 
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-    assert!(stdout.contains("Diff: main...HEAD"));
+    assert!(stdout.contains("Diff: main...WORKTREE"));
     assert!(stdout.contains("Rule fail-under-regions: PASS"));
     assert!(stdout.contains("Coverage:"));
 }
@@ -341,6 +450,8 @@ fn mixed_cli_over_toml_precedence() {
         "base = \"main\"\n[gates]\nfail_under_regions = 0.0\nfail_uncovered_regions = 10\n",
     )
     .expect("config should be written");
+    run_git(&worktree, &["add", "covgate.toml"]);
+    run_git(&worktree, &["commit", "-m", "add covgate defaults"]);
 
     let output = run_covgate(
         &worktree,
@@ -350,7 +461,7 @@ fn mixed_cli_over_toml_precedence() {
 
     assert_eq!(output.status.code(), Some(1));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-    assert!(stdout.contains("Diff: main...HEAD"));
+    assert!(stdout.contains("Diff: main...WORKTREE"));
     assert!(stdout.contains("Rule fail-under-regions: PASS"));
     assert!(stdout.contains("Rule fail-uncovered-regions: FAIL"));
     assert!(stdout.contains("Diff Coverage: FAIL"));
@@ -377,6 +488,8 @@ fn cli_threshold_overrides_repo_config_default() {
         "base = \"main\"\n[gates]\nfail_under_regions = 0.0\n",
     )
     .expect("config should be written");
+    run_git(&worktree, &["add", "covgate.toml"]);
+    run_git(&worktree, &["commit", "-m", "add covgate defaults"]);
 
     let output = run_covgate(
         &worktree,
@@ -386,7 +499,7 @@ fn cli_threshold_overrides_repo_config_default() {
 
     assert_eq!(output.status.code(), Some(1));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-    assert!(stdout.contains("Diff: main...HEAD"));
+    assert!(stdout.contains("Diff: main...WORKTREE"));
     assert!(stdout.contains("Rule fail-under-regions: FAIL"));
     assert!(stdout.contains("Diff Coverage: FAIL"));
 }

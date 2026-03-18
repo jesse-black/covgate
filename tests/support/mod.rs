@@ -240,7 +240,7 @@ pub fn run_covgate_with_coverage(
 ) -> Output {
     let binary = env!("CARGO_BIN_EXE_covgate");
     let mut command = Command::new(binary);
-    command.arg("--coverage-json");
+    command.arg("check");
     command.arg(coverage_json);
     command.args(extra_args);
     command.current_dir(worktree);

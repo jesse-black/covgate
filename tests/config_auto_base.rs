@@ -54,7 +54,7 @@ fn config_uses_recorded_base_when_base_is_omitted() {
     record_base_ref().expect("record-base should succeed");
 
     let cfg = Config::try_from(Args {
-        coverage_json: Some("coverage.json".into()),
+        coverage_report: "coverage.json".into(),
         base: None,
         diff_file: None,
         fail_under_regions: Some(1.0),

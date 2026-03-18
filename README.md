@@ -75,7 +75,7 @@ Run `covgate` in your CI pipeline after your tests generate coverage artifacts. 
 
 ### CLI Surface
 
-* `--coverage-json <FILE>`: Path to native JSON coverage export
+* `check <coverage-report>`: Run coverage gates for the provided report
 * `--base <REF>`: Git base reference to diff against
 * `--diff-file <FILE>`: Precomputed unified diff file
 * `--fail-under-regions <PERCENT>`: Fails if changed-region coverage is below this threshold
@@ -99,7 +99,7 @@ Run `covgate` in your CI pipeline after your tests generate coverage artifacts. 
 cargo llvm-cov --json --output-path coverage.json
 
 # Run covgate against the origin/main branch, failing if uncovered regions > 1
-covgate --coverage-json coverage.json --base origin/main --fail-uncovered-regions 1
+covgate check coverage.json --base origin/main --fail-uncovered-regions 1
 ```
 
 ### Autonomous Agent Workflows: Recording a Stable Base
@@ -107,6 +107,10 @@ covgate --coverage-json coverage.json --base origin/main --fail-uncovered-region
 In cloud agent environments, base branches like `origin/main` are intentionally inaccessible for security sandboxing. Run `covgate record-base` at task start to capture a stable per-worktree base commit.
 
 When `--base` is omitted, `covgate` automatically checks `refs/worktree/covgate/base` before checking standard fallback refs (`origin/HEAD`, `origin/main`, `main`). Explicit `--base` still takes precedence.
+
+When diffing against a Git base, `covgate` compares the merge-base snapshot to your current worktree. This includes committed changes plus staged/unstaged tracked edits, so local diagnosis reflects in-progress work.
+
+The recorded base is kept per branch so separate agent task branches keep separate stable diff anchors.
 
 ```bash
 # Capture a stable base commit at task start
@@ -116,25 +120,16 @@ covgate record-base
 
 # Generate coverage and gate locally against the recorded base
 cargo llvm-cov --json --output-path coverage.json
-covgate --coverage-json coverage.json --fail-under-regions 90
+covgate check coverage.json --fail-under-regions 90
 ```
 
 The Codex Cloud environment settings maintenance script should include `covgate record-base` so coverage gating can validate the task reliably. Jules does not have a maintenance-script setting, so `AGENTS` instructions should require running `covgate record-base` before every task.
-
-If you prefer to run the underlying Git plumbing directly, these are the commands `covgate record-base` uses:
-
-```bash
-# Check if the base ref exists, and if not, record HEAD
-git rev-parse -q --verify refs/worktree/covgate/base >/dev/null || \
-  git update-ref refs/worktree/covgate/base HEAD
-```
 
 ### Configuration (`covgate.toml`)
 
 `covgate` reads repository-local defaults from `covgate.toml` at the repository root so teams can keep their gate configuration checked in with the code. CLI flags always override config values.
 
 You can specify a default `base` and `markdown_output` at the top level, along with minimum percentage (`fail_under_*`) and maximum uncovered count (`fail_uncovered_*`) rules under `[gates]`.
-
 ```toml
 # Set a default comparison base and output file
 base = "origin/main"
@@ -156,7 +151,7 @@ With `covgate.toml` checked in, local invocations become frictionless:
 
 ```bash
 # Run covgate using the thresholds and base defined in covgate.toml
-covgate --coverage-json coverage.json
+covgate check coverage.json
 ```
 
 ## GitHub Actions
@@ -168,7 +163,7 @@ Generate native JSON coverage, run `covgate`, and seamlessly write the results t
   run: cargo llvm-cov --json --output-path coverage.json
 
 - name: Gate Pull Request
-  run: covgate --coverage-json coverage.json --markdown-output "$GITHUB_STEP_SUMMARY"
+  run: covgate check coverage.json --markdown-output "$GITHUB_STEP_SUMMARY"
 ```
 
 Because `covgate` supports repository-local defaults, a checked-in `covgate.toml` guarantees local hooks and CI pipelines enforce the exact same thresholds.
