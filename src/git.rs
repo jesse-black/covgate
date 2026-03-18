@@ -64,7 +64,6 @@ pub fn create_ref(reference: &str, target: &str) -> Result<()> {
     Ok(())
 }
 
-#[inline(never)]
 fn resolve_git_path(path: &str) -> Result<PathBuf> {
     let output = git_output(
         &["rev-parse", "--git-path", path],
@@ -81,7 +80,6 @@ fn resolve_git_path(path: &str) -> Result<PathBuf> {
     stdout_utf8(output, "git rev-parse output was not valid utf-8").map(PathBuf::from)
 }
 
-#[inline(never)]
 fn resolve_current_branch() -> Result<Option<String>> {
     let output = git_output(
         &["symbolic-ref", "--quiet", "--short", "HEAD"],
@@ -102,7 +100,6 @@ fn resolve_current_branch() -> Result<Option<String>> {
     stdout_utf8(output, "git symbolic-ref output was not valid utf-8").map(Some)
 }
 
-#[inline(never)]
 fn read_recorded_branch_marker() -> Result<Option<String>> {
     let marker_path = resolve_git_path(RECORDED_BASE_BRANCH_MARKER)?;
     if !marker_path.exists() {
@@ -119,7 +116,6 @@ fn read_recorded_branch_marker() -> Result<Option<String>> {
     Ok(Some(branch.to_string()))
 }
 
-#[inline(never)]
 fn write_recorded_branch_marker(branch: &str) -> Result<()> {
     let marker_path = resolve_git_path(RECORDED_BASE_BRANCH_MARKER)?;
     if let Some(parent) = marker_path.parent() {
@@ -129,7 +125,6 @@ fn write_recorded_branch_marker(branch: &str) -> Result<()> {
         .context("failed to write recorded base branch marker")
 }
 
-#[inline(never)]
 fn is_ancestor(ancestor: &str, descendant: &str) -> Result<bool> {
     let output = git_output(
         &["merge-base", "--is-ancestor", ancestor, descendant],
