@@ -134,6 +134,27 @@ fn is_ancestor(ancestor: &str, descendant: &str) -> Result<bool> {
     Ok(output.status.success())
 }
 
+pub fn list_untracked_files() -> Result<Vec<String>> {
+    let output = git_output(
+        &["ls-files", "--others", "--exclude-standard"],
+        "failed to run git ls-files for untracked files",
+    )?;
+
+    if !output.status.success() {
+        bail!(
+            "failed to list untracked files: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+
+    let stdout = stdout_utf8(output, "git ls-files output was not valid utf-8")?;
+    if stdout.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    Ok(stdout.lines().map(ToString::to_string).collect())
+}
+
 pub fn discover_base_ref() -> Result<Option<String>> {
     for candidate in [
         RECORDED_BASE_REF,
@@ -190,4 +211,54 @@ pub fn record_base_ref() -> Result<String> {
     }
     println!("Recorded base commit {head_sha} at {RECORDED_BASE_REF}");
     Ok(head_sha)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{env, fs};
+
+    use tempfile::tempdir;
+
+    use super::list_untracked_files;
+    use crate::test_support::CWD_LOCK;
+
+    struct CwdGuard(std::path::PathBuf);
+    impl Drop for CwdGuard {
+        fn drop(&mut self) {
+            let _ = env::set_current_dir(&self.0);
+        }
+    }
+
+    #[test]
+    fn list_untracked_files_reports_empty_and_non_empty_results() {
+        let _lock = CWD_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
+        let temp = tempdir().expect("tempdir should exist");
+        let previous = env::current_dir().expect("cwd should resolve");
+        let _guard = CwdGuard(previous);
+        env::set_current_dir(temp.path()).expect("should chdir into tempdir");
+        let git = |args: &[&str]| {
+            let output = std::process::Command::new("git")
+                .args(args)
+                .output()
+                .expect("git command should run");
+            assert!(output.status.success(), "git {:?} failed", args);
+        };
+        git(&["init"]);
+        git(&["config", "user.email", "covgate@example.com"]);
+        git(&["config", "user.name", "Covgate Tests"]);
+        fs::write("tracked.txt", "tracked\n").expect("tracked file should write");
+        git(&["add", "."]);
+        git(&["commit", "-m", "baseline"]);
+
+        assert!(
+            list_untracked_files()
+                .expect("listing should succeed")
+                .is_empty()
+        );
+        fs::write("new_untracked.rs", "pub fn pending() {}\n").expect("file should write");
+        assert_eq!(
+            list_untracked_files().expect("listing should succeed"),
+            vec!["new_untracked.rs"]
+        );
+    }
 }
