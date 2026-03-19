@@ -6,8 +6,8 @@ use std::sync::Mutex;
 use tempfile::tempdir;
 
 use covgate::git::{
-    RECORDED_BASE_REF, create_ref, discover_base_ref, record_base_ref, resolve_head_sha,
-    resolve_ref_sha,
+    RECORDED_BASE_REF, create_ref, discover_base_ref, list_untracked_files, record_base_ref,
+    resolve_head_sha, resolve_ref_sha,
 };
 use support::run_git;
 
@@ -181,6 +181,24 @@ fn record_base_detached_head_refreshes_when_recorded_commit_is_not_ancestor() {
         let refreshed =
             record_base_ref().expect("record-base should refresh on detached divergent commit");
         assert_eq!(refreshed, side_b);
+    });
+}
+
+#[test]
+fn list_untracked_files_reports_new_paths_and_empty_state() {
+    with_temp_git_repo(|repo| {
+        let initial = list_untracked_files().expect("listing should succeed");
+        assert!(initial.is_empty());
+
+        fs::write(
+            repo.join("new-file.rs"),
+            "pub fn pending() {}
+",
+        )
+        .expect("file should write");
+
+        let listed = list_untracked_files().expect("listing should succeed");
+        assert_eq!(listed, vec!["new-file.rs"]);
     });
 }
 
