@@ -33,7 +33,7 @@ You will know this is working when all of the following are true:
 - [x] (2026-03-17 22:05Z) Added default-on dirty-worktree protection in `covgate` for Git-base diff mode, with CLI/config opt-outs and explicit diff-file bypass behavior verified by tests.
 - [x] (2026-03-17 21:26Z) Added branch-refresh regression coverage and passed full repository validation, including `cargo xtask validate`.
 - [x] (2026-03-18 01:40Z) Coverage-gate hardening follow-up completed: added focused Git/diff regression tests, confirmed the Git-helper `#[inline(never)]` attributes were no longer needed, and restored `cargo xtask validate` without reducing repository default gates.
-- [x] (2026-03-19 00:35Z) Added a default Git-base-mode untracked-files warning with regression coverage, clarifying that untracked paths can cause false passes unless users add them with `git add -N <path>`.
+- [x] (2026-03-19 00:35Z) Added a default Git-base-mode untracked-files warning with regression coverage, clarifying that untracked paths can cause false passes unless users add them with a copy/paste-ready `git add -N ...` command.
 - [x] (2026-03-19 00:50Z) Final validation passed and this ExecPlan was closed out by moving it to `docs/exec-plans/completed/`.
 
 ## Surprises & Discoveries
@@ -60,7 +60,7 @@ You will know this is working when all of the following are true:
   Evidence: gate thresholds in `covgate.toml` were reverted after review feedback; remediation should come from additional tests/coverage, not weaker defaults.
 
 - Observation: Even with dirty-worktree handling in place, Git-base diff mode can still falsely pass when brand-new untracked files are present because those paths are omitted from diff gating until they are added with index intent.
-  Evidence: a new failing CLI regression test created `new_untracked.rs`, observed no stderr guidance before the fix, and passed once `covgate` emitted an explicit warning recommending `git add -N <path>`.
+  Evidence: a new failing CLI regression test created `new_untracked.rs`, observed no stderr guidance before the fix, and passed once `covgate` emitted an explicit warning with a copy/paste-ready `git add -N ...` command for the actual paths.
 
 - Observation: Some changed uncovered regions in `src/git.rs` are private helper error paths (for example subprocess spawn failures in `resolve_git_path`) that are difficult to reach through public APIs, creating a coverage hardening blocker under strict changed-file gates.
   Evidence: `cargo xtask validate` reports uncovered changed regions in private helper branches despite full test-suite pass, and attempts to cover them via in-file tests inflated changed regions further.
@@ -106,7 +106,7 @@ You will know this is working when all of the following are true:
 
 ## Outcomes & Retrospective
 
-This ExecPlan is complete. `covgate` now supports explicit `check` and `record-base` subcommands, records branch-aware worktree-local bases, keeps raw-Git agent maintenance aligned with the product behavior, and warns that Git-base-mode diff gating can falsely pass when brand-new untracked files have not yet been added with `git add -N`.
+This ExecPlan is complete. `covgate` now supports explicit `check` and `record-base` subcommands, records branch-aware worktree-local bases, keeps raw-Git agent maintenance aligned with the product behavior, and warns that Git-base-mode diff gating can falsely pass when brand-new untracked files have not yet been added, including a copy/paste-ready `git add -N ...` command for the current paths.
 
 The final validation pass confirmed the workflow end to end: targeted CLI regressions for the new untracked-files warning pass, repository validation remains green under the existing default gates, and the plan has been moved to `docs/exec-plans/completed/` as the canonical historical record. The main lesson from the final follow-up is that “dirty worktree” guidance was not sufficient on its own; users also need explicit explanation of Git’s untracked-file blind spot so coverage diagnosis matches what the CLI can actually see.
 
@@ -216,7 +216,7 @@ Run all commands from repository root `/home/jesse/git/covgate` unless otherwise
 
     Step D — Run full validation (`cargo xtask quick`, `cargo xtask validate`) with strict defaults unchanged.
 
-    ⚠️ Untracked-files warning: untracked files are not included in diff gating and can produce a false pass. Add them with `git add -N <path>`.
+    ⚠️ Untracked-files warning: untracked files are not included in diff gating and can produce a false pass. Add them with: `git add -N new_untracked.rs`.
 
     Step E — If strict-gate blockers persist due to private helper error paths, pause feature edits and introduce a minimal test seam for Git subprocess execution (for example a small injectable command-runner trait or function pointer gated to tests) so failure branches can be exercised from integration tests without changing gate policy.
 
@@ -225,7 +225,7 @@ Run all commands from repository root `/home/jesse/git/covgate` unless otherwise
     Potential blockers to monitor:
     - LLVM inlining collapsing changed helper functions into callsites and obscuring per-function coverage attribution.
     - Branch-specific/ref-state logic requiring non-trivial Git fixture setup (detached HEAD, marker missing, divergent ancestry).
-    - Untracked files are not included in diff gating until they are added with `git add -N <path>`, so otherwise a check can falsely pass.
+    - Untracked files are not included in diff gating until they are added, so the warning should print a copy/paste-ready `git add -N ...` command for the current paths.
 
     Policy reminder: gate defaults are project policy and must remain unchanged unless maintainers explicitly request a gate policy change.
 

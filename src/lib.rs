@@ -61,12 +61,30 @@ fn emit_untracked_files_warning(config: &Config) -> Result<()> {
         return Ok(());
     }
 
+    let add_command = format_git_add_command(&untracked_files);
     eprintln!(
-        "⚠️ Untracked-files warning: untracked files are not included in diff gating and can produce a false pass. Add them with `git add -N <path>`. Untracked paths: {}",
-        untracked_files.join(", ")
+        "⚠️ Untracked-files warning: untracked files are not included in diff gating and can produce a false pass. Add them with: `{add_command}`."
     );
 
     Ok(())
+}
+
+fn format_git_add_command(paths: &[String]) -> String {
+    let escaped_paths = paths
+        .iter()
+        .map(|path| {
+            if path
+                .chars()
+                .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '/' | '.' | '_' | '-'))
+            {
+                path.clone()
+            } else {
+                format!("'{}'", path.replace('\'', "'\''"))
+            }
+        })
+        .collect::<Vec<_>>();
+
+    format!("git add -N {}", escaped_paths.join(" "))
 }
 
 #[cfg(test)]
@@ -82,7 +100,7 @@ mod tests {
 
     use tempfile::tempdir;
 
-    use super::emit_untracked_files_warning;
+    use super::{emit_untracked_files_warning, format_git_add_command};
     use crate::{config::Config, diff::DiffSource, test_support::CWD_LOCK};
 
     struct CwdGuard(std::path::PathBuf);
@@ -99,6 +117,15 @@ mod tests {
             rules: Vec::new(),
             markdown_output: None,
         }
+    }
+
+    #[test]
+    fn format_git_add_command_quotes_only_when_needed() {
+        assert_eq!(
+            format_git_add_command(&["new_untracked.rs".to_string(), "dir/extra.rs".to_string()]),
+            "git add -N new_untracked.rs dir/extra.rs"
+        );
+        assert!(format_git_add_command(&["space name.rs".to_string()]).contains("'space name.rs'"));
     }
 
     #[test]
