@@ -8,13 +8,13 @@ pub mod metrics;
 pub mod model;
 pub mod render;
 
-use anyhow::Result;
+use anyhow::{Context, Result, bail};
 
-use crate::config::Config;
+use crate::{config::Config, diff::DiffSource, model::ChangedFile};
 
 pub fn run(config: Config) -> Result<i32> {
     let report = coverage::parse_path(&config.coverage_report)?;
-    let diff = diff::load_changed_lines(&config.diff_source)?;
+    let diff = load_changed_lines_with_warnings(&config.diff_source)?;
 
     let mut metrics = Vec::new();
     let mut requested_metrics = config.rules.iter().map(|r| r.metric()).collect::<Vec<_>>();
@@ -49,9 +49,71 @@ pub fn run(config: Config) -> Result<i32> {
     Ok(if gate_result.passed { 0 } else { 1 })
 }
 
-#[cfg(test)]
-pub mod test_support {
-    use std::sync::Mutex;
+fn load_changed_lines_with_warnings(source: &DiffSource) -> Result<Vec<ChangedFile>> {
+    emit_untracked_files_warning(source)?;
+    diff::load_changed_lines(source)
+}
 
-    pub static CWD_LOCK: Mutex<()> = Mutex::new(());
+fn emit_untracked_files_warning(source: &DiffSource) -> Result<()> {
+    if !matches!(source, DiffSource::GitBase(_)) {
+        return Ok(());
+    }
+
+    let untracked_files = list_untracked_files()?;
+    if untracked_files.is_empty() {
+        return Ok(());
+    }
+
+    let add_command = format_git_add_command(&untracked_files);
+    eprintln!(
+        "⚠️ Untracked-files warning: untracked files are not included in diff gating and can produce a false pass. Add them with: `{add_command}`."
+    );
+    Ok(())
+}
+
+fn list_untracked_files() -> Result<Vec<String>> {
+    let output = std::process::Command::new("git")
+        .args(["ls-files", "--others", "--exclude-standard"])
+        .output()
+        .context("failed to run git ls-files for untracked files")?;
+
+    if !output.status.success() {
+        bail!(
+            "failed to list untracked files: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+
+    let stdout =
+        String::from_utf8(output.stdout).context("git ls-files output was not valid utf-8")?;
+    let trimmed = stdout.trim();
+    if trimmed.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut untracked_files = Vec::new();
+    for path in trimmed.lines() {
+        untracked_files.push(path.to_string());
+    }
+    Ok(untracked_files)
+}
+
+fn format_git_add_command(paths: &[String]) -> String {
+    let mut command = String::from("git add -N");
+    for path in paths {
+        command.push(' ');
+        command.push_str(&shell_escape_path(path));
+    }
+    command
+}
+
+fn shell_escape_path(path: &str) -> String {
+    if path
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '/' | '.' | '_' | '-'))
+    {
+        return path.to_string();
+    }
+
+    format!("'{}'", path.replace('\'', "'\''"))
 }

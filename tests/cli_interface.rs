@@ -215,6 +215,72 @@ fn diff_file_mode_skips_dirty_worktree_guard() {
 }
 
 #[test]
+fn git_base_mode_warns_about_untracked_files() {
+    let fixture = rust_basic_pass_fixture();
+    let temp = tempdir().expect("tempdir should exist");
+    let worktree = setup_fixture_worktree(temp.path(), fixture);
+
+    fs::write(
+        worktree.join("new_untracked.rs"),
+        "pub fn pending() {}
+",
+    )
+    .expect("untracked file should write");
+
+    let output = run_covgate(
+        &worktree,
+        fixture,
+        &["--fail-under-regions".to_string(), "90".to_string()],
+    );
+
+    assert_eq!(output.status.code(), Some(0));
+    let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
+    assert!(
+        stderr.contains("Untracked-files warning"),
+        "stderr={stderr}"
+    );
+    assert!(stderr.contains("false pass"), "stderr={stderr}");
+    assert!(stderr.contains("Add them with:"), "stderr={stderr}");
+    assert!(
+        stderr.contains("git add -N new_untracked.rs"),
+        "stderr={stderr}"
+    );
+}
+
+#[test]
+fn diff_file_mode_skips_untracked_files_warning() {
+    let fixture = rust_basic_pass_fixture();
+    let temp = tempdir().expect("tempdir should exist");
+    let worktree = setup_fixture_worktree(temp.path(), fixture);
+    let diff_file = write_worktree_diff(temp.path(), &worktree);
+
+    fs::write(
+        worktree.join("new_untracked.rs"),
+        "pub fn pending() {}
+",
+    )
+    .expect("untracked file should write");
+
+    let output = run_covgate_with_coverage(
+        &worktree,
+        &fixture.coverage_json(),
+        &[
+            "--diff-file".to_string(),
+            diff_file.to_string_lossy().into_owned(),
+            "--fail-under-regions".to_string(),
+            "90".to_string(),
+        ],
+    );
+
+    assert_eq!(output.status.code(), Some(0));
+    let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
+    assert!(
+        !stderr.contains("Untracked-files warning"),
+        "stderr={stderr}"
+    );
+}
+
+#[test]
 fn automatic_base_prefers_recorded_worktree_ref() {
     let fixture = rust_basic_pass_fixture();
     let temp = tempdir().expect("tempdir should exist");
