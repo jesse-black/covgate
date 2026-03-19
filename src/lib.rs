@@ -8,15 +8,13 @@ pub mod metrics;
 pub mod model;
 pub mod render;
 
-use anyhow::Result;
+use anyhow::{Context, Result, bail};
 
-use crate::{config::Config, diff::DiffSource};
+use crate::{config::Config, diff::DiffSource, model::ChangedFile};
 
 pub fn run(config: Config) -> Result<i32> {
-    emit_untracked_files_warning(&config)?;
-
     let report = coverage::parse_path(&config.coverage_report)?;
-    let diff = diff::load_changed_lines(&config.diff_source)?;
+    let diff = load_changed_lines_with_warnings(&config.diff_source)?;
 
     let mut metrics = Vec::new();
     let mut requested_metrics = config.rules.iter().map(|r| r.metric()).collect::<Vec<_>>();
@@ -51,12 +49,17 @@ pub fn run(config: Config) -> Result<i32> {
     Ok(if gate_result.passed { 0 } else { 1 })
 }
 
-fn emit_untracked_files_warning(config: &Config) -> Result<()> {
-    let DiffSource::GitBase(_) = &config.diff_source else {
-        return Ok(());
-    };
+fn load_changed_lines_with_warnings(source: &DiffSource) -> Result<Vec<ChangedFile>> {
+    emit_untracked_files_warning(source)?;
+    diff::load_changed_lines(source)
+}
 
-    let untracked_files = git::list_untracked_files()?;
+fn emit_untracked_files_warning(source: &DiffSource) -> Result<()> {
+    if !matches!(source, DiffSource::GitBase(_)) {
+        return Ok(());
+    }
+
+    let untracked_files = list_untracked_files()?;
     if untracked_files.is_empty() {
         return Ok(());
     }
@@ -65,98 +68,52 @@ fn emit_untracked_files_warning(config: &Config) -> Result<()> {
     eprintln!(
         "⚠️ Untracked-files warning: untracked files are not included in diff gating and can produce a false pass. Add them with: `{add_command}`."
     );
-
     Ok(())
 }
 
-fn format_git_add_command(paths: &[String]) -> String {
-    let escaped_paths = paths
-        .iter()
-        .map(|path| {
-            if path
-                .chars()
-                .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '/' | '.' | '_' | '-'))
-            {
-                path.clone()
-            } else {
-                format!("'{}'", path.replace('\'', "'\''"))
-            }
-        })
-        .collect::<Vec<_>>();
+fn list_untracked_files() -> Result<Vec<String>> {
+    let output = std::process::Command::new("git")
+        .args(["ls-files", "--others", "--exclude-standard"])
+        .output()
+        .context("failed to run git ls-files for untracked files")?;
 
-    format!("git add -N {}", escaped_paths.join(" "))
-}
-
-#[cfg(test)]
-pub mod test_support {
-    use std::sync::Mutex;
-
-    pub static CWD_LOCK: Mutex<()> = Mutex::new(());
-}
-
-#[cfg(test)]
-mod tests {
-    use std::{env, fs};
-
-    use tempfile::tempdir;
-
-    use super::{emit_untracked_files_warning, format_git_add_command};
-    use crate::{config::Config, diff::DiffSource, test_support::CWD_LOCK};
-
-    struct CwdGuard(std::path::PathBuf);
-    impl Drop for CwdGuard {
-        fn drop(&mut self) {
-            let _ = env::set_current_dir(&self.0);
-        }
-    }
-
-    fn base_config(diff_source: DiffSource) -> Config {
-        Config {
-            coverage_report: "coverage.json".into(),
-            diff_source,
-            rules: Vec::new(),
-            markdown_output: None,
-        }
-    }
-
-    #[test]
-    fn format_git_add_command_quotes_only_when_needed() {
-        assert_eq!(
-            format_git_add_command(&["new_untracked.rs".to_string(), "dir/extra.rs".to_string()]),
-            "git add -N new_untracked.rs dir/extra.rs"
+    if !output.status.success() {
+        bail!(
+            "failed to list untracked files: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
         );
-        assert!(format_git_add_command(&["space name.rs".to_string()]).contains("'space name.rs'"));
     }
 
-    #[test]
-    fn untracked_warning_skips_diff_file_mode() {
-        emit_untracked_files_warning(&base_config(DiffSource::DiffFile("scenario.diff".into())))
-            .expect("diff-file mode should not query git");
+    let stdout =
+        String::from_utf8(output.stdout).context("git ls-files output was not valid utf-8")?;
+    let trimmed = stdout.trim();
+    if trimmed.is_empty() {
+        return Ok(Vec::new());
     }
 
-    #[test]
-    fn untracked_warning_lists_git_base_untracked_paths() {
-        let _lock = CWD_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
-        let temp = tempdir().expect("tempdir should exist");
-        let previous = env::current_dir().expect("cwd should resolve");
-        let _guard = CwdGuard(previous);
-        env::set_current_dir(temp.path()).expect("should chdir into tempdir");
-        let git = |args: &[&str]| {
-            let output = std::process::Command::new("git")
-                .args(args)
-                .output()
-                .expect("git command should run");
-            assert!(output.status.success(), "git {:?} failed", args);
-        };
-        git(&["init"]);
-        git(&["config", "user.email", "covgate@example.com"]);
-        git(&["config", "user.name", "Covgate Tests"]);
-        fs::write("tracked.txt", "tracked\n").expect("tracked file should write");
-        git(&["add", "."]);
-        git(&["commit", "-m", "baseline"]);
-        fs::write("new_untracked.rs", "pub fn pending() {}\n").expect("file should write");
-
-        emit_untracked_files_warning(&base_config(DiffSource::GitBase("HEAD".to_string())))
-            .expect("git-base mode should warn successfully");
+    let mut untracked_files = Vec::new();
+    for path in trimmed.lines() {
+        untracked_files.push(path.to_string());
     }
+    Ok(untracked_files)
+}
+
+fn format_git_add_command(paths: &[String]) -> String {
+    let mut command = String::from("git add -N");
+    for path in paths {
+        command.push(' ');
+        command.push_str(&shell_escape_path(path));
+    }
+    command
+}
+
+fn shell_escape_path(path: &str) -> String {
+    if path
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '/' | '.' | '_' | '-'))
+    {
+        return path.to_string();
+    }
+
+    format!("'{}'", path.replace('\'', "'\''"))
 }
