@@ -15,11 +15,6 @@ See `docs/reference/environment-execution-contexts.md` for deeper rationale, sou
 - .NET workflows: `dotnet` SDK
 - Rust workflows: `cargo llvm-cov`, `cargo-machete`, `cargo-deny` (plus `llvm-tools-preview` via `rustup component add` when `rustup` is present)
 
-### Base-ref maintenance for cloud agents
-
-- `scripts/agent-env-setup.sh` installs and updates tools.
-- `scripts/agent-env-maintenance.sh` uses raw Git plumbing to keep `refs/worktree/covgate/base` branch-aware: same-branch runs stay idempotent, while branch changes refresh the recorded base, all without building `covgate`.
-
 ### Available in devcontainer
 
 - Core CLI/build tools: `git`, `curl`, `jq`, `ripgrep`, `fd`, `zip/unzip`, `build-essential`

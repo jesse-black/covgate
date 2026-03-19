@@ -69,7 +69,7 @@ You will know this is working when all of the following are true:
   Evidence: local validate runs showed persistent uncovered helper spans/functions; this requires staged coverage work rather than policy changes.
 
 - Observation: `scripts/agent-env-maintenance.sh` already bypasses `cargo run -- record-base` and uses raw Git plumbing directly because compiling `covgate` during maintenance was too slow for practical agent startup.
-  Evidence: the script now checks `git rev-parse -q --verify refs/worktree/covgate/base` and then falls back to `git update-ref refs/worktree/covgate/base HEAD` without invoking `covgate` or `cargo`.
+  Evidence: at the time of implementation, the script checked `git rev-parse -q --verify refs/worktree/covgate/base` and then used `git update-ref refs/worktree/covgate/base HEAD` as a temporary internal maintenance fallback rather than invoking `covgate` or `cargo`. This was an implementation constraint, not recommended agent validation workflow.
 
 - Observation: `src/main.rs` currently owns Clap-specific validation logic for missing `--coverage-json`, which is a symptom of the root command serving two different modes with incompatible required arguments.
   Evidence: `src/main.rs` constructs a Clap `MissingRequiredArgument` error manually when `cli.args.coverage_json.is_none()`.
@@ -301,12 +301,13 @@ Expected branch-change refresh transcript:
     $ covgate record-base
     Refreshed base commit fedcba9876543210fedcba9876543210fedcba98 at refs/worktree/covgate/base for branch task/two
 
-Expected maintenance-script-style raw Git behavior:
+Historical maintenance-script implementation note (not agent workflow guidance):
 
-    $ git rev-parse -q --verify refs/worktree/covgate/base
-    0123456789abcdef0123456789abcdef01234567
-    $ # branch marker differs from current branch, so maintenance refreshes:
-    $ git update-ref refs/worktree/covgate/base HEAD
+    At the time this plan was implemented, the automatic maintenance path checked
+    `git rev-parse -q --verify refs/worktree/covgate/base` and, when needed, used
+    `git update-ref refs/worktree/covgate/base HEAD` as a temporary internal
+    fallback to refresh the recorded ref. This note is preserved as implementation
+    history only; agents should not treat this as a manual validation step.
 
 Expected failure guidance excerpt when no base can be resolved:
 

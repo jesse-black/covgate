@@ -54,7 +54,7 @@ Furthermore, cloud agent sandboxes deliberately remove base branches like `main`
 
 `covgate` supports native coverage formats across several language ecosystems:
 
-* **Rust / C / C++ / Swift (LLVM JSON):** Region-aware gating from `llvm-cov` / `cargo llvm-cov`.
+* **Rust (LLVM JSON):** Region-aware gating from `llvm-cov` / `cargo llvm-cov`.
 * **JavaScript / TypeScript (Istanbul JSON):** Accurate line and branch gating from native JSON output.
 * **C# / .NET (Coverlet JSON):** Line and branch gating from Coverlet’s native JSON.
 
