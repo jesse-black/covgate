@@ -194,6 +194,12 @@ const FIXTURE_COVERAGE_SPECS: &[FixtureCoverageSpec] = &[
         run_mode: RunMode::NoCalls,
     },
     FixtureCoverageSpec {
+        id: "dotnet/duplicate-lines",
+        source_file: "src/CovgateDemo/MathOps.cs",
+        toolchain: FixtureToolchain::Dotnet,
+        run_mode: RunMode::NoCalls,
+    },
+    FixtureCoverageSpec {
         id: "vitest/basic-fail",
         source_file: "src/math.js",
         toolchain: FixtureToolchain::Vitest,
@@ -201,6 +207,12 @@ const FIXTURE_COVERAGE_SPECS: &[FixtureCoverageSpec] = &[
     },
     FixtureCoverageSpec {
         id: "vitest/basic-pass",
+        source_file: "src/math.js",
+        toolchain: FixtureToolchain::Vitest,
+        run_mode: RunMode::NoCalls,
+    },
+    FixtureCoverageSpec {
+        id: "vitest/statement-line-divergence",
         source_file: "src/math.js",
         toolchain: FixtureToolchain::Vitest,
         run_mode: RunMode::NoCalls,
@@ -346,11 +358,26 @@ fn write_vitest_fixture_coverage(spec: &FixtureCoverageSpec) -> Result<()> {
     copy_tree(&fixture_root.join("overlay"), &temp_dir)?;
 
     run_in_dir("npm", &["install"], &temp_dir)?;
-    run_in_dir("npx", &["vitest", "run", "--coverage"], &temp_dir)?;
+    run_in_dir(
+        "npx",
+        &[
+            "vitest",
+            "run",
+            "--coverage",
+            "--coverage.reporter=json",
+            "--coverage.reporter=json-summary",
+        ],
+        &temp_dir,
+    )?;
 
-    let raw_coverage = temp_dir.join("coverage").join("coverage-final.json");
+    let coverage_dir = temp_dir.join("coverage");
+    let raw_coverage = coverage_dir.join("coverage-final.json");
     let output_path = fixture_root.join("coverage.json");
     normalize_istanbul_coverage(&raw_coverage, spec.source_file, &output_path)?;
+    normalize_vitest_native_summary(
+        &coverage_dir.join("coverage-summary.json"),
+        &fixture_root.join("native-summary.json"),
+    )?;
 
     std::fs::remove_dir_all(&temp_dir).ok();
     eprintln!("updated {}", output_path.display());
@@ -382,13 +409,18 @@ fn write_dotnet_fixture_coverage(spec: &FixtureCoverageSpec) -> Result<()> {
             test_project
                 .to_str()
                 .context("dotnet test project path contained non-utf8 characters")?,
-            "--collect:XPlat Code Coverage;Format=json",
+            "--collect:XPlat Code Coverage;Format=json,cobertura",
         ],
     )?;
 
     let raw_coverage = find_coverage_json(&temp_dir)?;
     let output_path = fixture_root.join("coverage.json");
     normalize_coverlet_coverage(&raw_coverage, spec.source_file, &output_path)?;
+    let cobertura_summary = find_cobertura_xml(&temp_dir)?;
+    normalize_dotnet_native_summary(
+        &cobertura_summary,
+        &fixture_root.join("native-summary.json"),
+    )?;
 
     std::fs::remove_dir_all(&temp_dir).ok();
     eprintln!("updated {}", output_path.display());
@@ -591,6 +623,89 @@ fn normalize_istanbul_coverage(raw: &Path, source_file: &str, output: &Path) -> 
         .with_context(|| format!("failed to write fixture coverage: {}", output.display()))
 }
 
+fn normalize_dotnet_native_summary(raw: &Path, output: &Path) -> Result<()> {
+    let text = std::fs::read_to_string(raw)
+        .with_context(|| format!("failed to read raw cobertura xml: {}", raw.display()))?;
+
+    fn read_attr(text: &str, name: &str) -> Result<usize> {
+        let marker = format!("{name}=\"");
+        let start = text
+            .find(&marker)
+            .with_context(|| format!("failed to locate cobertura attribute `{name}`"))?
+            + marker.len();
+        let end = text[start..]
+            .find('"')
+            .with_context(|| format!("failed to terminate cobertura attribute `{name}`"))?
+            + start;
+        text[start..end]
+            .parse::<usize>()
+            .with_context(|| format!("failed to parse cobertura attribute `{name}`"))
+    }
+
+    let summary = serde_json::json!({
+        "line": {
+            "covered": read_attr(&text, "lines-covered")?,
+            "total": read_attr(&text, "lines-valid")?,
+        },
+        "branch": {
+            "covered": read_attr(&text, "branches-covered")?,
+            "total": read_attr(&text, "branches-valid")?,
+        },
+    });
+
+    let pretty = serde_json::to_string_pretty(&summary).context("failed to format json")?;
+    std::fs::write(
+        output,
+        format!(
+            "{pretty}
+"
+        ),
+    )
+    .with_context(|| format!("failed to write native summary: {}", output.display()))
+}
+
+fn normalize_vitest_native_summary(raw: &Path, output: &Path) -> Result<()> {
+    let text = std::fs::read_to_string(raw)
+        .with_context(|| format!("failed to read raw vitest summary json: {}", raw.display()))?;
+    let parsed: serde_json::Value =
+        serde_json::from_str(&text).context("failed to parse vitest coverage summary json")?;
+    let total = parsed
+        .get("total")
+        .context("vitest coverage summary should include a total section")?;
+
+    fn metric(summary: &serde_json::Value, name: &str) -> Result<serde_json::Value> {
+        let section = summary
+            .get(name)
+            .with_context(|| format!("vitest summary missing metric `{name}`"))?;
+        Ok(serde_json::json!({
+            "covered": section
+                .get("covered")
+                .and_then(serde_json::Value::as_u64)
+                .with_context(|| format!("vitest summary metric `{name}` missing covered count"))?,
+            "total": section
+                .get("total")
+                .and_then(serde_json::Value::as_u64)
+                .with_context(|| format!("vitest summary metric `{name}` missing total count"))?,
+        }))
+    }
+
+    let normalized = serde_json::json!({
+        "line": metric(total, "lines")?,
+        "branch": metric(total, "branches")?,
+        "function": metric(total, "functions")?,
+    });
+
+    let pretty = serde_json::to_string_pretty(&normalized).context("failed to format json")?;
+    std::fs::write(
+        output,
+        format!(
+            "{pretty}
+"
+        ),
+    )
+    .with_context(|| format!("failed to write native summary: {}", output.display()))
+}
+
 fn find_coverage_json(root: &Path) -> Result<PathBuf> {
     let mut stack = vec![root.to_path_buf()];
     while let Some(dir) = stack.pop() {
@@ -613,6 +728,34 @@ fn find_coverage_json(root: &Path) -> Result<PathBuf> {
 
     bail!(
         "failed to locate coverlet coverage.json under {}",
+        root.display()
+    )
+}
+
+fn find_cobertura_xml(root: &Path) -> Result<PathBuf> {
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        for entry in std::fs::read_dir(&dir)
+            .with_context(|| format!("failed to read directory: {}", dir.display()))?
+        {
+            let entry = entry?;
+            let path = entry.path();
+            if entry.file_type()?.is_dir() {
+                stack.push(path);
+            } else if path
+                .file_name()
+                .is_some_and(|file| file == "coverage.cobertura.xml")
+                && path
+                    .components()
+                    .any(|component| component.as_os_str() == "TestResults")
+            {
+                return Ok(path);
+            }
+        }
+    }
+
+    bail!(
+        "failed to locate coverlet coverage.cobertura.xml under {}",
         root.display()
     )
 }

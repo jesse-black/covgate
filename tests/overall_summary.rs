@@ -35,6 +35,10 @@ fn overall_summary_line_totals_match_native_summary_for_all_line_capable_fixture
     let fixtures = fail_fixtures_with_lines()
         .into_iter()
         .chain(pass_fixtures_with_lines())
+        .chain([
+            support::dotnet_duplicate_lines_fixture(),
+            support::vitest_statement_line_divergence_fixture(),
+        ])
         .collect::<Vec<_>>();
 
     for fixture in fixtures {
@@ -50,6 +54,20 @@ fn overall_summary_line_totals_match_native_summary_for_all_line_capable_fixture
             markdown,
             "fixture {} metric line",
             case.fixture_id()
+        );
+    }
+}
+
+#[test]
+fn native_summary_artifacts_exist_for_line_repro_fixtures() {
+    for fixture in [
+        support::dotnet_duplicate_lines_fixture(),
+        support::vitest_statement_line_divergence_fixture(),
+    ] {
+        assert!(
+            fixture.root().join("native-summary.json").exists(),
+            "fixture {} should include a captured native summary artifact",
+            fixture.id()
         );
     }
 }

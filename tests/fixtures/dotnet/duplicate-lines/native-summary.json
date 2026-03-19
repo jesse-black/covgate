@@ -1,0 +1,10 @@
+{
+  "branch": {
+    "covered": 1,
+    "total": 2
+  },
+  "line": {
+    "covered": 4,
+    "total": 4
+  }
+}

@@ -86,6 +86,13 @@ pub fn dotnet_basic_pass_fixture() -> Fixture {
     }
 }
 
+pub fn dotnet_duplicate_lines_fixture() -> Fixture {
+    Fixture {
+        language: "dotnet",
+        name: "duplicate-lines",
+    }
+}
+
 pub fn vitest_basic_fail_fixture() -> Fixture {
     Fixture {
         language: "vitest",
@@ -97,6 +104,13 @@ pub fn vitest_basic_pass_fixture() -> Fixture {
     Fixture {
         language: "vitest",
         name: "basic-pass",
+    }
+}
+
+pub fn vitest_statement_line_divergence_fixture() -> Fixture {
+    Fixture {
+        language: "vitest",
+        name: "statement-line-divergence",
     }
 }
 
@@ -350,6 +364,10 @@ impl MetricFixtureCase {
     }
 
     pub fn native_overall_totals(&self) -> Option<OverallTotals> {
+        if let Some(native_summary) = native_summary_overall_totals(self.fixture, self.metric) {
+            return Some(native_summary);
+        }
+
         let parsed: serde_json::Value = serde_json::from_str(
             &fs::read_to_string(self.fixture.coverage_json())
                 .expect("coverage fixture should be readable"),
@@ -403,6 +421,23 @@ impl MetricFixtureCase {
             self.metric,
         )
     }
+}
+
+fn native_summary_overall_totals(fixture: Fixture, metric: &str) -> Option<OverallTotals> {
+    let path = fixture.root().join("native-summary.json");
+    if !path.exists() {
+        return None;
+    }
+
+    let parsed: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(path).expect("native summary fixture should be readable"),
+    )
+    .expect("native summary fixture should parse as json");
+    let section = parsed.get(metric)?;
+    Some(OverallTotals {
+        covered: section.get("covered")?.as_u64()? as usize,
+        total: section.get("total")?.as_u64()? as usize,
+    })
 }
 
 fn llvm_native_overall_totals(parsed: &serde_json::Value, metric: &str) -> Option<OverallTotals> {
@@ -484,6 +519,14 @@ fn coverlet_native_overall_totals(
     }
 
     Some(OverallTotals { covered, total })
+}
+
+pub fn istanbul_helper_overall_totals(fixture: Fixture, metric: &str) -> Option<OverallTotals> {
+    let parsed: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(fixture.coverage_json()).expect("coverage fixture should be readable"),
+    )
+    .expect("coverage fixture should parse as json");
+    istanbul_native_overall_totals(&parsed, metric)
 }
 
 fn istanbul_native_overall_totals(
