@@ -59,15 +59,33 @@ fn overall_summary_line_totals_match_native_summary_for_all_line_capable_fixture
 }
 
 #[test]
-fn native_summary_artifacts_exist_for_line_repro_fixtures() {
+fn line_repro_fixtures_use_captured_native_summary_artifacts() {
     for fixture in [
         support::dotnet_duplicate_lines_fixture(),
         support::vitest_statement_line_divergence_fixture(),
     ] {
-        assert!(
-            fixture.root().join("native-summary.json").exists(),
-            "fixture {} should include a captured native summary artifact",
-            fixture.id()
+        let case = MetricFixtureCase::new(fixture, "line");
+        let captured = case
+            .captured_native_summary_overall_totals()
+            .expect("repro fixture should include a captured native summary artifact");
+        let native = case
+            .native_overall_totals()
+            .expect("native totals should exist");
+        let markdown = case
+            .covgate_markdown_overall_totals()
+            .expect("markdown totals should exist");
+
+        assert_eq!(
+            captured,
+            native,
+            "fixture {} should read native totals from native-summary.json",
+            case.fixture_id()
+        );
+        assert_eq!(
+            captured,
+            markdown,
+            "fixture {} metric line",
+            case.fixture_id()
         );
     }
 }

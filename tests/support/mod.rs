@@ -364,7 +364,7 @@ impl MetricFixtureCase {
     }
 
     pub fn native_overall_totals(&self) -> Option<OverallTotals> {
-        if let Some(native_summary) = native_summary_overall_totals(self.fixture, self.metric) {
+        if let Some(native_summary) = self.captured_native_summary_overall_totals() {
             return Some(native_summary);
         }
 
@@ -380,6 +380,10 @@ impl MetricFixtureCase {
             "vitest" => istanbul_native_overall_totals(&parsed, self.metric),
             other => panic!("unsupported fixture language: {other}"),
         }
+    }
+
+    pub fn captured_native_summary_overall_totals(&self) -> Option<OverallTotals> {
+        native_summary_overall_totals(self.fixture, self.metric)
     }
 
     pub fn covgate_markdown_overall_totals(&self) -> Option<OverallTotals> {
@@ -519,14 +523,6 @@ fn coverlet_native_overall_totals(
     }
 
     Some(OverallTotals { covered, total })
-}
-
-pub fn istanbul_helper_overall_totals(fixture: Fixture, metric: &str) -> Option<OverallTotals> {
-    let parsed: serde_json::Value = serde_json::from_str(
-        &fs::read_to_string(fixture.coverage_json()).expect("coverage fixture should be readable"),
-    )
-    .expect("coverage fixture should parse as json");
-    istanbul_native_overall_totals(&parsed, metric)
 }
 
 fn istanbul_native_overall_totals(
