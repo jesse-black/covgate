@@ -239,6 +239,7 @@ fn git_base_mode_warns_about_untracked_files() {
         stderr.contains("Untracked-files warning"),
         "stderr={stderr}"
     );
+    assert!(stderr.contains("false pass"), "stderr={stderr}");
     assert!(stderr.contains("git add -N <path>"), "stderr={stderr}");
 }
 

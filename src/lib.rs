@@ -62,7 +62,7 @@ fn emit_untracked_files_warning(config: &Config) -> Result<()> {
     }
 
     eprintln!(
-        "⚠️ Untracked-files warning: covgate check in Git-base mode reflects committed + tracked worktree edits. New untracked source files are invisible to git diff <merge-base> until added to the index intent state (for example git add -N <path>). Untracked paths: {}",
+        "⚠️ Untracked-files warning: untracked files are not included in diff gating and can produce a false pass. Add them with `git add -N <path>`. Untracked paths: {}",
         untracked_files.join(", ")
     );
 
