@@ -1,6 +1,6 @@
-# Reproduce and fix native-summary parity drift for Coverlet and Istanbul fixtures
+# Reproduce and fix native-summary parity drift using real tool summaries, not helper-derived fixture math
 
-Save this in-progress ExecPlan in `docs/exec-plans/active/covgate-native-summary-parity-fixture-repros.md`. Move it to `docs/exec-plans/completed/covgate-native-summary-parity-fixture-repros.md` only after the reproducer fixtures, failing tests, helper fixes, validation runs, and retrospective notes are complete.
+Save this in-progress ExecPlan in `docs/exec-plans/active/covgate-native-summary-parity-fixture-repros.md`. Move it to `docs/exec-plans/completed/covgate-native-summary-parity-fixture-repros.md` only after the reproducer fixtures, failing tests, replacement summary-comparison path, validation runs, and retrospective notes are complete.
 
 This ExecPlan is a living document. The sections `Progress`, `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
@@ -8,186 +8,184 @@ Maintain this document in accordance with `docs/PLANS.md`. Re-read that file bef
 
 ## Purpose / Big Picture
 
-`covgate` already parses Coverlet and Istanbul coverage into its internal line metrics, but the overall-summary parity tests currently derive their “native” totals with helper code that does not match the parser semantics for line counting. That creates a dangerous false-positive path: a parity test can say “native and covgate match” even when the helper is counting the wrong thing.
+`covgate` currently has overall-summary parity tests that compute a supposed “native” total from fixture JSON using repository-local helper code. That was a reasonable bootstrap, but it is no longer the right oracle for this class of bug. The review feedback on Coverlet and Istanbul line totals is specifically about helper logic drifting from the semantics of the native tools. If we keep asserting parity against our own helper calculations, we can still accidentally validate the wrong thing.
 
-After this work, a novice should be able to regenerate one .NET fixture and one Vitest fixture that explicitly reproduce the mismatches under review, run a targeted parity test that fails before the helper fix, apply the helper fix, and then rerun the same test to prove that `covgate`’s overall line totals are being checked against the correct native interpretation. The user-visible result is stronger confidence that the Markdown summary parity tests really validate native-format behavior instead of accidental agreement with flawed test helpers.
+After this work, a novice should be able to regenerate one `.NET` fixture and one Vitest fixture, capture the real line-summary totals emitted by the native tools themselves, run `covgate` against the corresponding checked-in coverage artifacts, and see that `covgate`’s overall Markdown summary matches those real tool summaries. The user-visible benefit is stronger proof that `covgate` matches what `dotnet test` and `vitest` actually report, not what a repository-local reconstruction happens to infer from fixture JSON.
 
 ## Progress
 
-- [x] (2026-03-18 00:35Z) Re-read `docs/PLANS.md`, `docs/TESTING.md`, `src/coverage/coverlet_json.rs`, `src/coverage/istanbul_json.rs`, `tests/support/mod.rs`, and `tests/overall_summary.rs` to confirm the current mismatch and ground this plan in the checked-in code.
-- [x] (2026-03-18 00:40Z) Confirmed the exact helper drift: Coverlet native line totals still count raw per-method `Lines` entries, while Istanbul native line totals still count raw `s` entries instead of `statementMap`-derived line ranges.
-- [ ] Add explicit fixture scenarios that reproduce the Coverlet duplicate-line case and the Istanbul multi-line / multi-statement-on-one-line case using native toolchains and checked-in `coverage.json` artifacts.
-- [ ] Add failing tests that isolate the helper mismatch before any fix lands.
-- [ ] Update the native-summary helper logic in `tests/support/mod.rs` so Coverlet and Istanbul line totals match parser semantics exactly.
+- [x] (2026-03-19 00:10Z) Re-read `docs/PLANS.md`, `docs/TESTING.md`, `src/coverage/coverlet_json.rs`, `src/coverage/istanbul_json.rs`, `tests/support/mod.rs`, and `tests/overall_summary.rs` to confirm the current parity design and why it is the wrong oracle for this review feedback.
+- [x] (2026-03-19 00:20Z) Reworked this plan so the target is no longer “fix fixture-calculated native totals,” but “assert against real summary outputs from the native tools.”
+- [ ] Add explicit reproduction fixtures that make the problematic line-counting shapes visible in native tool summaries: one `.NET` duplicate-line scenario and one Vitest statement/line-divergence scenario.
+- [ ] Extend fixture regeneration so each reproducer captures the relevant real native summary output in a checked-in, stable form alongside the coverage artifact.
+- [ ] Replace or narrow the current helper-based parity path in `tests/overall_summary.rs` so Coverlet and Istanbul line parity assertions use the captured native tool summaries instead of repository-local total reconstruction.
+- [ ] Add failing tests that prove the old helper-based approach was insufficient for these scenarios and that the new native-summary path detects the mismatch.
+- [ ] Update documentation and helper code only as needed to support reading the captured tool summaries during test execution.
 - [ ] Re-run targeted tests, then `cargo xtask quick`, then `cargo xtask validate`.
-- [ ] Close this plan with a retrospective that records the final fixture shapes, the fixed helper rules, and any follow-up gaps.
+- [ ] Close this plan with a retrospective that records the final fixture shapes, native-summary capture format, and remaining gaps.
 
 ## Surprises & Discoveries
 
-- Observation: The parser-side logic is already correct for the review comments under discussion; the drift lives in the parity test helpers, not in `covgate`’s ingestion path.
-  Evidence: `src/coverage/coverlet_json.rs` merges duplicate method-reported lines into a per-file `BTreeMap<u32, bool>`, and `src/coverage/istanbul_json.rs` expands line coverage from `statementMap` ranges before counting totals.
+- Observation: The parser-side logic in `src/coverage/coverlet_json.rs` and `src/coverage/istanbul_json.rs` may already be correct for the review comments, but the current test design still creates a trust problem because the oracle is repository-local code.
+  Evidence: `tests/overall_summary.rs` currently compares Markdown output against `MetricFixtureCase::native_overall_totals()`, and those totals are computed by helper functions in `tests/support/mod.rs` rather than by parsing a native tool summary output.
 
-- Observation: The current line parity test in `tests/overall_summary.rs` is broad enough to cover `.NET` and Vitest fixtures, but it will only expose this bug if the checked-in fixtures actually contain the problematic report shapes.
-  Evidence: the shared test iterates every line-capable fixture through `MetricFixtureCase::native_overall_totals()` and compares it against the Markdown summary path.
+- Observation: The criticism here is deeper than “the helper math is buggy.” The real issue is that line-parity validation for native formats should come from the native tools’ own overall summaries whenever those summaries exist in a usable form.
+  Evidence: The requested rework explicitly says we should not be testing against fixture calculations at all, but against real summary outputs from `dotnet test` and Vitest.
 
-- Observation: The repository’s testing policy already requires exactly the kind of reproduction this review feedback needs: real fixture source projects, native toolchains, checked-in artifacts, and TDD for bugs.
-  Evidence: `docs/TESTING.md` requires adding a failing test first and regenerating fixture coverage artifacts through xtask rather than hand-authoring JSON.
+- Observation: The repository’s fixture policy already prefers native toolchain generation and checked-in artifacts, so storing stable native summary evidence alongside each reproducer fixture is consistent with existing testing philosophy.
+  Evidence: `docs/TESTING.md` requires native toolchain generation through xtask and encourages checked-in artifacts for deterministic test runs.
 
 ## Decision Log
 
-- Decision: Treat this as a fixture-and-test-helper bug, not a parser bug.
-  Rationale: The checked-in parser modules already implement the semantics described in the review feedback, so the smallest correct fix is to make the native-summary test helpers mirror those semantics.
-  Date/Author: 2026-03-18 / Codex
+- Decision: Stop using repository-local helper math as the oracle for Coverlet and Istanbul line-summary parity in the repro scenarios covered by this plan.
+  Rationale: The whole bug class is “our reconstruction drifted from the real native semantics.” Reasserting correctness with another reconstruction does not solve the trust problem.
+  Date/Author: 2026-03-19 / Codex
 
-- Decision: Add dedicated reproduction fixtures instead of mutating the existing `basic-pass` and `basic-fail` scenarios to carry extra edge-case meaning.
-  Rationale: The current basic fixtures should remain small smoke tests. Review regressions deserve scenario names that make the edge case obvious to future readers, such as duplicate Coverlet method lines or Istanbul statement/line divergence.
-  Date/Author: 2026-03-18 / Codex
+- Decision: Compare `covgate` overall summaries against stable, checked-in native summary outputs captured from the real tools during fixture regeneration.
+  Rationale: This keeps routine tests deterministic while making the oracle come from the actual ecosystem tools rather than local inference.
+  Date/Author: 2026-03-19 / Codex
 
-- Decision: Keep the reproducer artifacts native-generated through xtask even if hand-editing the JSON would be faster.
-  Rationale: `docs/TESTING.md` explicitly forbids hand-authored fixture coverage JSON for routine repository validation. The whole point of this work is to prove real tool output behavior.
-  Date/Author: 2026-03-18 / Codex
+- Decision: Keep helper-based native-total reconstruction only where a native tool summary is unavailable or unusable, and explicitly exclude the Coverlet/Istanbul line-parity repro cases from that fallback.
+  Rationale: The broader test harness may still need helper-derived totals for formats that do not emit an easily consumable summary, but this plan is specifically about removing that dependency for the review-sensitive cases.
+  Date/Author: 2026-03-19 / Codex
 
-- Decision: Add focused tests for the helper semantics in addition to relying on the broad overall-summary parity suite.
-  Rationale: The matrix-style parity test proves end-to-end behavior, but a smaller helper-focused test will make future regressions easier to diagnose without having to infer the cause from fixture-wide Markdown mismatches.
-  Date/Author: 2026-03-18 / Codex
+- Decision: Treat summary capture as part of fixture regeneration, not ad hoc test setup.
+  Rationale: The artifacts need to be reproducible by `cargo xtask regen-fixture-coverage ...`, reviewable in git, and stable enough for ordinary `cargo test` runs.
+  Date/Author: 2026-03-19 / Codex
 
 ## Outcomes & Retrospective
 
-Implementation has not started yet. The important outcome so far is a sharper problem statement: the review feedback is still valid because the test helper logic does not match the parser logic, and the current fixtures are not yet guaranteed to exercise the divergence.
+Implementation has not started yet. The useful outcome so far is a clearer testing principle: for native-summary parity, the safest oracle is the native tool’s own reported totals, captured in a stable artifact during fixture generation.
 
-The main lesson at this stage is that parity tests are only trustworthy when both sides of the comparison express the same native semantics. “Native total” is not a vague idea here. For Coverlet it means unique source lines per file after method-level duplication is collapsed, and for Istanbul it means unique source lines reached by statement ranges, not raw statement counter count.
+The key lesson at this stage is that parity tests do not just need the right answer; they need a trustworthy source for the answer. For this review feedback, “native parity” should mean parity against `dotnet test` and Vitest summary outputs, not parity against repository-local code that reverse-engineers the same JSON differently.
 
 ## Context and Orientation
 
-`covgate` parses coverage formats in `src/coverage/`. The Coverlet adapter lives in `src/coverage/coverlet_json.rs`, and the Istanbul adapter lives in `src/coverage/istanbul_json.rs`. Both convert ecosystem-specific coverage payloads into `CoverageOpportunity` records and per-file totals that later feed gate calculations and Markdown rendering.
+`covgate` parses coverage formats in `src/coverage/`. The Coverlet adapter in `src/coverage/coverlet_json.rs` and the Istanbul adapter in `src/coverage/istanbul_json.rs` convert native coverage JSON into internal `CoverageOpportunity` records and per-file totals. Those parser modules are not the main problem this plan is solving. The problem is how the tests decide what “native” means.
 
-The overall-summary parity tests live in `tests/overall_summary.rs`. They do not read parser internals directly. Instead, they build `MetricFixtureCase` values from checked-in fixtures, compute a supposed native total through helper functions in `tests/support/mod.rs`, run the CLI to emit Markdown, parse the Markdown summary, and assert equality. That means any bug in the helper logic can make the parity suite compare `covgate` against the wrong “native” answer.
+Today, the overall-summary parity tests in `tests/overall_summary.rs` route through `MetricFixtureCase::native_overall_totals()` in `tests/support/mod.rs`. For `.NET`, that helper walks Coverlet `Lines` and `Branches` structures directly. For Vitest, it walks Istanbul `s`, `b`, and `f` maps directly. That means the test oracle is a second implementation of native semantics maintained inside this repository. When review feedback says the helper’s line logic is wrong, we do not just have a bug; we have evidence that the oracle itself is too fragile for these formats.
 
-The current helper mismatch is specific to line metrics. In this plan, “Coverlet duplicate-line case” means a `.NET` coverage artifact where two methods in the same source file report the same line number in their `Lines` maps. `covgate` currently merges those by line number before counting totals, so the test helper must do the same. “Istanbul statement/line divergence case” means a Vitest coverage artifact where the `statementMap` does not have a one-to-one relationship with source lines, such as multiple statements on one line or one statement spanning multiple lines. `covgate` currently expands statement ranges into source lines before counting totals, so the test helper must do the same.
+In this plan, a “real tool summary output” means a machine-readable or at least stably parseable artifact emitted by the native toolchain that reports overall line totals. For `.NET`, that may be the summary printed by `dotnet test` or another stable output produced by the Coverlet/XPlat coverage flow invoked during fixture regeneration. For Vitest, that means the summary emitted by `vitest run --coverage`, captured in a stable text or JSON form during regeneration. The exact capture mechanism must be chosen based on what the tools actually emit deterministically in this repository, but the source of truth must be the native tool output, not repository-local recomputation from raw coverage maps.
 
-Relevant files the implementer will need to navigate are:
+The main files this plan is expected to touch are:
 
-- `src/coverage/coverlet_json.rs` for the actual Coverlet line-counting behavior.
-- `src/coverage/istanbul_json.rs` for the actual Istanbul line-counting behavior.
-- `tests/support/mod.rs` for the helper functions `coverlet_native_overall_totals` and `istanbul_native_overall_totals` that currently drift from those semantics.
-- `tests/overall_summary.rs` for the end-to-end parity assertions.
-- `tests/fixtures/dotnet/` for checked-in .NET fixture repositories and coverage artifacts.
-- `tests/fixtures/vitest/` for checked-in Vitest fixture repositories and coverage artifacts.
-- `xtask/src/main.rs` for fixture regeneration entry points and any new scenario registration needed to rebuild the reproducer artifacts.
+- `tests/overall_summary.rs`, where overall-summary parity assertions are defined.
+- `tests/support/mod.rs`, where `MetricFixtureCase::native_overall_totals()` currently uses helper-derived totals.
+- `xtask/src/main.rs`, where fixture regeneration can be extended to capture and normalize native summary outputs from `.NET` and Vitest.
+- `tests/fixtures/dotnet/...` and `tests/fixtures/vitest/...`, where the new reproducer fixture source trees, coverage artifacts, and captured native summary artifacts will live.
+- Potentially `docs/TESTING.md` or fixture README files if the regeneration flow needs new contributor instructions.
 
 ## Plan of Work
 
-Start by creating two new fixture scenarios with native toolchains and deliberately shaped source code. For `.NET`, add a new fixture under `tests/fixtures/dotnet/` whose source file contains at least two methods that Coverlet will report against the same source line. Expression-bodied members, multiple lambdas on one line, or two tiny methods intentionally written on one line are acceptable as long as the generated `coverage.json` proves the same line number appears in multiple method `Lines` maps for one file. The fixture should include a pass/fail shape only if needed for the existing harness; otherwise a single reproduction-oriented scenario is enough.
+Start by creating two dedicated reproducer fixtures whose real tool summaries will expose the line-counting edge cases under review. For `.NET`, add a scenario under `tests/fixtures/dotnet/` whose source shape causes Coverlet to report the same source line in multiple methods within one file. The source should be small, native, and deterministic. The goal is not just to make the raw `coverage.json` interesting; it is to make the native tool summary demonstrably disagree with a naïve per-method line count.
 
-For Vitest, add a new fixture under `tests/fixtures/vitest/` whose source file forces line counting to diverge from raw statement counting. The safest shape is one statement spanning multiple lines plus another pair of statements sharing one source line. That guarantees both directions of drift are visible: statement count greater than line count in one area and line count greater than statement count in another. The source should stay small and deterministic, and coverage must still be generated through `vitest run --coverage` so the checked-in artifact is real Istanbul output.
+For Vitest, add a scenario under `tests/fixtures/vitest/` whose source shape makes overall line totals diverge from raw statement count. The best shape is a compact file that includes at least one multi-line statement and at least one line containing multiple statements. Again, the key deliverable is not only the coverage artifact but the real summary emitted by the Vitest coverage run.
 
-Once the new fixture directories exist, wire them into xtask regeneration if they are not automatically discovered. The plan is complete only if a novice can run `cargo xtask regen-fixture-coverage dotnet/<scenario>` and `cargo xtask regen-fixture-coverage vitest/<scenario>` from the repository root and reproduce the checked-in artifacts without manual JSON edits.
+Next, extend `cargo xtask regen-fixture-coverage` so it captures two outputs for each reproducer scenario: the native coverage artifact already used by `covgate`, and a checked-in summary artifact containing the real overall totals from the native tool. Prefer a machine-readable file if the tool already emits one. If only terminal text is available, capture and normalize the relevant summary lines into a small checked-in text or JSON file produced by xtask. The normalization rules must be documented in the xtask code and in this plan so a novice knows exactly why the artifact is stable.
 
-Next, add failing tests before fixing the helper logic. One layer of tests should stay end-to-end: extend `tests/overall_summary.rs` or the fixture lists in `tests/support/mod.rs` so the new reproducer scenarios participate in line parity checks. A second layer should be narrower and diagnostic. Add a helper-focused test module, likely near `tests/support/mod.rs` or in a new integration test, that reads the reproducer JSON and asserts the currently expected native line totals for each scenario. Before the fix, these tests should fail because the helper still counts per-method Coverlet `Lines` entries and raw Istanbul `s` entries.
+After the artifacts are in place, rework `tests/overall_summary.rs` for the affected scenarios. The new path should load the checked-in native summary artifact, parse the overall line totals from that artifact, run `covgate` to produce Markdown, parse the Markdown overall totals, and compare the two. The old helper-derived path can remain temporarily for other ecosystems or metrics that do not yet have real-summary artifacts, but Coverlet line parity and Vitest line parity for these repro fixtures must use the real native summaries.
 
-After the failure is demonstrated, fix `tests/support/mod.rs` by making the native helper semantics mirror the parser code. For Coverlet line totals, accumulate per-file line numbers in a deduplicating map and merge coverage with boolean OR so a line is considered covered if any method reports hits on that line. For Istanbul line totals, iterate `statementMap`, look up each statement’s hit count in `s`, expand the statement’s `start.line..=end.line` range into a deduplicating per-file map, and mark lines covered if any covering statement has hits. Keep function and branch logic unchanged unless the reproducer shows an unexpected secondary mismatch.
+Only after the new native-summary path exists should you decide what to do with the old helper functions. The likely outcome is that `.NET` and Vitest line parity stop calling helper reconstruction entirely, while branch/function or non-repro scenarios may continue using the old mechanism until a future plan removes it more broadly. Keep the scope tight and do not rewrite the entire fixture harness unless the implementation proves that narrower routing is impossible.
 
-Finish by rerunning the new targeted failing tests, then the broader overall-summary suite, then the repository-standard commands from `AGENTS.md` and `docs/TESTING.md`. If the new fixtures expose an additional mismatch in Markdown rendering or parser behavior, record that discovery in this document before broadening scope.
+Finally, add failing tests that demonstrate the value of this rework. At least one test should fail under the old helper-based oracle and pass under the native-summary oracle. If parser behavior also needs a fix after the new oracle is in place, document that surprise and address it with TDD, but do not assume parser changes are required. The first goal is to replace the oracle.
 
 ## Concrete Steps
 
 Run all commands from the repository root, the directory containing `Cargo.toml`.
 
-1. Inspect current fixture and helper entry points before editing.
+1. Inspect the current fixture and parity plumbing.
 
-    rg -n "coverlet_native_overall_totals|istanbul_native_overall_totals|overall_summary_line_totals" tests src
+    rg -n "native_overall_totals|overall_summary|regen-fixture-coverage" tests xtask/src/main.rs
     find tests/fixtures/dotnet -maxdepth 3 -type f | sort
     find tests/fixtures/vitest -maxdepth 3 -type f | sort
-    rg -n "regen-fixture-coverage|dotnet|vitest" xtask/src/main.rs
 
-   Expected result: identify where new fixture ids must be added and confirm the current helper logic that will be made to fail.
+   Expected result: identify where the helper-derived oracle is wired in and where new captured native-summary artifacts should live.
 
-2. Create reproduction fixture source changes and regenerate native artifacts.
+2. Add the reproducer fixture source shapes and regenerate both the coverage artifact and the native summary artifact.
 
     cargo xtask regen-fixture-coverage dotnet/duplicate-lines
     cargo xtask regen-fixture-coverage vitest/statement-line-divergence
 
-   Expected result: checked-in `coverage.json` files are updated under the new fixture directories. The .NET artifact should show at least one repeated line number across multiple methods. The Vitest artifact should show a `statementMap` where line-range expansion is not equivalent to counting `s` entries.
+   Expected result: each scenario writes a checked-in `coverage.json` plus a checked-in summary artifact that records the real overall line totals emitted by the native toolchain.
 
-3. Add failing tests before fixing the helper.
-
-    cargo test overall_summary_line_totals_match_native_summary_for_all_line_capable_fixtures -- --nocapture
-    cargo test native_overall_totals -- --nocapture
-
-   Expected result before the fix: at least one new test fails, and the failure message makes clear that the helper-native total differs from the Markdown summary for the new reproducer fixture.
-
-4. Implement the helper fix and rerun the narrow suites.
+3. Add or update tests so line parity for the reproducer scenarios reads the captured native summaries.
 
     cargo test overall_summary_line_totals_match_native_summary_for_all_line_capable_fixtures -- --nocapture
-    cargo test native_overall_totals -- --nocapture
 
-   Expected result after the fix: the same tests now pass, proving the helper semantics match the parser semantics.
+   Expected result before any parser/helper changes: the test should now reflect the native tool summary. If `covgate` or the old helper-based expectations were wrong, the failure should point at the real summary mismatch rather than a local reconstruction mismatch.
 
-5. Run the standard repository validation loop.
+4. Apply the smallest fix required after the new oracle is in place.
+
+    cargo test overall_summary_line_totals_match_native_summary_for_all_line_capable_fixtures -- --nocapture
+    cargo test overall_summary -- --nocapture
+
+   Expected result after the fix: `covgate` Markdown overall line totals match the checked-in native summary artifacts for the reproducer fixtures.
+
+5. Run the standard repository development and validation commands.
 
     cargo xtask quick
     cargo xtask validate
 
-   Expected result: the repository passes the normal development and pre-ship validation commands without relaxing any gates.
+   Expected result: all routine repository checks pass without lowering any gates.
 
 ## Validation and Acceptance
 
 This plan is complete only when all of the following are true and observable by a novice:
 
-A checked-in `.NET` fixture exists whose native Coverlet artifact reproduces duplicate line numbers across methods in one file, and a checked-in Vitest fixture exists whose native Istanbul artifact reproduces statement-to-line counting divergence.
+A checked-in `.NET` reproducer fixture exists with a native-generated coverage artifact and a checked-in artifact containing the real summary output from the `.NET` toolchain used during regeneration.
 
-The line parity suite fails before the helper fix and passes after it. The failure must be caused by the new reproducer fixtures, not by synthetic JSON or a hand-waved explanation.
+A checked-in Vitest reproducer fixture exists with a native-generated coverage artifact and a checked-in artifact containing the real summary output from `vitest run --coverage`.
 
-`tests/support/mod.rs` computes Coverlet native line totals by deduplicating per-file line numbers across methods and computes Istanbul native line totals by expanding `statementMap` line ranges rather than counting raw `s` entries.
+For the repro scenarios covered by this plan, `tests/overall_summary.rs` compares `covgate` Markdown totals against those checked-in native summary artifacts, not against totals reconstructed by repository-local helper code.
+
+The targeted line parity test fails before the necessary fix and passes after it, and the failure message is traceable to disagreement with the native tool summary rather than disagreement with local helper math.
 
 `cargo xtask quick` passes during development and `cargo xtask validate` passes before the plan is closed.
 
-The final state must prove a real behavioral claim, not just a refactor: `tests/overall_summary.rs` should once again compare `covgate`’s Markdown output against a helper that matches the actual native-format semantics for the reproduced cases.
-
 ## Idempotence and Recovery
 
-Fixture regeneration must stay idempotent. Re-running the two xtask commands for the new scenarios should only update those scenarios’ checked-in `coverage.json` artifacts and should never require manual edits to the generated JSON.
+Fixture regeneration must remain idempotent. Re-running `cargo xtask regen-fixture-coverage dotnet/duplicate-lines` and `cargo xtask regen-fixture-coverage vitest/statement-line-divergence` should reproducibly rewrite both the coverage artifact and the captured native summary artifact for only those scenarios.
 
-If the first chosen source shape does not actually produce the intended native artifact, recover by changing the fixture source code and regenerating coverage, not by editing the JSON output. Keep the plan notes up to date with the final source pattern that worked.
+If the native tools emit summaries in a format that is noisy or unstable, recover by adding xtask normalization that preserves only the stable lines or fields needed for total comparison. Do not hand-edit the checked-in artifacts.
 
-If the broad parity test is too opaque when it fails, keep the smaller helper-focused tests even after the end-to-end parity suite passes. They are the safest recovery aid for future contributors debugging fixture-specific summary drift.
+If a chosen reproducer source shape does not actually create summary drift, recover by changing the source and regenerating the artifacts. Keep this plan updated with the final source pattern that worked.
 
-If a new fixture reveals a parser bug instead of only a helper bug, stop and record that surprise in this document before changing scope. The current intent is to fix helper parity, but the living plan must stay honest if the evidence widens the problem.
+If the new native-summary oracle reveals a parser bug rather than only a helper-design bug, record that discovery here and expand the implementation scope carefully with a new failing test. The current plan expects oracle replacement first, parser edits second only if proven necessary.
 
 ## Artifacts and Notes
 
-Representative failure this plan should capture before the fix:
+Representative artifact set after regeneration:
+
+    tests/fixtures/dotnet/duplicate-lines/coverage.json
+    tests/fixtures/dotnet/duplicate-lines/native-summary.json
+    tests/fixtures/vitest/statement-line-divergence/coverage.json
+    tests/fixtures/vitest/statement-line-divergence/native-summary.json
+
+Representative failure before the final fix:
 
     $ cargo test overall_summary_line_totals_match_native_summary_for_all_line_capable_fixtures -- --nocapture
-    thread 'overall_summary_line_totals_match_native_summary_for_all_line_capable_fixtures' panicked at ...
-    fixture dotnet/duplicate-lines metric line
-    left: OverallTotals { covered: 3, total: 4 }
-    right: OverallTotals { covered: 3, total: 3 }
+    fixture vitest/statement-line-divergence metric line
+    native summary total: 5
+    covgate markdown total: 4
 
 Representative success after the fix:
 
     $ cargo test overall_summary_line_totals_match_native_summary_for_all_line_capable_fixtures -- --nocapture
     test overall_summary_line_totals_match_native_summary_for_all_line_capable_fixtures ... ok
 
-Representative helper rule for Istanbul after the fix:
-
-    native line total = count of unique source lines reached by statementMap ranges
-    native covered lines = unique source lines for which at least one covering statement has hits > 0
-
-Keep the actual transcripts concise and replace the example numbers above with the real fixture outputs once implementation is underway.
+If the native tools cannot emit directly machine-readable summaries, the checked-in `native-summary.json` files may instead be normalized from tool stdout by xtask. If that happens, the xtask code must explain the normalization rules, and this plan must be updated with one concise example.
 
 ## Interfaces and Dependencies
 
-Use the existing repository mechanisms. Do not introduce a second fixture-generation workflow or a one-off script.
+Use the existing repository mechanisms and native toolchains. Do not introduce a second fixture generation workflow or a fake summary generator.
 
 The final implementation should leave these interfaces and responsibilities clear:
 
-- `tests/support/mod.rs::coverlet_native_overall_totals(parsed, "line") -> Option<OverallTotals>` must deduplicate line numbers per file across methods and OR coverage hits for duplicate lines.
-- `tests/support/mod.rs::istanbul_native_overall_totals(parsed, "line") -> Option<OverallTotals>` must derive line totals from `statementMap` ranges joined with `s` hit counts.
-- `tests/overall_summary.rs` must continue to use `MetricFixtureCase::native_overall_totals()` and `MetricFixtureCase::covgate_markdown_overall_totals()` as the end-to-end comparison entry points.
-- `xtask/src/main.rs` must provide regeneration support for any newly added `dotnet/...` and `vitest/...` reproducer fixtures.
-- `tests/fixtures/dotnet/...` and `tests/fixtures/vitest/...` must remain native-tool-generated fixture trees with checked-in `coverage.json` artifacts.
+- `xtask/src/main.rs` must regenerate both coverage artifacts and captured native summary artifacts for the new `.NET` and Vitest repro scenarios.
+- `tests/overall_summary.rs` must load the captured native summary artifact for the affected scenarios and compare it with `MetricFixtureCase::covgate_markdown_overall_totals()`.
+- `tests/support/mod.rs` may keep helper-derived native totals for unrelated ecosystems or metrics, but Coverlet and Istanbul line-parity repro scenarios created by this plan must not rely on helper reconstruction.
+- `tests/fixtures/dotnet/...` and `tests/fixtures/vitest/...` must remain native-tool-generated fixture trees with checked-in artifacts that are reproducible through xtask.
 
 At the bottom of this plan, append a revision note every time the plan changes materially, describing what changed and why.
 
-Revision note: Initial plan created to turn valid review feedback about Coverlet and Istanbul native-summary helper drift into native-generated repro fixtures, failing parity tests, and a precise helper fix.
+Revision note: Initial plan created to replace helper-derived Coverlet/Istanbul line parity assertions with fixture-backed comparisons against real native tool summary outputs captured during xtask regeneration.
