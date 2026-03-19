@@ -35,6 +35,10 @@ fn overall_summary_line_totals_match_native_summary_for_all_line_capable_fixture
     let fixtures = fail_fixtures_with_lines()
         .into_iter()
         .chain(pass_fixtures_with_lines())
+        .chain([
+            support::dotnet_duplicate_lines_fixture(),
+            support::vitest_statement_line_divergence_fixture(),
+        ])
         .collect::<Vec<_>>();
 
     for fixture in fixtures {
@@ -47,6 +51,38 @@ fn overall_summary_line_totals_match_native_summary_for_all_line_capable_fixture
             .expect("markdown totals should exist");
         assert_eq!(
             native,
+            markdown,
+            "fixture {} metric line",
+            case.fixture_id()
+        );
+    }
+}
+
+#[test]
+fn line_repro_fixtures_use_captured_native_summary_artifacts() {
+    for fixture in [
+        support::dotnet_duplicate_lines_fixture(),
+        support::vitest_statement_line_divergence_fixture(),
+    ] {
+        let case = MetricFixtureCase::new(fixture, "line");
+        let captured = case
+            .captured_native_summary_overall_totals()
+            .expect("repro fixture should include a captured native summary artifact");
+        let native = case
+            .native_overall_totals()
+            .expect("native totals should exist");
+        let markdown = case
+            .covgate_markdown_overall_totals()
+            .expect("markdown totals should exist");
+
+        assert_eq!(
+            captured,
+            native,
+            "fixture {} should read native totals from native-summary.json",
+            case.fixture_id()
+        );
+        assert_eq!(
+            captured,
             markdown,
             "fixture {} metric line",
             case.fixture_id()
