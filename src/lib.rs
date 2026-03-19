@@ -21,6 +21,16 @@ pub fn run(config: Config) -> Result<i32> {
     requested_metrics.sort();
     requested_metrics.dedup();
 
+    let available_metrics = report
+        .totals_by_file
+        .iter()
+        .filter(|(_, totals)| totals.values().any(|file_totals| file_totals.total > 0))
+        .map(|(metric, _)| *metric)
+        .filter(|metric| !requested_metrics.contains(metric))
+        .collect::<Vec<_>>();
+
+    requested_metrics.extend(available_metrics);
+
     for metric_kind in requested_metrics {
         let metric = metrics::compute_changed_metric(&report, &diff, metric_kind)?;
         metrics.push(metric);

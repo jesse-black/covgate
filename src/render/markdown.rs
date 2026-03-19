@@ -103,20 +103,22 @@ pub fn render(result: &GateResult, _diff_description: &str) -> String {
         let metric_label = title_case(metric.metric.label());
         out.push_str(&format!("#### {}\n\n", title_case(metric.metric.as_str())));
         out.push_str(&format!(
-            "| File | Covered {metric_label} | {metric_label} | Coverage |\n"
+            "| File | Covered {metric_label} | {metric_label} | Missed {metric_label} | Coverage |\n"
         ));
-        out.push_str("| --- | ---: | ---: | ---: |\n");
+        out.push_str("| --- | ---: | ---: | ---: | ---: |\n");
         for (path, totals) in &metric.totals_by_file {
             let percent = if totals.total == 0 {
                 100.0
             } else {
                 (totals.covered as f64 / totals.total as f64) * 100.0
             };
+            let missed = totals.total.saturating_sub(totals.covered);
             out.push_str(&format!(
-                "| `{}` | {} | {} | {:.2}% |\n",
+                "| `{}` | {} | {} | {} | {:.2}% |\n",
                 path.display(),
                 totals.covered,
                 totals.total,
+                missed,
                 percent
             ));
         }
@@ -135,9 +137,10 @@ pub fn render(result: &GateResult, _diff_description: &str) -> String {
         } else {
             (overall_covered as f64 / overall_total as f64) * 100.0
         };
+        let overall_missed = overall_total.saturating_sub(overall_covered);
         out.push_str(&format!(
-            "| **Total** | **{}** | **{}** | **{:.2}%** |\n",
-            overall_covered, overall_total, overall_percent
+            "| **Total** | **{}** | **{}** | **{}** | **{:.2}%** |\n",
+            overall_covered, overall_total, overall_missed, overall_percent
         ));
         out.push('\n');
     }
@@ -213,10 +216,81 @@ mod tests {
         ));
         assert!(rendered.contains("| `src/lib.rs` | 1 | 2 | 50.00% |"));
         assert!(rendered.contains("| **Total** | **1** | **2** | **50.00%** |  |"));
-        assert!(rendered.contains("| File | Covered Regions | Regions | Coverage |"));
-        assert!(rendered.contains("| **Total** | **3** | **4** | **75.00%** |"));
+        assert!(
+            rendered.contains("| File | Covered Regions | Regions | Missed Regions | Coverage |")
+        );
+        assert!(rendered.contains("| `src/lib.rs` | 3 | 4 | 1 | 75.00% |"));
+        assert!(rendered.contains("| **Total** | **3** | **4** | **1** | **75.00%** |"));
         assert!(rendered.contains("### Overall Coverage"));
         assert!(!rendered.contains("Informational only. Does not affect the gate result in v1."));
+    }
+
+    #[test]
+    fn renders_all_nonzero_metrics_in_markdown_summary() {
+        let result = GateResult {
+            metrics: vec![
+                crate::model::ComputedMetric {
+                    metric: MetricKind::Region,
+                    covered: 1,
+                    total: 2,
+                    percent: 50.0,
+                    uncovered_changed_opportunities: Vec::new(),
+                    changed_totals_by_file: BTreeMap::from([(
+                        PathBuf::from("src/lib.rs"),
+                        FileTotals {
+                            covered: 1,
+                            total: 2,
+                        },
+                    )]),
+                    totals_by_file: BTreeMap::from([(
+                        PathBuf::from("src/lib.rs"),
+                        FileTotals {
+                            covered: 3,
+                            total: 4,
+                        },
+                    )]),
+                },
+                crate::model::ComputedMetric {
+                    metric: MetricKind::Line,
+                    covered: 2,
+                    total: 2,
+                    percent: 100.0,
+                    uncovered_changed_opportunities: Vec::new(),
+                    changed_totals_by_file: BTreeMap::from([(
+                        PathBuf::from("src/lib.rs"),
+                        FileTotals {
+                            covered: 2,
+                            total: 2,
+                        },
+                    )]),
+                    totals_by_file: BTreeMap::from([(
+                        PathBuf::from("src/lib.rs"),
+                        FileTotals {
+                            covered: 5,
+                            total: 5,
+                        },
+                    )]),
+                },
+            ],
+            rules: vec![RuleOutcome {
+                rule: GateRule::Percent {
+                    metric: MetricKind::Region,
+                    minimum_percent: 90.0,
+                },
+                passed: false,
+                observed_percent: 50.0,
+                observed_uncovered_count: 0,
+            }],
+            passed: false,
+        };
+
+        let rendered = render(&result, "origin/main...HEAD");
+        assert!(rendered.contains("#### Region"));
+        assert!(rendered.contains("#### Line"));
+        assert!(rendered.contains(
+            "| File | Covered Changed Lines | Changed Lines | Coverage | Missed Changed Spans |"
+        ));
+        assert!(rendered.contains("| File | Covered Lines | Lines | Missed Lines | Coverage |"));
     }
 
     #[test]
