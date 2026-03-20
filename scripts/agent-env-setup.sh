@@ -21,6 +21,7 @@ fi
 export DEBIAN_FRONTEND=noninteractive
 SWIFTLY_HOME_DIR="${SWIFTLY_HOME_DIR:-$HOME/.local/share/swiftly}"
 SWIFTLY_BIN_DIR="${SWIFTLY_BIN_DIR:-$HOME/.local/share/swiftly/bin}"
+YQ_VERSION="${YQ_VERSION:-v4.48.1}"
 
 need_cmd() {
 	local cmd="$1"
@@ -69,6 +70,42 @@ ensure_fd_command() {
 		$SUDO ln -sf "$fdfind_path" /usr/local/bin/fd
 		echo "${SETUP_LABEL}: linked fd -> ${fdfind_path}"
 	fi
+}
+
+yq_arch() {
+	local arch
+	arch="$(uname -m)"
+
+	case "$arch" in
+	x86_64)
+		echo "amd64"
+		;;
+	aarch64 | arm64)
+		echo "arm64"
+		;;
+	*)
+		echo "unsupported architecture for yq install: ${arch}" >&2
+		return 1
+		;;
+	esac
+}
+
+ensure_yq() {
+	if ! need_cmd yq; then
+		echo "${SETUP_LABEL}: yq already installed"
+		return 0
+	fi
+
+	local arch tmp_dir url
+	arch="$(yq_arch)"
+	tmp_dir="$(mktemp -d)"
+	url="https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_${arch}"
+
+	echo "${SETUP_LABEL}: installing yq ${YQ_VERSION}"
+	curl -fsSL "${url}" -o "${tmp_dir}/yq"
+	chmod +x "${tmp_dir}/yq"
+	$SUDO install -m 0755 "${tmp_dir}/yq" /usr/local/bin/yq
+	rm -rf "${tmp_dir}"
 }
 
 ensure_cargo_tool() {
@@ -181,7 +218,6 @@ need_cmd curl && APT_PACKAGES+=(curl)
 need_cmd dotnet && APT_PACKAGES+=(dotnet-sdk-10.0)
 need_cmd jq && APT_PACKAGES+=(jq)
 need_cmd rg && APT_PACKAGES+=(ripgrep)
-need_cmd yq && APT_PACKAGES+=(yq)
 need_cmd fdfind && APT_PACKAGES+=(fd-find)
 need_cmd eza && APT_PACKAGES+=(eza)
 need_cmd shellcheck && APT_PACKAGES+=(shellcheck)
@@ -213,6 +249,7 @@ else
 fi
 
 ensure_fd_command
+ensure_yq
 ensure_swift_toolchain
 
 # Rust workflow tools used by cargo xtask validate.

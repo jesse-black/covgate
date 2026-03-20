@@ -2,7 +2,23 @@
 name = "covgate"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.85"
 license = "Apache-2.0"
+description = "Diff-focused coverage gates for local CI, pull requests, and autonomous coding agents."
+readme = "README.md"
+repository = "https://github.com/jesse-black/covgate"
+homepage = "https://github.com/jesse-black/covgate"
+documentation = "https://docs.rs/covgate"
+keywords = ["coverage", "diff", "ci", "git", "cli"]
+categories = ["command-line-utilities", "development-tools::testing"]
+include = [
+  "src/**",
+  ".cargo/config.toml",
+  "Cargo.toml",
+  "Cargo.lock",
+  "README.md",
+  "LICENSE*",
+]
 
 [dependencies]
 anyhow = "1.0"

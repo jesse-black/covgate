@@ -1,0 +1,135 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Version label used for packaging"
+        required: true
+        type: string
+      publish_release:
+        description: "Actually publish the GitHub release"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build (${{ matrix.target }})
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      attestations: write
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            target: x86_64-unknown-linux-musl
+            archive_format: tar.gz
+            binary_path: target/x86_64-unknown-linux-musl/release/covgate
+            build_tool: zigbuild
+          - runner: ubuntu-24.04
+            target: aarch64-unknown-linux-musl
+            archive_format: tar.gz
+            binary_path: target/aarch64-unknown-linux-musl/release/covgate
+            build_tool: zigbuild
+          - runner: windows-2022
+            target: x86_64-pc-windows-msvc
+            archive_format: zip
+            binary_path: target/x86_64-pc-windows-msvc/release/covgate.exe
+            build_tool: cargo
+          - runner: macos-14
+            target: aarch64-apple-darwin
+            archive_format: tar.gz
+            binary_path: target/aarch64-apple-darwin/release/covgate
+            build_tool: cargo
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+    steps:
+      - name: Checkout tagged source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install Zig
+        if: matrix.build_tool == 'zigbuild'
+        uses: goto-bus-stop/setup-zig@v2
+
+      - name: Install cargo-zigbuild
+        if: matrix.build_tool == 'zigbuild'
+        uses: taiki-e/install-action@cargo-zigbuild
+
+      - name: Build release binary with cargo-zigbuild
+        if: matrix.build_tool == 'zigbuild'
+        run: cargo zigbuild --locked --release --bin covgate --target ${{ matrix.target }}
+
+      - name: Build release binary with cargo
+        if: matrix.build_tool == 'cargo'
+        run: cargo build --locked --release --bin covgate --target ${{ matrix.target }}
+
+      - name: Package release archive
+        shell: bash
+        run: |
+          rm -rf dist
+          ./scripts/package-release.sh \
+            "${{ matrix.binary_path }}" \
+            "${RELEASE_TAG}" \
+            "${{ matrix.target }}" \
+            "${{ matrix.archive_format }}"
+
+      - name: Upload release archive artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+
+      - name: Generate artifact attestation
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: dist/*
+
+  publish:
+    name: publish release
+    needs: build
+    if: ${{ github.event_name == 'push' || inputs.publish_release }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+    steps:
+      - name: Download packaged artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: dist
+
+      - name: Generate release checksums
+        shell: bash
+        run: |
+          cd dist
+          sha256sum covgate-* > checksums.txt
+
+      - name: Publish GitHub release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          generate_release_notes: true
+          files: |
+            dist/covgate-*
+            dist/checksums.txt
