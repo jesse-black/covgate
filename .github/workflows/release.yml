@@ -20,8 +20,60 @@ permissions:
   contents: read
 
 jobs:
+  validate:
+    uses: ./.github/workflows/reusable-ci.yml
+
+  release-context:
+    name: resolve release mode
+    needs: validate
+    runs-on: ubuntu-24.04
+    outputs:
+      publish_release: ${{ steps.decide.outputs.publish_release }}
+      release_mode: ${{ steps.decide.outputs.release_mode }}
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Fetch main
+        if: github.event_name == 'push'
+        run: git fetch --no-tags --prune --depth=1 origin +refs/heads/main:refs/remotes/origin/main
+
+      - name: Decide release mode
+        id: decide
+        shell: bash
+        run: |
+          publish_release=false
+          release_mode=dry-run
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            if [[ "${{ inputs.publish_release }}" == "true" ]]; then
+              publish_release=true
+              release_mode=publish
+            fi
+          elif git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            publish_release=true
+            release_mode=publish
+          fi
+
+          {
+            echo "publish_release=${publish_release}"
+            echo "release_mode=${release_mode}"
+          } >>"$GITHUB_OUTPUT"
+
+      - name: Summarize release mode
+        run: |
+          echo "Release tag: ${RELEASE_TAG}"
+          echo "Release mode: ${{ steps.decide.outputs.release_mode }}"
+          if [[ "${{ steps.decide.outputs.release_mode }}" == "dry-run" ]]; then
+            echo "Tag is not on main or publish was not requested, so the workflow will build artifacts without creating a GitHub release."
+          fi
+
   build:
     name: build (${{ matrix.target }})
+    needs: release-context
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
@@ -35,22 +87,18 @@ jobs:
             target: x86_64-unknown-linux-musl
             archive_format: tar.gz
             binary_path: target/x86_64-unknown-linux-musl/release/covgate
-            build_tool: zigbuild
-          - runner: ubuntu-24.04
+          - runner: ubuntu-24.04-arm
             target: aarch64-unknown-linux-musl
             archive_format: tar.gz
             binary_path: target/aarch64-unknown-linux-musl/release/covgate
-            build_tool: zigbuild
           - runner: windows-2022
             target: x86_64-pc-windows-msvc
             archive_format: zip
             binary_path: target/x86_64-pc-windows-msvc/release/covgate.exe
-            build_tool: cargo
           - runner: macos-14
             target: aarch64-apple-darwin
             archive_format: tar.gz
             binary_path: target/aarch64-apple-darwin/release/covgate
-            build_tool: cargo
     env:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
     steps:
@@ -62,20 +110,11 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Install Zig
-        if: matrix.build_tool == 'zigbuild'
-        uses: goto-bus-stop/setup-zig@v2
+      - name: Install musl tools
+        if: ${{ endsWith(matrix.target, '-unknown-linux-musl') }}
+        run: sudo apt-get update -y && sudo apt-get install -y musl-tools
 
-      - name: Install cargo-zigbuild
-        if: matrix.build_tool == 'zigbuild'
-        uses: taiki-e/install-action@cargo-zigbuild
-
-      - name: Build release binary with cargo-zigbuild
-        if: matrix.build_tool == 'zigbuild'
-        run: cargo zigbuild --locked --release --bin covgate --target ${{ matrix.target }}
-
-      - name: Build release binary with cargo
-        if: matrix.build_tool == 'cargo'
+      - name: Build release binary
         run: cargo build --locked --release --bin covgate --target ${{ matrix.target }}
 
       - name: Package release archive
@@ -102,8 +141,8 @@ jobs:
 
   publish:
     name: publish release
-    needs: build
-    if: ${{ github.event_name == 'push' || inputs.publish_release }}
+    needs: [release-context, build]
+    if: ${{ needs.release-context.outputs.publish_release == 'true' }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write

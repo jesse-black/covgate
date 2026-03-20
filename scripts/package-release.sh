@@ -21,6 +21,8 @@ stage_dir=${STAGE_DIR:-dist/stage}
 out_dir=${OUT_DIR:-dist}
 archive_base="covgate-${version}-${target}"
 archive_dir="$stage_dir/$archive_base"
+archive_dir_abs="$(pwd)/$archive_dir"
+out_dir_abs="$(pwd)/$out_dir"
 
 rm -rf "$archive_dir"
 mkdir -p "$archive_dir" "$out_dir"
@@ -32,11 +34,16 @@ case "$archive_format" in
     tar -C "$stage_dir" -czf "$out_dir/$archive_base.tar.gz" "$archive_base"
     ;;
   zip)
-    (
-      cd "$stage_dir"
-      rm -f "$OLDPWD/$out_dir/$archive_base.zip"
-      zip -qr "$OLDPWD/$out_dir/$archive_base.zip" "$archive_base"
-    )
+    if command -v zip >/dev/null 2>&1; then
+      (
+        cd "$stage_dir"
+        rm -f "$OLDPWD/$out_dir/$archive_base.zip"
+        zip -qr "$OLDPWD/$out_dir/$archive_base.zip" "$archive_base"
+      )
+    else
+      pwsh -NoLogo -NoProfile -Command \
+        "Compress-Archive -Path '$archive_dir_abs' -DestinationPath '$out_dir_abs/$archive_base.zip' -Force"
+    fi
     ;;
   *)
     echo "unsupported archive format: $archive_format" >&2
