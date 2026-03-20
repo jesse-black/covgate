@@ -9,12 +9,12 @@ permissions:
   contents: read
 
 jobs:
-  validate:
+  checks:
     uses: ./.github/workflows/reusable-ci.yml
 
   verify-main-tag:
     name: verify tag is on main
-    needs: validate
+    needs: checks
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
