@@ -86,8 +86,8 @@ After this work, a novice maintainer should be able to inspect `Cargo.toml`, see
   Rationale: In Cargo manifests, `rust-version` declares a minimum supported compiler version rather than an exact pin, so `1.85` accurately states the edition-imposed floor without preventing newer compilers.
   Date/Author: 2026-03-20 / Codex
 
-- Decision: Publish three native runner targets in the first release workflow: `x86_64-unknown-linux-gnu`, `x86_64-pc-windows-msvc`, and `aarch64-apple-darwin`.
-  Rationale: Those targets cover the actively relevant hosted GitHub runner platforms for this project without introducing extra cross-compilation toolchains into the first release workflow. Dropping Intel macOS keeps the workflow aligned with the project's near-term platform priorities while preserving the trust and packaging mechanics that matter most in this milestone.
+- Decision: Publish four first-release binary targets: `x86_64-unknown-linux-musl`, `aarch64-unknown-linux-musl`, `x86_64-pc-windows-msvc`, and `aarch64-apple-darwin`.
+  Rationale: Before the first public release, it is cheaper to set the Linux portability story up front than to migrate it later. Shipping musl-linked Linux binaries avoids glibc-version coupling for downloaded CLI users, and adding Linux arm64 keeps the release set aligned with the two common Linux CPU architectures. Zig-backed musl cross-compilation keeps that extra toolchain complexity isolated to the release workflow instead of changing the repository's normal development or CI paths.
   Date/Author: 2026-03-20 / Codex
 
 - Decision: Use a checked-in `scripts/package-release.sh` helper for archive assembly.
@@ -98,7 +98,7 @@ After this work, a novice maintainer should be able to inspect `Cargo.toml`, see
 
 This ExecPlan is complete. `covgate` now has crates.io-ready manifest metadata, a narrowed published crate surface, and a dedicated GitHub Actions release workflow that builds tagged archives, publishes `checksums.txt`, and generates GitHub artifact attestations for each packaged binary. Review feedback ultimately kept maintainer release instructions out of the user-facing README.
 
-The most important implementation lesson was that release readiness depended on small operational details as much as on the high-level policy: the Rust 2024 edition forced an explicit `rust-version = "1.85"`, Cargo packaging only needed `.cargo/config.toml` in addition to source and top-level metadata, and the release workflow stayed easier to audit once crate publishing remained a manual `cargo publish` step outside GitHub Actions. A future follow-up can add more targets or consumer-side attestation verification without reopening this completed milestone.
+The most important implementation lesson was that release readiness depended on small operational details as much as on the high-level policy: the Rust 2024 edition forced an explicit `rust-version = "1.85"`, Cargo packaging only needed `.cargo/config.toml` in addition to source and top-level metadata, and the release workflow stayed easier to audit once Linux musl cross-compilation was isolated to explicit workflow steps while crate publishing remained a manual `cargo publish` step outside GitHub Actions. A future follow-up can add more targets or consumer-side attestation verification without reopening this completed milestone.
 
 ## Context and Orientation
 
@@ -265,6 +265,7 @@ Representative package-surface expectation after the initial include filter:
 Representative release assets after a tagged workflow run:
 
     covgate-x86_64-unknown-linux-musl.tar.gz
+    covgate-aarch64-unknown-linux-musl.tar.gz
     covgate-aarch64-apple-darwin.tar.gz
     covgate-x86_64-pc-windows-msvc.zip
     checksums.txt

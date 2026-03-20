@@ -8,7 +8,7 @@ See `docs/reference/environment-execution-contexts.md` for deeper rationale, sou
 
 ### Installed by `scripts/agent-env-setup.sh` when missing
 
-- Core CLI/build tools: `jq`, `ripgrep`, `yq`, `fd` (via `fd-find` + symlink), `eza`
+- Core CLI/build tools: `jq`, `ripgrep`, Mike Farah `yq`, `fd` (via `fd-find` + symlink), `eza`
 - Shell tooling: `shellcheck`, `shfmt`
 - C/C++ workflows: `build-essential`, `cmake`, `ninja`, `clang`, `llvm-cov`, `llvm-profdata`
 - Swift workflows: Swift via `swiftly`
