@@ -4,17 +4,6 @@ on:
   push:
     tags:
       - "v*"
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: "Version label used for packaging"
-        required: true
-        type: string
-      publish_release:
-        description: "Actually publish the GitHub release"
-        required: true
-        default: false
-        type: boolean
 
 permissions:
   contents: read
@@ -23,57 +12,25 @@ jobs:
   validate:
     uses: ./.github/workflows/reusable-ci.yml
 
-  release-context:
-    name: resolve release mode
+  verify-main-tag:
+    name: verify tag is on main
     needs: validate
     runs-on: ubuntu-24.04
-    outputs:
-      publish_release: ${{ steps.decide.outputs.publish_release }}
-      release_mode: ${{ steps.decide.outputs.release_mode }}
-    env:
-      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Fetch main
-        if: github.event_name == 'push'
         run: git fetch --no-tags --prune --depth=1 origin +refs/heads/main:refs/remotes/origin/main
 
-      - name: Decide release mode
-        id: decide
-        shell: bash
+      - name: Verify tagged commit is reachable from main
         run: |
-          publish_release=false
-          release_mode=dry-run
-
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            if [[ "${{ inputs.publish_release }}" == "true" ]]; then
-              publish_release=true
-              release_mode=publish
-            fi
-          elif git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
-            publish_release=true
-            release_mode=publish
-          fi
-
-          {
-            echo "publish_release=${publish_release}"
-            echo "release_mode=${release_mode}"
-          } >>"$GITHUB_OUTPUT"
-
-      - name: Summarize release mode
-        run: |
-          echo "Release tag: ${RELEASE_TAG}"
-          echo "Release mode: ${{ steps.decide.outputs.release_mode }}"
-          if [[ "${{ steps.decide.outputs.release_mode }}" == "dry-run" ]]; then
-            echo "Tag is not on main or publish was not requested, so the workflow will build artifacts without creating a GitHub release."
-          fi
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
 
   build:
     name: build (${{ matrix.target }})
-    needs: release-context
+    needs: verify-main-tag
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
@@ -100,7 +57,7 @@ jobs:
             archive_format: tar.gz
             binary_path: target/aarch64-apple-darwin/release/covgate
     env:
-      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+      RELEASE_TAG: ${{ github.ref_name }}
     steps:
       - name: Checkout tagged source
         uses: actions/checkout@v6
@@ -141,13 +98,12 @@ jobs:
 
   publish:
     name: publish release
-    needs: [release-context, build]
-    if: ${{ needs.release-context.outputs.publish_release == 'true' }}
+    needs: build
     runs-on: ubuntu-24.04
     permissions:
       contents: write
     env:
-      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+      RELEASE_TAG: ${{ github.ref_name }}
     steps:
       - name: Download packaged artifacts
         uses: actions/download-artifact@v4
