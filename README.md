@@ -69,6 +69,7 @@ Furthermore, cloud agent sandboxes deliberately remove base branches like `main`
 cargo install covgate
 ```
 
+
 ## Usage
 
 Run `covgate` in your CI pipeline after your tests generate coverage artifacts. Invoke it with either a Git base reference or a diff file.

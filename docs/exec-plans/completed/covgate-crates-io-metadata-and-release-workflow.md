@@ -1,6 +1,6 @@
 # Add crates.io package metadata and a tagged release workflow with checksums and provenance
 
-Save this in-progress ExecPlan in `docs/exec-plans/active/covgate-crates-io-metadata-and-release-workflow.md`. Move it to `docs/exec-plans/completed/covgate-crates-io-metadata-and-release-workflow.md` only after the crate metadata, release workflow, validation steps, release documentation, and retrospective notes are complete.
+The canonical completed copy of this ExecPlan lives at `docs/exec-plans/completed/covgate-crates-io-metadata-and-release-workflow.md`. Keep any follow-up release-channel work in a new active ExecPlan rather than moving this file back.
 
 This ExecPlan is a living document. The sections `Progress`, `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
@@ -17,13 +17,14 @@ After this work, a novice maintainer should be able to inspect `Cargo.toml`, see
 - [x] (2026-03-19 18:20Z) Re-read `docs/PLANS.md`, inspected `Cargo.toml`, `README.md`, `.github/workflows/ci.yml`, `deny.toml`, and `docs/reference/release-binary-trust-and-ci.md`, and confirmed the current release gap.
 - [x] (2026-03-19 18:30Z) Created this active ExecPlan with repository-specific file targets, validation commands, and a first-pass scope for crates.io metadata plus release automation.
 - [x] (2026-03-19 18:45Z) Narrowed the plan so crates.io publication is an explicit manual maintainer step using `cargo publish`, while GitHub Actions handles binary release artifacts only.
-- [ ] Add crates.io package metadata to `Cargo.toml` and tighten package contents if the shipped tarball is unnecessarily large.
-- [ ] Document the release-facing metadata choices in `README.md` only where user-visible installation or release behavior needs clarification.
-- [ ] Add a dedicated GitHub Actions workflow for tagged releases that builds platform binaries, generates checksums, and publishes release assets.
-- [ ] Add provenance or artifact attestation to the release workflow so downstream consumers can verify that binaries came from this repository’s workflow.
-- [ ] Document the manual maintainer release sequence: bump version, validate locally, publish to crates.io with `cargo publish`, then create the release tag that drives binary publication.
-- [ ] Validate the crate package locally with `cargo package` and validate workflow syntax as far as local tooling and repository CI allow.
-- [ ] Record the final release procedure, tradeoffs, and any deferred follow-up work in this plan’s retrospective before moving it to `completed/`.
+- [x] (2026-03-20 00:40Z) Added crates.io package metadata to `Cargo.toml`, set `rust-version = "1.85"` to match the Rust 2024 edition floor, and trimmed the published crate to a reviewed include allowlist that keeps contributor-only docs, scripts, and fixtures out of the tarball while retaining `.cargo/config.toml`.
+- [x] (2026-03-20 00:45Z) Initially updated `README.md` with the public release story, then reverted those README additions during review so release-process details remain in maintainer-facing planning artifacts instead of the user-facing README.
+- [x] (2026-03-20 01:00Z) Added `.github/workflows/release.yml` plus a deterministic `scripts/package-release.sh` helper to build, archive, checksum, and publish tagged release artifacts for Linux, Windows, and Apple Silicon macOS targets.
+- [x] (2026-03-20 01:05Z) Added GitHub artifact attestation generation in each release build job so every published archive gets provenance from the repository workflow.
+- [x] (2026-03-20 00:45Z) Recorded the maintainer release sequence in repository planning notes rather than the user-facing README after review feedback requested reverting README release notes.
+- [x] (2026-03-20 01:20Z) Validated package contents with `cargo package --allow-dirty --list`, exercised `cargo publish --dry-run`, syntax-checked `scripts/package-release.sh`, and ran repository validation with `cargo xtask quick` plus `cargo xtask validate`.
+- [x] (2026-03-20 01:25Z) Updated the retrospective with the shipped release process, recorded packaging and target-platform decisions, and moved this ExecPlan to `docs/exec-plans/completed/`.
+- [x] (2026-03-20 02:25Z) Applied post-review follow-up: reverted the README release notes, removed the retiring `x86_64-apple-darwin` target from the release matrix, and kept the maintainer-facing release rationale in this completed ExecPlan.
 
 ## Surprises & Discoveries
 
@@ -41,6 +42,15 @@ After this work, a novice maintainer should be able to inspect `Cargo.toml`, see
 
 - Observation: A minimal explicit `include` list is a good first candidate for this repository because the likely unwanted package contents are whole top-level areas such as `docs/`, `scripts/`, `tests/`, `ARCHITECTURE.md`, and `AGENTS.md`, not a few scattered files.
   Evidence: the current package dry-run list shows source and metadata files mixed with contributor-only docs, fixtures, and helper scripts that are not obviously needed by downstream crate consumers.
+
+- Observation: the explicit package allowlist needed `.cargo/config.toml` to preserve the repository's linker and target defaults during `cargo package` verification, but it did not need `tests/`, `docs/`, or fixture trees.
+  Evidence: `cargo package --allow-dirty --list` succeeded with a package surface limited to `src/**`, `.cargo/config.toml`, `Cargo.toml`, `Cargo.lock`, `README.md`, and `LICENSE*`, and `cargo publish --dry-run` completed successfully from that same manifest.
+
+- Observation: Cargo still auto-includes a few README artifacts and warns that integration tests are omitted when the crate uses a narrow `include` allowlist.
+  Evidence: `cargo package --allow-dirty --list` retained `tests/fixtures/dotnet/README.md` and `tests/fixtures/vitest/README.md`, and `cargo publish --dry-run --allow-dirty` warned that integration tests such as `tests/cli_interface.rs` are ignored because they are not shipped in the published package.
+
+- Observation: release-time artifact attestations fit cleanly into the build matrix as long as each job attests its packaged archive before the publish job aggregates assets into a GitHub release.
+  Evidence: `.github/workflows/release.yml` can generate `dist/covgate-<tag>-<target>.<ext>` and call `actions/attest-build-provenance` against `dist/*` without needing extra packaging state in the publish job.
 
 ## Decision Log
 
@@ -68,17 +78,33 @@ After this work, a novice maintainer should be able to inspect `Cargo.toml`, see
   Rationale: The repository has several large top-level directories and contributor-focused files that should stay out of the published crate by default. An allowlist is easier to audit and naturally keeps `tests/`, `docs/`, `scripts/`, `ARCHITECTURE.md`, and `AGENTS.md` out unless the package verification steps prove that one of them must be added back.
   Date/Author: 2026-03-19 / Codex
 
+- Decision: Set `rust-version = "1.85"` in `Cargo.toml`.
+  Rationale: `covgate` already uses the Rust 2024 edition, whose minimum stable compiler is Rust 1.85, so making that floor explicit helps crates.io consumers and release tooling fail fast with a clear message.
+  Date/Author: 2026-03-20 / Codex
+
+- Decision: Keep `rust-version = "1.85"` even though the field syntax looks like a single version.
+  Rationale: In Cargo manifests, `rust-version` declares a minimum supported compiler version rather than an exact pin, so `1.85` accurately states the edition-imposed floor without preventing newer compilers.
+  Date/Author: 2026-03-20 / Codex
+
+- Decision: Publish three native runner targets in the first release workflow: `x86_64-unknown-linux-gnu`, `x86_64-pc-windows-msvc`, and `aarch64-apple-darwin`.
+  Rationale: Those targets cover the actively relevant hosted GitHub runner platforms for this project without introducing extra cross-compilation toolchains into the first release workflow. Dropping Intel macOS keeps the workflow aligned with the project's near-term platform priorities while preserving the trust and packaging mechanics that matter most in this milestone.
+  Date/Author: 2026-03-20 / Codex
+
+- Decision: Use a checked-in `scripts/package-release.sh` helper for archive assembly.
+  Rationale: Packaging logic is easier to validate locally with `bash -n` and easier for a novice maintainer to audit when the archive naming and included files live in a single deterministic script instead of duplicated workflow shell fragments.
+  Date/Author: 2026-03-20 / Codex
+
 ## Outcomes & Retrospective
 
-Implementation has not started yet. The useful outcome so far is a clear release-readiness scope grounded in the current repository state: the crate itself needs richer manifest metadata, and the binary distribution story needs a real workflow that produces the verification material the docs already say downstream users should expect.
+This ExecPlan is complete. `covgate` now has crates.io-ready manifest metadata, a narrowed published crate surface, and a dedicated GitHub Actions release workflow that builds tagged archives, publishes `checksums.txt`, and generates GitHub artifact attestations for each packaged binary. Review feedback ultimately kept maintainer release instructions out of the user-facing README.
 
-The main lesson at this planning stage is that “publish to crates.io” is only part of the repository’s release problem. For `covgate`, a trustworthy release also means producing GitHub release binaries, checksums, and provenance in a way that aligns with the existing trust note and the CI checks already enforced on the source tree.
+The most important implementation lesson was that release readiness depended on small operational details as much as on the high-level policy: the Rust 2024 edition forced an explicit `rust-version = "1.85"`, Cargo packaging only needed `.cargo/config.toml` in addition to source and top-level metadata, and the release workflow stayed easier to audit once crate publishing remained a manual `cargo publish` step outside GitHub Actions. A future follow-up can add more targets or consumer-side attestation verification without reopening this completed milestone.
 
 ## Context and Orientation
 
 `covgate` is a Rust workspace rooted at `Cargo.toml`. The public crate is the root package `covgate`; the helper crate in `xtask/` is intentionally unpublished. The current root manifest includes only the minimal package fields `name`, `version`, `edition`, and `license`. It does not yet declare the descriptive package metadata that crates.io and downstream tooling use for discovery and attribution.
 
-The user-facing installation and usage guidance lives in `README.md`. This file already explains the product’s purpose, supported ecosystems, and installation via `cargo install covgate`, so the metadata work should align with that message rather than invent a new description.
+The user-facing installation and usage guidance lives in `README.md`. This file already explains the product’s purpose, supported ecosystems, and installation via `cargo install covgate`, so release-process details should only be added there if they clearly help end users rather than maintainers.
 
 Repository automation currently lives in `.github/workflows/ci.yml`. That workflow validates source quality but does not create GitHub releases, upload binaries, publish checksums, or attest released artifacts. The repository does contain release guidance in `docs/reference/release-binary-trust-and-ci.md`. In plain language, a “checksum” is a small text file that records a hash, such as SHA-256, for each release artifact so consumers can verify downloads were not changed. “Provenance” or “attestation” means signed machine-readable evidence that a release artifact was produced by a specific repository workflow run.
 
@@ -271,3 +297,7 @@ Revision note: Initial plan created to add missing crates.io package metadata an
 Revision note: Simplified the plan by deciding that crates.io publication remains a manual maintainer step via `cargo publish`; the GitHub workflow now covers binary releases only.
 
 Revision note: Added a concrete starting `include` allowlist for the crate package and explicit sanity-check steps to verify that `cargo package` and `cargo publish --dry-run` still work when `tests/` is not included in the published crate.
+
+Revision note: Implemented the plan by shipping crates.io metadata, a trimmed package include list, release documentation, a checked-in packaging helper, and a dedicated tagged release workflow with checksums plus GitHub artifact attestations; then moved the plan to `docs/exec-plans/completed/`.
+
+Revision note: After review, reverted the README release-flow additions, narrowed the release matrix by removing `x86_64-apple-darwin`, and kept the maintainer-process detail in this completed ExecPlan instead of the user-facing README.
