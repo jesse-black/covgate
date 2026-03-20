@@ -32,11 +32,24 @@ case "$archive_format" in
     tar -C "$stage_dir" -czf "$out_dir/$archive_base.tar.gz" "$archive_base"
     ;;
   zip)
-    (
-      cd "$stage_dir"
-      rm -f "$OLDPWD/$out_dir/$archive_base.zip"
-      zip -qr "$OLDPWD/$out_dir/$archive_base.zip" "$archive_base"
-    )
+    if command -v zip >/dev/null 2>&1; then
+      (
+        cd "$stage_dir"
+        rm -f "$OLDPWD/$out_dir/$archive_base.zip"
+        zip -qr "$OLDPWD/$out_dir/$archive_base.zip" "$archive_base"
+      )
+    else
+      if pwd -W >/dev/null 2>&1; then
+        workspace_root="$(pwd -W)"
+      else
+        workspace_root="$(pwd)"
+      fi
+      archive_dir_abs="${workspace_root}\\${archive_dir//\//\\}"
+      out_dir_abs="${workspace_root}\\${out_dir//\//\\}"
+      archive_zip_abs="${out_dir_abs}\\${archive_base}.zip"
+      pwsh -NoLogo -NoProfile -Command \
+        "Compress-Archive -Path '$archive_dir_abs' -DestinationPath '$archive_zip_abs' -Force"
+    fi
     ;;
   *)
     echo "unsupported archive format: $archive_format" >&2

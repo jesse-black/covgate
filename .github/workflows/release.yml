@@ -4,24 +4,33 @@ on:
   push:
     tags:
       - "v*"
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: "Version label used for packaging"
-        required: true
-        type: string
-      publish_release:
-        description: "Actually publish the GitHub release"
-        required: true
-        default: false
-        type: boolean
 
 permissions:
   contents: read
 
 jobs:
+  checks:
+    uses: ./.github/workflows/reusable-ci.yml
+
+  verify-main-tag:
+    name: verify tag is on main
+    needs: checks
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Fetch main
+        run: git fetch --no-tags --prune --depth=1 origin +refs/heads/main:refs/remotes/origin/main
+
+      - name: Verify tagged commit is reachable from main
+        run: |
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+
   build:
     name: build (${{ matrix.target }})
+    needs: verify-main-tag
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
@@ -35,49 +44,34 @@ jobs:
             target: x86_64-unknown-linux-musl
             archive_format: tar.gz
             binary_path: target/x86_64-unknown-linux-musl/release/covgate
-            build_tool: zigbuild
-          - runner: ubuntu-24.04
+          - runner: ubuntu-24.04-arm
             target: aarch64-unknown-linux-musl
             archive_format: tar.gz
             binary_path: target/aarch64-unknown-linux-musl/release/covgate
-            build_tool: zigbuild
           - runner: windows-2022
             target: x86_64-pc-windows-msvc
             archive_format: zip
             binary_path: target/x86_64-pc-windows-msvc/release/covgate.exe
-            build_tool: cargo
           - runner: macos-14
             target: aarch64-apple-darwin
             archive_format: tar.gz
             binary_path: target/aarch64-apple-darwin/release/covgate
-            build_tool: cargo
     env:
-      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+      RELEASE_TAG: ${{ github.ref_name }}
     steps:
       - name: Checkout tagged source
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ env.RELEASE_TAG }}
+        uses: actions/checkout@v6
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
-      - name: Install Zig
-        if: matrix.build_tool == 'zigbuild'
-        uses: goto-bus-stop/setup-zig@v2
+      - name: Install musl tools
+        if: ${{ endsWith(matrix.target, '-unknown-linux-musl') }}
+        run: sudo apt-get update -y && sudo apt-get install -y musl-tools
 
-      - name: Install cargo-zigbuild
-        if: matrix.build_tool == 'zigbuild'
-        uses: taiki-e/install-action@cargo-zigbuild
-
-      - name: Build release binary with cargo-zigbuild
-        if: matrix.build_tool == 'zigbuild'
-        run: cargo zigbuild --locked --release --bin covgate --target ${{ matrix.target }}
-
-      - name: Build release binary with cargo
-        if: matrix.build_tool == 'cargo'
+      - name: Build release binary
         run: cargo build --locked --release --bin covgate --target ${{ matrix.target }}
 
       - name: Package release archive
@@ -105,12 +99,11 @@ jobs:
   publish:
     name: publish release
     needs: build
-    if: ${{ github.event_name == 'push' || inputs.publish_release }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write
     env:
-      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+      RELEASE_TAG: ${{ github.ref_name }}
     steps:
       - name: Download packaged artifacts
         uses: actions/download-artifact@v4
