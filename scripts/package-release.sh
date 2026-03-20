@@ -21,8 +21,6 @@ stage_dir=${STAGE_DIR:-dist/stage}
 out_dir=${OUT_DIR:-dist}
 archive_base="covgate-${version}-${target}"
 archive_dir="$stage_dir/$archive_base"
-archive_dir_abs="$(pwd)/$archive_dir"
-out_dir_abs="$(pwd)/$out_dir"
 
 rm -rf "$archive_dir"
 mkdir -p "$archive_dir" "$out_dir"
@@ -41,8 +39,16 @@ case "$archive_format" in
         zip -qr "$OLDPWD/$out_dir/$archive_base.zip" "$archive_base"
       )
     else
+      if pwd -W >/dev/null 2>&1; then
+        workspace_root="$(pwd -W)"
+      else
+        workspace_root="$(pwd)"
+      fi
+      archive_dir_abs="${workspace_root}\\${archive_dir//\//\\}"
+      out_dir_abs="${workspace_root}\\${out_dir//\//\\}"
+      archive_zip_abs="${out_dir_abs}\\${archive_base}.zip"
       pwsh -NoLogo -NoProfile -Command \
-        "Compress-Archive -Path '$archive_dir_abs' -DestinationPath '$out_dir_abs/$archive_base.zip' -Force"
+        "Compress-Archive -Path '$archive_dir_abs' -DestinationPath '$archive_zip_abs' -Force"
     fi
     ;;
   *)
