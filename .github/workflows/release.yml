@@ -55,9 +55,7 @@ jobs:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
     steps:
       - name: Checkout tagged source
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ env.RELEASE_TAG }}
+        uses: actions/checkout@v6
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
