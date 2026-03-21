@@ -1,6 +1,8 @@
 # covgate
 
 [![CI](https://github.com/jesse-black/covgate/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/jesse-black/covgate/actions/workflows/ci.yml)
+[![crates.io](https://img.shields.io/crates/v/covgate.svg)](https://crates.io/crates/covgate)
+[![docs.rs](https://img.shields.io/docsrs/covgate)](https://docs.rs/covgate)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
 
 A zero-dependency CI/CD quality gate that enforces code coverage strictly on pull request diffs—built for human developers and autonomous AI agents.
@@ -155,7 +157,13 @@ covgate check coverage.json
 
 Generate JSON coverage, run `covgate`, and seamlessly write the results to your PR summary. 
 
+When running `covgate` against the default branch in GitHub Actions, set `fetch-depth: 0` on the checkout action so it includes the default branch as the base to diff against. This is not required when using `--diff-file`.
+
 ```yaml
+- uses: actions/checkout@v6
+  with:
+    fetch-depth: 0
+
 - name: Generate Coverage
   run: cargo llvm-cov --json --output-path coverage.json
 
