@@ -157,7 +157,13 @@ covgate check coverage.json
 
 Generate JSON coverage, run `covgate`, and seamlessly write the results to your PR summary. 
 
+When running `covgate` against the default branch in GitHub Actions, set `fetch-depth: 0` on the checkout action so it includes the default branch as the base to diff against. This is not required when using `--diff-file`.
+
 ```yaml
+- uses: actions/checkout@v6
+  with:
+    fetch-depth: 0
+
 - name: Generate Coverage
   run: cargo llvm-cov --json --output-path coverage.json
 
