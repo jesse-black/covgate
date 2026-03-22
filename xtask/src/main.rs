@@ -217,6 +217,12 @@ const FIXTURE_COVERAGE_SPECS: &[FixtureCoverageSpec] = &[
         toolchain: FixtureToolchain::Vitest,
         run_mode: RunMode::NoCalls,
     },
+    FixtureCoverageSpec {
+        id: "vitest/empty-branch-locations",
+        source_file: "src/fixtures/fixtureSeed.ts",
+        toolchain: FixtureToolchain::Vitest,
+        run_mode: RunMode::NoCalls,
+    },
 ];
 
 fn regen_fixture_coverage(fixture_id: &str) -> Result<()> {
@@ -373,7 +379,7 @@ fn write_vitest_fixture_coverage(spec: &FixtureCoverageSpec) -> Result<()> {
     let coverage_dir = temp_dir.join("coverage");
     let raw_coverage = coverage_dir.join("coverage-final.json");
     let output_path = fixture_root.join("coverage.json");
-    normalize_istanbul_coverage(&raw_coverage, spec.source_file, &output_path)?;
+    normalize_istanbul_coverage(&raw_coverage, &temp_dir, spec.source_file, &output_path)?;
     normalize_vitest_native_summary(
         &coverage_dir.join("coverage-summary.json"),
         &fixture_root.join("native-summary.json"),
@@ -601,7 +607,12 @@ fn normalize_coverlet_coverage(raw: &Path, source_file: &str, output: &Path) -> 
         .with_context(|| format!("failed to write fixture coverage: {}", output.display()))
 }
 
-fn normalize_istanbul_coverage(raw: &Path, source_file: &str, output: &Path) -> Result<()> {
+fn normalize_istanbul_coverage(
+    raw: &Path,
+    fixture_root: &Path,
+    source_file: &str,
+    output: &Path,
+) -> Result<()> {
     let text = std::fs::read_to_string(raw)
         .with_context(|| format!("failed to read raw istanbul json: {}", raw.display()))?;
     let mut files: serde_json::Map<String, serde_json::Value> =
@@ -609,18 +620,32 @@ fn normalize_istanbul_coverage(raw: &Path, source_file: &str, output: &Path) -> 
 
     let mut rewritten = serde_json::Map::new();
     for (file, value) in std::mem::take(&mut files) {
-        let normalized = file.replace('\\', "/");
-        let key = if normalized.ends_with(source_file) {
-            source_file.to_string()
-        } else {
-            normalized
-        };
+        let key = normalize_istanbul_path(&file, fixture_root, source_file);
+        let mut value = value;
+        if let Some(path) = value.get_mut("path") {
+            *path = serde_json::Value::String(key.clone());
+        }
         rewritten.insert(key, value);
     }
 
     let pretty = serde_json::to_string_pretty(&rewritten).context("failed to format json")?;
     std::fs::write(output, format!("{pretty}\n"))
         .with_context(|| format!("failed to write fixture coverage: {}", output.display()))
+}
+
+fn normalize_istanbul_path(raw_path: &str, fixture_root: &Path, source_file: &str) -> String {
+    let normalized = raw_path.replace('\\', "/");
+    let raw = Path::new(&normalized);
+
+    if let Ok(relative) = raw.strip_prefix(fixture_root) {
+        return relative.to_string_lossy().replace('\\', "/");
+    }
+
+    if normalized.ends_with(source_file) {
+        return source_file.to_string();
+    }
+
+    normalized
 }
 
 fn normalize_dotnet_native_summary(raw: &Path, output: &Path) -> Result<()> {

@@ -1,0 +1,14 @@
+{
+  "branch": {
+    "covered": 9,
+    "total": 21
+  },
+  "function": {
+    "covered": 6,
+    "total": 6
+  },
+  "line": {
+    "covered": 28,
+    "total": 36
+  }
+}

@@ -54,9 +54,16 @@ pub(crate) fn parse_str_with_repo_root(input: &str, repo_root: &Path) -> Result<
         let mut branch_records = Vec::new();
         for (branch_id, branch_map) in &coverage.branch_map {
             let outcomes = coverage.b.get(branch_id).cloned().unwrap_or_default();
+            let fallback_line = branch_map
+                .line
+                .or(branch_map.loc.as_ref().and_then(|span| span.start.line))
+                .or(branch_map.loc.as_ref().and_then(|span| span.end.line));
             for (index, location) in branch_map.locations.iter().enumerate() {
+                let Some(line) = location.start.line.or(location.end.line).or(fallback_line) else {
+                    continue;
+                };
                 branch_records.push(BranchRecord {
-                    line: location.start.line,
+                    line,
                     covered: outcomes.get(index).copied().unwrap_or(0) > 0,
                 });
             }
@@ -180,7 +187,11 @@ struct IstanbulFunctionMap {
 
 #[derive(Debug, Deserialize)]
 struct IstanbulBranchMap {
-    locations: Vec<IstanbulSpan>,
+    #[serde(default)]
+    line: Option<u32>,
+    #[serde(default)]
+    loc: Option<IstanbulOptionalSpan>,
+    locations: Vec<IstanbulOptionalSpan>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -192,6 +203,18 @@ struct IstanbulSpan {
 #[derive(Debug, Deserialize)]
 struct IstanbulPosition {
     line: u32,
+}
+
+#[derive(Debug, Deserialize)]
+struct IstanbulOptionalSpan {
+    start: IstanbulOptionalPosition,
+    end: IstanbulOptionalPosition,
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct IstanbulOptionalPosition {
+    #[serde(default)]
+    line: Option<u32>,
 }
 
 #[derive(Debug)]
@@ -286,6 +309,28 @@ mod tests {
         let error = parse_str_with_repo_root("{", Path::new("/workspace/covgate"))
             .expect_err("invalid json should fail");
         assert!(error.to_string().contains("failed to parse istanbul json"));
+    }
+
+    #[test]
+    fn parses_checked_in_vitest_fixture_with_empty_branch_locations() {
+        let input =
+            include_str!("../../tests/fixtures/vitest/empty-branch-locations/coverage.json");
+
+        let report = parse_str_with_repo_root(input, Path::new("/workspace/covgate"))
+            .expect("checked-in vitest fixture should parse");
+
+        let branch_totals = report
+            .totals_by_file
+            .get(&MetricKind::Branch)
+            .expect("branch totals should exist");
+        assert!(
+            branch_totals.contains_key(&PathBuf::from("src/auth/authService.ts")),
+            "fixture should include authService branch totals"
+        );
+        assert!(
+            branch_totals.contains_key(&PathBuf::from("src/auth/msalConfig.ts")),
+            "fixture should include msalConfig branch totals"
+        );
     }
 
     #[test]
