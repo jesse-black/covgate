@@ -75,6 +75,7 @@ pub fn compute_changed_metric(
 mod tests {
     use std::{collections::BTreeMap, path::PathBuf};
 
+    use crate::coverage::istanbul_json::parse_str_with_repo_root;
     use crate::model::{
         ChangedFile, CoverageOpportunity, CoverageReport, FileTotals, LineRange, MetricKind,
         OpportunityKind, SourceSpan,
@@ -157,5 +158,24 @@ mod tests {
             error.to_string(),
             "requested metric branch is not available in the report"
         );
+    }
+
+    #[test]
+    fn changed_branch_metric_counts_multiline_vitest_branch_outcomes() {
+        let report = parse_str_with_repo_root(
+            include_str!("../tests/fixtures/vitest/empty-branch-locations/coverage.json"),
+            std::path::Path::new("."),
+        )
+        .expect("fixture should parse");
+        let diff = vec![ChangedFile {
+            path: PathBuf::from("src/auth/authService.ts"),
+            changed_lines: vec![LineRange { start: 11, end: 11 }],
+        }];
+
+        let metric =
+            compute_changed_metric(&report, &diff, MetricKind::Branch).expect("metric works");
+
+        assert_eq!(metric.covered, 1);
+        assert_eq!(metric.total, 2);
     }
 }

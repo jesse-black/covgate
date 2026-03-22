@@ -267,6 +267,7 @@ pub fn write_absolute_path_coverage_fixture(fixture: Fixture, worktree: &Path, d
         "cpp" => "src/lib.cpp",
         "swift" => "Sources/CovgateDemo/CovgateDemo.swift",
         "dotnet" => "src/CovgateDemo/MathOps.cs",
+        "vitest" if fixture.name == "empty-branch-locations" => "src/fixtures/fixtureSeed.ts",
         "vitest" => "src/math.js",
         _ => "src/lib.rs",
     };
