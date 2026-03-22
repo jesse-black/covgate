@@ -54,16 +54,27 @@ pub(crate) fn parse_str_with_repo_root(input: &str, repo_root: &Path) -> Result<
         let mut branch_records = Vec::new();
         for (branch_id, branch_map) in &coverage.branch_map {
             let outcomes = coverage.b.get(branch_id).cloned().unwrap_or_default();
-            let fallback_line = branch_map
-                .line
-                .or(branch_map.loc.as_ref().and_then(|span| span.start.line))
+            let fallback_start_line = branch_map
+                .loc
+                .as_ref()
+                .and_then(|span| span.start.line)
+                .or(branch_map.line)
                 .or(branch_map.loc.as_ref().and_then(|span| span.end.line));
+            let fallback_end_line = branch_map
+                .loc
+                .as_ref()
+                .and_then(|span| span.end.line)
+                .or(fallback_start_line);
             for (index, location) in branch_map.locations.iter().enumerate() {
-                let Some(line) = location.start.line.or(location.end.line).or(fallback_line) else {
+                let start_line = location.start.line.or(fallback_start_line);
+                let end_line = location.end.line.or(fallback_end_line).or(start_line);
+                let Some(start_line) = start_line else {
                     continue;
                 };
+                let end_line = end_line.unwrap_or(start_line);
                 branch_records.push(BranchRecord {
-                    line,
+                    start_line,
+                    end_line,
                     covered: outcomes.get(index).copied().unwrap_or(0) > 0,
                 });
             }
@@ -80,8 +91,8 @@ pub(crate) fn parse_str_with_repo_root(input: &str, repo_root: &Path) -> Result<
                     kind: OpportunityKind::BranchOutcome,
                     span: SourceSpan {
                         path: path.clone(),
-                        start_line: record.line,
-                        end_line: record.line,
+                        start_line: record.start_line,
+                        end_line: record.end_line,
                     },
                     covered: record.covered,
                 });
@@ -226,7 +237,8 @@ struct FunctionRecord {
 
 #[derive(Debug)]
 struct BranchRecord {
-    line: u32,
+    start_line: u32,
+    end_line: u32,
     covered: bool,
 }
 
@@ -234,7 +246,7 @@ struct BranchRecord {
 mod tests {
     use std::path::{Path, PathBuf};
 
-    use crate::model::MetricKind;
+    use crate::model::{MetricKind, OpportunityKind};
 
     use super::parse_str_with_repo_root;
 
@@ -330,6 +342,22 @@ mod tests {
         assert!(
             branch_totals.contains_key(&PathBuf::from("src/auth/msalConfig.ts")),
             "fixture should include msalConfig branch totals"
+        );
+
+        let auth_service_branches: Vec<_> = report
+            .opportunities
+            .iter()
+            .filter(|opportunity| {
+                opportunity.kind == OpportunityKind::BranchOutcome
+                    && opportunity.span.path == Path::new("src/auth/authService.ts")
+                    && opportunity.span.start_line == 10
+                    && opportunity.span.end_line == 11
+            })
+            .collect();
+        assert_eq!(
+            auth_service_branches.len(),
+            2,
+            "line 10-11 authService branch should preserve both outcome spans"
         );
     }
 
