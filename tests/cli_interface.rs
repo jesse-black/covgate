@@ -1,6 +1,6 @@
 mod support;
 
-use std::fs;
+use std::{fs, process::Output};
 
 use tempfile::tempdir;
 
@@ -9,6 +9,15 @@ use crate::support::{
     rust_basic_fail_fixture, rust_basic_pass_fixture, setup_fixture_worktree,
     write_absolute_path_coverage_fixture, write_worktree_diff,
 };
+
+fn run_covgate_raw_with_path(worktree: &std::path::Path, path: &str, args: &[String]) -> Output {
+    let binary = env!("CARGO_BIN_EXE_covgate");
+    let mut command = std::process::Command::new(binary);
+    command.args(args);
+    command.current_dir(worktree);
+    command.env("PATH", path);
+    command.output().expect("covgate should run")
+}
 
 #[test]
 fn record_base_creates_worktree_ref() {
@@ -47,6 +56,20 @@ fn record_base_fails_outside_git_repo() {
 }
 
 #[test]
+fn record_base_fails_fast_when_git_is_missing() {
+    let temp = tempdir().expect("tempdir should exist");
+
+    let output = run_covgate_raw_with_path(temp.path(), "", &["record-base".to_string()]);
+
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
+    assert!(
+        stderr.contains("git is required to run covgate but was not found in PATH"),
+        "stderr={stderr}"
+    );
+}
+
+#[test]
 fn missing_check_subcommand_is_reported_as_clap_usage_error() {
     let temp = tempdir().expect("tempdir should exist");
 
@@ -72,6 +95,24 @@ fn missing_check_coverage_report_is_reported_as_clap_usage_error() {
         "stderr={stderr}"
     );
     assert!(stderr.contains("<COVERAGE_REPORT>"), "stderr={stderr}");
+}
+
+#[test]
+fn check_fails_fast_when_git_is_missing() {
+    let temp = tempdir().expect("tempdir should exist");
+
+    let output = run_covgate_raw_with_path(
+        temp.path(),
+        "",
+        &["check".to_string(), "missing.json".to_string()],
+    );
+
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
+    assert!(
+        stderr.contains("git is required to run covgate but was not found in PATH"),
+        "stderr={stderr}"
+    );
 }
 
 #[test]
@@ -492,6 +533,43 @@ fn uses_repo_config_defaults_for_base_and_threshold() {
     run_git(&worktree, &["commit", "-m", "add covgate defaults"]);
 
     let output = run_covgate(&worktree, fixture, &[]);
+
+    assert_eq!(output.status.code(), Some(0));
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+    assert!(stdout.contains("Diff: main...WORKTREE"));
+    assert!(stdout.contains("Rule fail-under-regions: PASS"));
+    assert!(stdout.contains("Coverage:"));
+}
+
+#[test]
+fn uses_repo_config_defaults_from_parent_directory() {
+    let fixture = rust_basic_fail_fixture();
+    let temp = tempdir().expect("tempdir should exist");
+    let fixture_root = fixture.root();
+    let repo_src = fixture_root.join("repo");
+    let overlay_src = fixture_root.join("overlay");
+    let worktree = temp.path().join("repo");
+    copy_tree(&repo_src, &worktree);
+    init_git_repo(&worktree);
+    run_git(&worktree, &["branch", "-M", "main"]);
+    run_git(
+        &worktree,
+        &["checkout", "-b", "feature/config-parent-defaults"],
+    );
+
+    copy_tree(&overlay_src, &worktree);
+    run_git(&worktree, &["add", "."]);
+    run_git(&worktree, &["commit", "-m", "feature change"]);
+    fs::write(
+        worktree.join("covgate.toml"),
+        "base = \"main\"\n[gates]\nfail_under_regions = 0.0\n",
+    )
+    .expect("config should be written");
+    run_git(&worktree, &["add", "covgate.toml"]);
+    run_git(&worktree, &["commit", "-m", "add covgate defaults"]);
+
+    let nested_dir = worktree.join("src");
+    let output = run_covgate(&nested_dir, fixture, &[]);
 
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");

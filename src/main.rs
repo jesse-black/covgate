@@ -2,6 +2,7 @@ use clap::Parser;
 
 fn main() -> anyhow::Result<()> {
     let cli = covgate::cli::Cli::parse();
+    covgate::git::ensure_available()?;
 
     match cli.command {
         covgate::cli::Command::RecordBase => {

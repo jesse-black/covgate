@@ -6,8 +6,9 @@ use std::sync::Mutex;
 use tempfile::tempdir;
 
 use covgate::git::{
-    RECORDED_BASE_REF, create_ref, discover_base_ref, record_base_ref, resolve_head_sha,
-    resolve_ref_sha,
+    RECORDED_BASE_REF, create_ref, diff_with_unified_zero, discover_base_ref, ensure_available,
+    list_untracked_files, merge_base, record_base_ref, resolve_head_sha, resolve_ref_sha,
+    resolve_repo_root,
 };
 use support::run_git;
 
@@ -59,6 +60,17 @@ where
             unsafe { std::env::remove_var("PATH") };
         }
     }
+}
+
+fn with_fake_git(script_body: &str, f: impl FnOnce()) {
+    let temp = tempdir().expect("tempdir should exist");
+    let fake_git = temp.path().join("git");
+    fs::write(&fake_git, script_body).expect("fake git script should be written");
+    make_executable(&fake_git);
+
+    let original_path = std::env::var("PATH").unwrap_or_default();
+    let path = format!("{}:{}", temp.path().to_string_lossy(), original_path);
+    with_path_override(&path, f);
 }
 
 #[test]
@@ -200,6 +212,90 @@ fn discover_base_prefers_recorded_ref() {
 }
 
 #[test]
+fn resolve_repo_root_returns_current_repo_toplevel() {
+    with_temp_git_repo(|repo| {
+        let repo_root = resolve_repo_root()
+            .expect("repo root lookup should succeed")
+            .expect("repo root should exist");
+        assert_eq!(repo_root, repo);
+    });
+}
+
+#[test]
+fn resolve_repo_root_reports_missing_git_command() {
+    let _lock = CWD_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
+
+    with_path_override("", || {
+        let err = resolve_repo_root().expect_err("resolve_repo_root should fail");
+        assert!(
+            err.to_string()
+                .contains("failed to run git rev-parse for repository root")
+        );
+    });
+}
+
+#[test]
+fn ensure_available_reports_missing_git_command() {
+    let _lock = CWD_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
+
+    with_path_override("", || {
+        let err = ensure_available().expect_err("ensure_available should fail");
+        assert!(
+            err.to_string()
+                .contains("git is required to run covgate but was not found in PATH")
+        );
+    });
+}
+
+#[test]
+fn ensure_available_reports_failed_version_without_stderr() {
+    let _lock = CWD_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
+
+    with_fake_git(
+        r#"#!/usr/bin/env bash
+if [ "$1" = "--version" ]; then
+  exit 1
+fi
+printf 'unexpected args: %s\n' "$*" >&2
+exit 99
+"#,
+        || {
+            let err = ensure_available().expect_err("ensure_available should fail");
+            assert!(
+                err.to_string()
+                    .contains("git is required to run covgate but `git --version` failed"),
+                "err={err:#}"
+            );
+        },
+    );
+}
+
+#[test]
+fn ensure_available_reports_failed_version_with_stderr() {
+    let _lock = CWD_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
+
+    with_fake_git(
+        r#"#!/usr/bin/env bash
+if [ "$1" = "--version" ]; then
+  printf 'version failed\n' >&2
+  exit 1
+fi
+printf 'unexpected args: %s\n' "$*" >&2
+exit 99
+"#,
+        || {
+            let err = ensure_available().expect_err("ensure_available should fail");
+            assert!(
+                err.to_string().contains(
+                    "git is required to run covgate but `git --version` failed: version failed"
+                ),
+                "err={err:#}"
+            );
+        },
+    );
+}
+
+#[test]
 fn resolve_and_create_ref_error_paths_are_actionable() {
     with_temp_git_repo(|_| {
         let missing = resolve_ref_sha("refs/worktree/covgate/missing")
@@ -255,6 +351,161 @@ fn resolve_head_ref_and_create_ref_report_when_git_command_is_missing() {
             create_err
                 .to_string()
                 .contains("failed to run git update-ref")
+        );
+    });
+}
+
+#[test]
+fn merge_base_reports_failure() {
+    let _lock = CWD_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
+
+    with_fake_git(
+        r#"#!/usr/bin/env bash
+if [ "$1" = "merge-base" ]; then
+  exit 2
+fi
+printf 'unexpected args: %s\n' "$*" >&2
+exit 99
+"#,
+        || {
+            let err = merge_base("main", "HEAD").expect_err("merge-base failure should surface");
+            assert!(
+                err.to_string()
+                    .contains("git merge-base failed with status"),
+                "err={err:#}"
+            );
+        },
+    );
+}
+
+#[test]
+fn merge_base_reports_missing_git_command() {
+    let _lock = CWD_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
+
+    with_path_override("", || {
+        let err = merge_base("main", "HEAD").expect_err("missing git should fail");
+        assert!(
+            err.to_string().contains("failed to run git merge-base"),
+            "err={err:#}"
+        );
+    });
+}
+
+#[test]
+fn merge_base_reports_non_utf8_output() {
+    let _lock = CWD_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
+
+    with_fake_git(
+        r#"#!/usr/bin/env bash
+if [ "$1" = "merge-base" ]; then
+  printf '\377'
+  exit 0
+fi
+printf 'unexpected args: %s\n' "$*" >&2
+exit 99
+"#,
+        || {
+            let err = merge_base("main", "HEAD").expect_err("non-utf8 merge-base should surface");
+            assert!(
+                err.to_string()
+                    .contains("git merge-base output was not valid utf-8"),
+                "err={err:#}"
+            );
+        },
+    );
+}
+
+#[test]
+fn diff_with_unified_zero_reports_failure_status() {
+    let _lock = CWD_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
+
+    with_fake_git(
+        r#"#!/usr/bin/env bash
+if [ "$1" = "diff" ]; then
+  exit 2
+fi
+printf 'unexpected args: %s\n' "$*" >&2
+exit 99
+"#,
+        || {
+            let err =
+                diff_with_unified_zero("base-sha").expect_err("diff failure status should fail");
+            assert!(
+                err.to_string().contains("git diff failed with status"),
+                "err={err:#}"
+            );
+        },
+    );
+}
+
+#[test]
+fn diff_with_unified_zero_reports_non_utf8_output() {
+    let _lock = CWD_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
+
+    with_fake_git(
+        r#"#!/usr/bin/env bash
+if [ "$1" = "diff" ]; then
+  printf '\377'
+  exit 0
+fi
+printf 'unexpected args: %s\n' "$*" >&2
+exit 99
+"#,
+        || {
+            let err = diff_with_unified_zero("base-sha")
+                .expect_err("non-utf8 diff output should surface");
+            assert!(
+                err.to_string()
+                    .contains("git diff output was not valid utf-8"),
+                "err={err:#}"
+            );
+        },
+    );
+}
+
+#[test]
+fn resolve_repo_root_returns_none_for_empty_output() {
+    let _lock = CWD_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
+
+    with_fake_git(
+        r#"#!/usr/bin/env bash
+if [ "$1" = "rev-parse" ] && [ "$2" = "--show-toplevel" ]; then
+  exit 0
+fi
+printf 'unexpected args: %s\n' "$*" >&2
+exit 99
+"#,
+        || {
+            let root = resolve_repo_root().expect("repo root lookup should succeed");
+            assert!(root.is_none());
+        },
+    );
+}
+
+#[test]
+fn list_untracked_files_reports_missing_git_command() {
+    let _lock = CWD_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
+
+    with_path_override("", || {
+        let err = list_untracked_files().expect_err("missing git should fail");
+        assert!(
+            err.to_string()
+                .contains("failed to run git ls-files for untracked files"),
+            "err={err:#}"
+        );
+    });
+}
+
+#[test]
+fn list_untracked_files_reports_non_utf8_output() {
+    let _lock = CWD_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
+
+    with_fake_git("#!/bin/sh\nprintf '\\377'\n", || {
+        let err = list_untracked_files().expect_err("non-utf8 output should fail");
+        assert!(
+            err.to_string()
+                .contains("git ls-files output was not valid utf-8"),
+            "err={err:#}"
         );
     });
 }

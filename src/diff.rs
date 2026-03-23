@@ -1,8 +1,11 @@
-use std::{collections::BTreeMap, path::PathBuf, process::Command};
+use std::{collections::BTreeMap, path::PathBuf};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 
-use crate::model::{ChangedFile, LineRange};
+use crate::{
+    git,
+    model::{ChangedFile, LineRange},
+};
 
 #[derive(Debug, Clone)]
 pub enum DiffSource {
@@ -22,27 +25,8 @@ impl DiffSource {
 pub fn load_changed_lines(source: &DiffSource) -> Result<Vec<ChangedFile>> {
     let text = match source {
         DiffSource::GitBase(base) => {
-            let merge_base = Command::new("git")
-                .args(["merge-base", base, "HEAD"])
-                .output()
-                .context("failed to run git merge-base")?;
-            if !merge_base.status.success() {
-                bail!("git merge-base failed with status {}", merge_base.status);
-            }
-
-            let merge_base_sha = String::from_utf8(merge_base.stdout)
-                .context("git merge-base output was not valid utf-8")?
-                .trim()
-                .to_string();
-
-            let output = Command::new("git")
-                .args(["diff", "--unified=0", "--no-ext-diff", &merge_base_sha])
-                .output()
-                .context("failed to run git diff")?;
-            if !output.status.success() {
-                bail!("git diff failed with status {}", output.status);
-            }
-            String::from_utf8(output.stdout).context("git diff output was not valid utf-8")?
+            let merge_base_sha = git::merge_base(base, "HEAD")?;
+            git::diff_with_unified_zero(&merge_base_sha)?
         }
         DiffSource::DiffFile(path) => std::fs::read_to_string(path)
             .with_context(|| format!("failed to read diff file: {}", path.display()))?,
