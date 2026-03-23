@@ -8,7 +8,7 @@ pub mod metrics;
 pub mod model;
 pub mod render;
 
-use anyhow::{Context, Result, bail};
+use anyhow::Result;
 
 use crate::{config::Config, diff::DiffSource, model::ChangedFile};
 
@@ -72,30 +72,7 @@ fn emit_untracked_files_warning(source: &DiffSource) -> Result<()> {
 }
 
 fn list_untracked_files() -> Result<Vec<String>> {
-    let output = std::process::Command::new("git")
-        .args(["ls-files", "--others", "--exclude-standard"])
-        .output()
-        .context("failed to run git ls-files for untracked files")?;
-
-    if !output.status.success() {
-        bail!(
-            "failed to list untracked files: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        );
-    }
-
-    let stdout =
-        String::from_utf8(output.stdout).context("git ls-files output was not valid utf-8")?;
-    let trimmed = stdout.trim();
-    if trimmed.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    let mut untracked_files = Vec::new();
-    for path in trimmed.lines() {
-        untracked_files.push(path.to_string());
-    }
-    Ok(untracked_files)
+    crate::git::list_untracked_files()
 }
 
 fn format_git_add_command(paths: &[String]) -> String {

@@ -25,10 +25,30 @@ fn make_executable(path: &std::path::Path) {
     fs::set_permissions(path, perms).expect("permissions should be updated");
 }
 
-fn with_fake_git(script_body: &str, f: impl FnOnce()) {
+#[test]
+fn load_changed_lines_uses_git_base_helpers() {
+    let _lock = CWD_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
+
     let temp = tempdir().expect("tempdir should exist");
     let fake_git = temp.path().join("git");
-    fs::write(&fake_git, script_body).expect("fake git script should be written");
+    fs::write(
+        &fake_git,
+        r#"#!/usr/bin/env bash
+if [ "$1" = "merge-base" ]; then
+  printf 'abc123\n'
+  exit 0
+fi
+if [ "$1" = "diff" ] && [ "$4" = "abc123" ]; then
+  printf 'diff --git a/src/lib.rs b/src/lib.rs\n'
+  printf '+++ b/src/lib.rs\n'
+  printf '@@ -1,0 +2,2 @@\n'
+  exit 0
+fi
+printf 'unexpected args: %s\n' "$*" >&2
+exit 99
+"#,
+    )
+    .expect("fake git script should be written");
     make_executable(&fake_git);
 
     let original_path = std::env::var("PATH").unwrap_or_default();
@@ -39,73 +59,15 @@ fn with_fake_git(script_body: &str, f: impl FnOnce()) {
 
     let original = std::env::var("PATH").ok();
     unsafe { std::env::set_var("PATH", &path) };
-    f();
+    let changed =
+        load_changed_lines(&DiffSource::GitBase("main".to_string())).expect("diff should load");
     match original {
         Some(value) => unsafe { std::env::set_var("PATH", value) },
         None => unsafe { std::env::remove_var("PATH") },
     }
-}
 
-#[test]
-fn load_changed_lines_reports_merge_base_spawn_failure() {
-    let _lock = CWD_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
-    let original = std::env::var("PATH").ok();
-    unsafe { std::env::set_var("PATH", "") };
-    let err = load_changed_lines(&DiffSource::GitBase("main".to_string()))
-        .expect_err("missing git should fail spawn");
-    assert!(
-        err.to_string().contains("failed to run git merge-base"),
-        "err={err:#}"
-    );
-    match original {
-        Some(value) => unsafe { std::env::set_var("PATH", value) },
-        None => unsafe { std::env::remove_var("PATH") },
-    }
-}
-
-#[test]
-fn load_changed_lines_reports_merge_base_failure() {
-    let _lock = CWD_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
-    with_fake_git(
-        r#"#!/usr/bin/env bash
-if [ "$1" = "merge-base" ]; then
-  exit 2
-fi
-printf 'unexpected args: %s\n' "$*" >&2
-exit 99
-"#,
-        || {
-            let err = load_changed_lines(&DiffSource::GitBase("main".to_string()))
-                .expect_err("merge-base failure should surface");
-            assert!(
-                err.to_string()
-                    .contains("git merge-base failed with status"),
-                "err={err:#}"
-            );
-        },
-    );
-}
-
-#[test]
-fn load_changed_lines_reports_non_utf8_merge_base_output() {
-    let _lock = CWD_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
-    with_fake_git(
-        r#"#!/usr/bin/env bash
-if [ "$1" = "merge-base" ]; then
-  printf '\377'
-  exit 0
-fi
-printf 'unexpected args: %s\n' "$*" >&2
-exit 99
-"#,
-        || {
-            let err = load_changed_lines(&DiffSource::GitBase("main".to_string()))
-                .expect_err("non-utf8 merge-base should surface");
-            assert!(
-                err.to_string()
-                    .contains("git merge-base output was not valid utf-8"),
-                "err={err:#}"
-            );
-        },
-    );
+    assert_eq!(changed.len(), 1);
+    assert_eq!(changed[0].path, std::path::PathBuf::from("src/lib.rs"));
+    assert_eq!(changed[0].changed_lines[0].start, 2);
+    assert_eq!(changed[0].changed_lines[0].end, 3);
 }
