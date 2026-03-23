@@ -125,6 +125,72 @@ fn help_lists_record_base_as_subcommand() {
     assert!(stdout.contains("Commands:"), "stdout={stdout}");
     assert!(stdout.contains("check"), "stdout={stdout}");
     assert!(stdout.contains("record-base"), "stdout={stdout}");
+    assert!(!stdout.contains("./covgate.toml"), "stdout={stdout}");
+    assert!(
+        !stdout.contains("Supported defaults in v1"),
+        "stdout={stdout}"
+    );
+    assert!(!stdout.contains("Agent workflow"), "stdout={stdout}");
+}
+
+#[test]
+fn check_help_describes_arguments_and_options() {
+    let temp = tempdir().expect("tempdir should exist");
+
+    let output = run_covgate_raw(temp.path(), &["check".to_string(), "--help".to_string()]);
+    assert_eq!(output.status.code(), Some(0));
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+    assert!(stdout.contains("Arguments:"), "stdout={stdout}");
+    assert!(
+        stdout.contains("Coverage report path (LLVM/Coverlet/Istanbul auto-detected)"),
+        "stdout={stdout}"
+    );
+    assert!(stdout.contains("Options:"), "stdout={stdout}");
+    assert!(
+        stdout.contains("Git base reference to diff against"),
+        "stdout={stdout}"
+    );
+    assert!(
+        stdout.contains("Precomputed unified diff file"),
+        "stdout={stdout}"
+    );
+    assert!(
+        stdout.contains("Minimum changed-region coverage percentage required to pass"),
+        "stdout={stdout}"
+    );
+    assert!(
+        stdout.contains("Write a Markdown summary to this file"),
+        "stdout={stdout}"
+    );
+}
+
+#[test]
+fn record_base_help_is_user_focused() {
+    let temp = tempdir().expect("tempdir should exist");
+
+    let output = run_covgate_raw(
+        temp.path(),
+        &["record-base".to_string(), "--help".to_string()],
+    );
+    assert_eq!(output.status.code(), Some(0));
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+    assert!(
+        stdout.contains("stable task-start base for constrained cloud-agent worktrees"),
+        "stdout={stdout}"
+    );
+    assert!(
+        stdout.contains("Run it once at the start of a task before"),
+        "stdout={stdout}"
+    );
+    assert!(stdout.contains("making Git changes"), "stdout={stdout}");
+    assert!(
+        stdout.contains("covgate check <coverage-report>"),
+        "stdout={stdout}"
+    );
+    assert!(
+        !stdout.contains("refs/worktree/covgate/base"),
+        "stdout={stdout}"
+    );
 }
 
 #[test]
