@@ -26,12 +26,10 @@ pub(crate) fn parse_str_with_repo_root(input: &str, repo_root: &Path) -> Result<
         for (statement_id, statement) in &coverage.statement_map {
             let hits = coverage.s.get(statement_id).copied().unwrap_or(0);
             let covered = hits > 0;
-            for line in statement.start.line..=statement.end.line {
-                lines
-                    .entry(line)
-                    .and_modify(|seen| *seen = *seen || covered)
-                    .or_insert(covered);
-            }
+            lines
+                .entry(statement.start.line)
+                .and_modify(|seen| *seen = *seen || covered)
+                .or_insert(covered);
         }
 
         if !lines.is_empty() {
@@ -393,6 +391,74 @@ mod tests {
 
         assert!(!report.totals_by_file.contains_key(&MetricKind::Branch));
         assert!(!report.totals_by_file.contains_key(&MetricKind::Function));
+    }
+
+    #[test]
+    fn counts_unique_statement_start_lines_for_line_totals() {
+        let input = r#"
+        {
+          "src/math.js": {
+            "statementMap": {
+              "0": {"start": {"line": 19}, "end": {"line": 22}},
+              "1": {"start": {"line": 20}, "end": {"line": 20}},
+              "2": {"start": {"line": 22}, "end": {"line": 22}}
+            },
+            "s": {"0": 1, "1": 0, "2": 1},
+            "branchMap": {},
+            "b": {},
+            "fnMap": {},
+            "f": {}
+          }
+        }
+        "#;
+
+        let report = parse_str_with_repo_root(input, Path::new("/workspace/covgate"))
+            .expect("istanbul json should parse");
+
+        let line_totals = report
+            .totals_by_file
+            .get(&MetricKind::Line)
+            .expect("line totals should exist")
+            .get(&PathBuf::from("src/math.js"))
+            .expect("file totals should exist");
+        assert_eq!(line_totals.covered, 2);
+        assert_eq!(line_totals.total, 3);
+
+        let line_20 = report
+            .opportunities
+            .iter()
+            .find(|opportunity| {
+                opportunity.kind == OpportunityKind::Line
+                    && opportunity.span.path == Path::new("src/math.js")
+                    && opportunity.span.start_line == 20
+                    && opportunity.span.end_line == 20
+            })
+            .expect("line 20 opportunity should exist");
+        assert!(!line_20.covered, "line 20 should remain uncovered");
+    }
+
+    #[test]
+    fn checked_in_vitest_fixture_preserves_uncovered_nested_fixture_seed_line() {
+        let input =
+            include_str!("../../tests/fixtures/vitest/empty-branch-locations/coverage.json");
+
+        let report = parse_str_with_repo_root(input, Path::new("/workspace/covgate"))
+            .expect("checked-in vitest fixture should parse");
+
+        let line_20 = report
+            .opportunities
+            .iter()
+            .find(|opportunity| {
+                opportunity.kind == OpportunityKind::Line
+                    && opportunity.span.path == Path::new("src/fixtures/fixtureSeed.ts")
+                    && opportunity.span.start_line == 20
+                    && opportunity.span.end_line == 20
+            })
+            .expect("fixtureSeed line 20 opportunity should exist");
+        assert!(
+            !line_20.covered,
+            "fixtureSeed line 20 should stay uncovered"
+        );
     }
 
     #[test]

@@ -114,6 +114,13 @@ pub fn vitest_statement_line_divergence_fixture() -> Fixture {
     }
 }
 
+pub fn vitest_empty_branch_locations_fixture() -> Fixture {
+    Fixture {
+        language: "vitest",
+        name: "empty-branch-locations",
+    }
+}
+
 pub fn fail_fixtures_with_regions() -> Vec<Fixture> {
     vec![
         rust_basic_fail_fixture(),
