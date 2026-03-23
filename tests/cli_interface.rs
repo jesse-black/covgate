@@ -414,7 +414,7 @@ fn diff_file_mode_skips_untracked_files_warning() {
 }
 
 #[test]
-fn automatic_base_prefers_recorded_worktree_ref() {
+fn automatic_base_prefers_standard_branch_ref_over_recorded_worktree_ref() {
     let fixture = rust_basic_pass_fixture();
     let temp = tempdir().expect("tempdir should exist");
     let fixture_root = fixture.root();
@@ -427,6 +427,7 @@ fn automatic_base_prefers_recorded_worktree_ref() {
 
     let output = run_covgate_raw(&worktree, &["record-base".to_string()]);
     assert_eq!(output.status.code(), Some(0));
+    run_git(&worktree, &["branch", "main", "HEAD"]);
 
     copy_tree(&overlay_src, &worktree);
     run_git(&worktree, &["add", "."]);
@@ -440,7 +441,7 @@ fn automatic_base_prefers_recorded_worktree_ref() {
 
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-    assert!(stdout.contains("Diff: refs/worktree/covgate/base...WORKTREE"));
+    assert!(stdout.contains("Diff: main...WORKTREE"), "stdout={stdout}");
 }
 
 #[test]

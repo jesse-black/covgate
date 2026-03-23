@@ -226,9 +226,10 @@ fn is_ancestor(ancestor: &str, descendant: &str) -> Result<bool> {
 }
 
 pub fn discover_base_ref() -> Result<Option<String>> {
-    for candidate in [RECORDED_BASE_REF]
-        .into_iter()
-        .chain(STANDARD_BASE_REFS.iter().copied())
+    for candidate in STANDARD_BASE_REFS
+        .iter()
+        .copied()
+        .chain([RECORDED_BASE_REF].into_iter())
     {
         if resolve_ref_sha(candidate)?.is_some() {
             return Ok(Some(candidate.to_string()));

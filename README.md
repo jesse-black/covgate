@@ -126,7 +126,7 @@ Use `covgate record-base` only in constrained cloud-agent or sandboxed worktree 
 
 Run `covgate record-base` at the beginning of a task before the agent makes Git changes. Running it immediately before `covgate check` is too late because that would capture the post-change `HEAD` instead of the task-start base.
 
-When `--base` is omitted, `covgate` checks `refs/worktree/covgate/base` before trying the standard branch refs listed above. Explicit `--base` still takes precedence. If a default base branch ref is already available, `covgate record-base` will do nothing.
+When `--base` is omitted, `covgate` first tries the standard branch refs listed above and only falls back to `refs/worktree/covgate/base` when those refs are unavailable. Explicit `--base` still takes precedence. If a default base branch ref is already available, `covgate record-base` will do nothing.
 
 The recorded base is kept per branch so separate agent task branches keep separate stable diff anchors.
 

@@ -109,6 +109,34 @@ fn record_base_noops_when_standard_base_ref_is_available() {
 }
 
 #[test]
+fn record_base_leaves_stale_recorded_ref_but_discovery_prefers_standard_base_when_available() {
+    with_temp_git_repo(|repo| {
+        run_git(repo, &["branch", "-M", "task/stale"]);
+        let recorded = record_base_ref().expect("record-base should succeed on task branch");
+        let recorded_ref = resolve_ref_sha(RECORDED_BASE_REF)
+            .expect("recorded ref lookup should run")
+            .expect("recorded ref should exist");
+        assert_eq!(recorded_ref, recorded);
+
+        run_git(repo, &["branch", "main", "HEAD"]);
+
+        let returned = record_base_ref().expect("record-base should no-op successfully");
+        let main_sha = resolve_ref_sha("main")
+            .expect("main should resolve")
+            .expect("main sha should exist");
+        assert_eq!(returned, main_sha);
+
+        let recorded_after = resolve_ref_sha(RECORDED_BASE_REF)
+            .expect("recorded ref lookup should run")
+            .expect("recorded ref should still exist");
+        assert_eq!(recorded_after, recorded);
+
+        let discovered = discover_base_ref().expect("discovery should succeed");
+        assert_eq!(discovered.as_deref(), Some("main"));
+    });
+}
+
+#[test]
 fn record_base_refreshes_when_branch_changes() {
     with_temp_git_repo(|repo| {
         run_git(repo, &["branch", "-M", "task/one"]);
@@ -214,7 +242,7 @@ fn record_base_detached_head_refreshes_when_recorded_commit_is_not_ancestor() {
 }
 
 #[test]
-fn discover_base_prefers_recorded_ref() {
+fn discover_base_prefers_standard_branch_ref_over_recorded_ref() {
     with_temp_git_repo(|repo| {
         let task_sha = resolve_ref_sha("HEAD")
             .expect("task sha query should work")
@@ -225,7 +253,7 @@ fn discover_base_prefers_recorded_ref() {
         run_git(repo, &["branch", "origin/main", &task_sha]);
 
         let discovered = discover_base_ref().expect("discovery should succeed");
-        assert_eq!(discovered.as_deref(), Some(RECORDED_BASE_REF));
+        assert_eq!(discovered.as_deref(), Some("origin/main"));
     });
 }
 
