@@ -20,10 +20,10 @@ This plan makes that split obvious and adds one small guardrail in the product i
 - [x] (2026-03-23 16:40Z) Refined the CLI-help direction: remove config guidance from top-level `--help`, avoid examples blocks at the root command, move the cloud-agent workflow guidance into `record-base --help`, and ensure `check --help` includes descriptive argument and option text.
 - [ ] Rewrite `README.md` so the standard local/devcontainer workflow appears before the cloud-agent workflow and explicitly states that `record-base` is not the default in ordinary clones.
 - [x] (2026-03-23 16:45Z) Updated `src/cli.rs` so top-level `--help` no longer includes config prose or roadmap wording, `record-base --help` uses user-focused cloud-agent guidance, and `check --help` now describes its argument and options.
-- [ ] Implement a defensive `record-base` preflight in the Git path so standard local checkouts get an explanatory no-op instead of writing a worktree base ref unnecessarily.
-- [ ] Add or update tests to prove the new defensive behavior does not regress the intended cloud-agent path.
+- [x] (2026-03-23 17:35Z) Implemented a defensive `record-base` preflight in `src/git.rs` so standard local checkouts now emit an explanatory no-op when a normal base ref already resolves.
+- [x] (2026-03-23 17:35Z) Updated Git, CLI, and config tests to cover both sides of the contract: ordinary local checkouts no-op, while constrained task-branch repos still create and refresh `refs/worktree/covgate/base`.
 - [ ] Decide whether `docs/reference/environment-execution-contexts.md` needs a short clarification or whether README plus CLI help are sufficient for this scope.
-- [ ] Validate the remaining wording by checking rendered help text and re-reading the updated docs for consistency.
+- [x] (2026-03-23 17:40Z) Revalidated the implementation with focused `record-base` test slices plus `cargo xtask quick`; remaining work is documentation alignment, not code behavior.
 
 ## Surprises & Discoveries
 
@@ -41,6 +41,9 @@ This plan makes that split obvious and adds one small guardrail in the product i
 
 - Observation: The current `after_help` text has drifted from current behavior and mixes evergreen help with implementation-history wording.
   Evidence: `src/cli.rs` says `Repository-local defaults may be read from ./covgate.toml.` even though config discovery now traverses ancestor directories, and it also says `Supported defaults in v1:` even though `--help` should describe current behavior rather than roadmap/version framing.
+
+- Observation: Once `record-base` becomes defensive in ordinary checkouts, many existing tests must move onto nonstandard task-branch names to keep exercising the constrained-environment path.
+  Evidence: tests that stayed on `main` or `master` began no-oping before they could create branch markers or recorded refs; renaming those repos to task-style branches restored the intended cloud-agent setup for the test fixtures.
 
 ## Decision Log
 
@@ -64,11 +67,15 @@ This plan makes that split obvious and adds one small guardrail in the product i
   Rationale: Comparable Rust CLIs keep root help compact and attach concrete examples to the relevant subcommand or flag. That keeps the root help skimmable while still giving `record-base` enough context to explain when to use it.
   Date/Author: 2026-03-23 / Codex
 
+- Decision: Reuse the same standard branch candidates for the defensive `record-base` preflight that automatic discovery already treats as ordinary checkout bases, excluding only the recorded worktree ref itself.
+  Rationale: This keeps the guidance and product behavior aligned: if `covgate check` would ordinarily succeed from a normal branch ref, `record-base` should explain that it is unnecessary instead of creating a redundant worktree-local marker.
+  Date/Author: 2026-03-23 / Codex
+
 ## Outcomes & Retrospective
 
-Implementation has not started yet. The useful result so far is a narrowed problem statement: the repository does not need another broad `record-base` plan, it needs a short follow-up plan that aligns the public wording with the existing environment split and timing expectations.
+Implementation is partially complete. The CLI help work and the defensive `record-base` preflight are now in place, along with regression coverage that distinguishes ordinary local checkouts from constrained task-branch repos. The remaining work is to align the README and decide whether the longer environment reference doc needs a short consistency update.
 
-The main lesson at this stage is that environment-specific guidance needs ordering as much as wording. If the exception case is shown first, readers will understandably treat it as the main workflow.
+The main lesson so far is that environment-specific guidance needs both wording and behavioral reinforcement. Once the command itself says “this is unnecessary here” in ordinary checkouts, the intended workflow becomes much harder to misread.
 
 ## Context and Orientation
 

@@ -76,6 +76,7 @@ fn with_fake_git(script_body: &str, f: impl FnOnce()) {
 #[test]
 fn record_base_creates_and_is_idempotent() {
     with_temp_git_repo(|repo| {
+        run_git(repo, &["branch", "-M", "task/one"]);
         let head_before = resolve_ref_sha("HEAD")
             .expect("head should resolve")
             .expect("head sha");
@@ -92,11 +93,27 @@ fn record_base_creates_and_is_idempotent() {
 }
 
 #[test]
-fn record_base_refreshes_when_branch_changes() {
+fn record_base_noops_when_standard_base_ref_is_available() {
     with_temp_git_repo(|repo| {
         run_git(repo, &["branch", "-M", "main"]);
 
-        let first = record_base_ref().expect("record-base should succeed on main");
+        let resolved_main = resolve_ref_sha("main")
+            .expect("main should resolve")
+            .expect("main sha should exist");
+        let returned = record_base_ref().expect("record-base should no-op successfully");
+        assert_eq!(returned, resolved_main);
+
+        let recorded = resolve_ref_sha(RECORDED_BASE_REF).expect("recorded ref lookup should run");
+        assert!(recorded.is_none(), "recorded ref should not be created");
+    });
+}
+
+#[test]
+fn record_base_refreshes_when_branch_changes() {
+    with_temp_git_repo(|repo| {
+        run_git(repo, &["branch", "-M", "task/one"]);
+
+        let first = record_base_ref().expect("record-base should succeed on task branch");
 
         run_git(repo, &["checkout", "-b", "task/two"]);
         fs::write(repo.join("task-two.txt"), "task two\n").expect("task-two file should write");
@@ -116,7 +133,7 @@ fn record_base_refreshes_when_branch_changes() {
 #[test]
 fn record_base_recreates_missing_branch_marker_without_refreshing_ref() {
     with_temp_git_repo(|repo| {
-        run_git(repo, &["branch", "-M", "main"]);
+        run_git(repo, &["branch", "-M", "task/base"]);
         let recorded = record_base_ref().expect("record-base should succeed");
 
         let marker_path_output = std::process::Command::new("git")
@@ -139,14 +156,14 @@ fn record_base_recreates_missing_branch_marker_without_refreshing_ref() {
         assert_eq!(second, recorded);
 
         let marker_branch = fs::read_to_string(marker_path).expect("marker should be rewritten");
-        assert_eq!(marker_branch.trim(), "main");
+        assert_eq!(marker_branch.trim(), "task/base");
     });
 }
 
 #[test]
 fn record_base_detached_head_uses_ancestor_check_path() {
     with_temp_git_repo(|repo| {
-        run_git(repo, &["branch", "-M", "main"]);
+        run_git(repo, &["branch", "-M", "task/base"]);
         let recorded = record_base_ref().expect("record-base should succeed");
 
         run_git(repo, &["checkout", "--detach", "HEAD"]);
@@ -159,7 +176,7 @@ fn record_base_detached_head_uses_ancestor_check_path() {
 #[test]
 fn record_base_detached_head_refreshes_when_recorded_commit_is_not_ancestor() {
     with_temp_git_repo(|repo| {
-        run_git(repo, &["branch", "-M", "main"]);
+        run_git(repo, &["branch", "-M", "task/main"]);
 
         fs::write(
             repo.join("main-a.txt"),
@@ -168,11 +185,11 @@ fn record_base_detached_head_refreshes_when_recorded_commit_is_not_ancestor() {
         )
         .expect("file should write");
         run_git(repo, &["add", "."]);
-        run_git(repo, &["commit", "-m", "main a"]);
-        let main_a = resolve_ref_sha("HEAD")
+        run_git(repo, &["commit", "-m", "task main a"]);
+        let task_main_a = resolve_ref_sha("HEAD")
             .expect("head should resolve")
             .expect("head sha should exist");
-        record_base_ref().expect("record-base should succeed on main");
+        record_base_ref().expect("record-base should succeed on task branch");
 
         run_git(repo, &["checkout", "-b", "side", "HEAD~1"]);
         fs::write(
@@ -186,7 +203,7 @@ fn record_base_detached_head_refreshes_when_recorded_commit_is_not_ancestor() {
         let side_b = resolve_ref_sha("HEAD")
             .expect("head should resolve")
             .expect("head sha should exist");
-        assert_ne!(side_b, main_a);
+        assert_ne!(side_b, task_main_a);
 
         run_git(repo, &["checkout", "--detach", "HEAD"]);
 
@@ -199,12 +216,13 @@ fn record_base_detached_head_refreshes_when_recorded_commit_is_not_ancestor() {
 #[test]
 fn discover_base_prefers_recorded_ref() {
     with_temp_git_repo(|repo| {
-        let main_sha = resolve_ref_sha("HEAD")
-            .expect("main sha query should work")
+        let task_sha = resolve_ref_sha("HEAD")
+            .expect("task sha query should work")
             .expect("head should resolve");
-        run_git(repo, &["branch", "-M", "main"]);
-        run_git(repo, &["branch", "origin/main", &main_sha]);
+        run_git(repo, &["branch", "-M", "task/recorded"]);
         record_base_ref().expect("record-base should succeed");
+        run_git(repo, &["branch", "main", &task_sha]);
+        run_git(repo, &["branch", "origin/main", &task_sha]);
 
         let discovered = discover_base_ref().expect("discovery should succeed");
         assert_eq!(discovered.as_deref(), Some(RECORDED_BASE_REF));
@@ -600,7 +618,7 @@ exit 99
 #[test]
 fn record_base_rewrites_empty_branch_marker() {
     with_temp_git_repo(|repo| {
-        run_git(repo, &["branch", "-M", "main"]);
+        run_git(repo, &["branch", "-M", "task/base"]);
         let recorded = record_base_ref().expect("record-base should succeed");
 
         let marker_path_output = std::process::Command::new("git")
@@ -622,7 +640,7 @@ fn record_base_rewrites_empty_branch_marker() {
         let second = record_base_ref().expect("record-base should tolerate empty marker");
         assert_eq!(second, recorded);
         let marker_branch = fs::read_to_string(marker_path).expect("marker should be rewritten");
-        assert_eq!(marker_branch.trim(), "main");
+        assert_eq!(marker_branch.trim(), "task/base");
     });
 }
 
@@ -675,7 +693,7 @@ exit 99
 #[test]
 fn record_base_reports_directory_branch_marker_read_failure() {
     with_temp_git_repo(|repo| {
-        run_git(repo, &["branch", "-M", "main"]);
+        run_git(repo, &["branch", "-M", "task/base"]);
         record_base_ref().expect("record-base should succeed");
 
         let marker_path_output = std::process::Command::new("git")

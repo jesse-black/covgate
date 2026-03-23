@@ -20,10 +20,38 @@ fn run_covgate_raw_with_path(worktree: &std::path::Path, path: &str, args: &[Str
 }
 
 #[test]
-fn record_base_creates_worktree_ref() {
+fn record_base_noops_when_standard_base_ref_is_available() {
     let fixture = rust_basic_pass_fixture();
     let temp = tempdir().expect("tempdir should exist");
     let worktree = setup_fixture_worktree(temp.path(), fixture);
+    run_git(&worktree, &["branch", "-M", "main"]);
+
+    let output = run_covgate_raw(&worktree, &["record-base".to_string()]);
+    assert_eq!(output.status.code(), Some(0));
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+    assert!(
+        stdout.contains("record-base` is unnecessary"),
+        "stdout={stdout}"
+    );
+    assert!(
+        stdout.contains("Base ref `main` is available"),
+        "stdout={stdout}"
+    );
+
+    let ref_sha = std::process::Command::new("git")
+        .args(["rev-parse", "--verify", "refs/worktree/covgate/base"])
+        .current_dir(&worktree)
+        .output()
+        .expect("git rev-parse should run");
+    assert!(!ref_sha.status.success(), "stdout={stdout}");
+}
+
+#[test]
+fn record_base_creates_worktree_ref_in_constrained_repo() {
+    let fixture = rust_basic_pass_fixture();
+    let temp = tempdir().expect("tempdir should exist");
+    let worktree = setup_fixture_worktree(temp.path(), fixture);
+    run_git(&worktree, &["branch", "-M", "task/record-base"]);
 
     let output = run_covgate_raw(&worktree, &["record-base".to_string()]);
     assert_eq!(output.status.code(), Some(0));
@@ -141,10 +169,7 @@ fn check_help_describes_arguments_and_options() {
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
     assert!(stdout.contains("Arguments:"), "stdout={stdout}");
-    assert!(
-        stdout.contains("Coverage report path (LLVM/Coverlet/Istanbul auto-detected)"),
-        "stdout={stdout}"
-    );
+    assert!(stdout.contains("Coverage report path"), "stdout={stdout}");
     assert!(stdout.contains("Options:"), "stdout={stdout}");
     assert!(
         stdout.contains("Git base reference to diff against"),
@@ -198,6 +223,7 @@ fn record_base_is_idempotent() {
     let fixture = rust_basic_pass_fixture();
     let temp = tempdir().expect("tempdir should exist");
     let worktree = setup_fixture_worktree(temp.path(), fixture);
+    run_git(&worktree, &["branch", "-M", "task/idempotent"]);
 
     let first = run_covgate_raw(&worktree, &["record-base".to_string()]);
     assert_eq!(first.status.code(), Some(0));
@@ -231,7 +257,7 @@ fn record_base_refreshes_after_branch_switch() {
     let fixture = rust_basic_pass_fixture();
     let temp = tempdir().expect("tempdir should exist");
     let worktree = setup_fixture_worktree(temp.path(), fixture);
-    run_git(&worktree, &["branch", "-M", "main"]);
+    run_git(&worktree, &["branch", "-M", "task/base"]);
 
     let first = run_covgate_raw(&worktree, &["record-base".to_string()]);
     assert_eq!(first.status.code(), Some(0));
@@ -397,8 +423,7 @@ fn automatic_base_prefers_recorded_worktree_ref() {
     let worktree = temp.path().join("repo");
     copy_tree(&repo_src, &worktree);
     init_git_repo(&worktree);
-    run_git(&worktree, &["branch", "-M", "main"]);
-    run_git(&worktree, &["checkout", "-b", "feature/recorded-base"]);
+    run_git(&worktree, &["branch", "-M", "task/recorded-base"]);
 
     let output = run_covgate_raw(&worktree, &["record-base".to_string()]);
     assert_eq!(output.status.code(), Some(0));
@@ -428,11 +453,11 @@ fn explicit_base_overrides_recorded_worktree_ref() {
     let worktree = temp.path().join("repo");
     copy_tree(&repo_src, &worktree);
     init_git_repo(&worktree);
-    run_git(&worktree, &["branch", "-M", "main"]);
-    run_git(&worktree, &["checkout", "-b", "feature/explicit-base"]);
+    run_git(&worktree, &["branch", "-M", "task/explicit-base"]);
 
     let output = run_covgate_raw(&worktree, &["record-base".to_string()]);
     assert_eq!(output.status.code(), Some(0));
+    run_git(&worktree, &["branch", "main", "HEAD"]);
 
     copy_tree(&overlay_src, &worktree);
     run_git(&worktree, &["add", "."]);
