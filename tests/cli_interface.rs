@@ -20,10 +20,38 @@ fn run_covgate_raw_with_path(worktree: &std::path::Path, path: &str, args: &[Str
 }
 
 #[test]
-fn record_base_creates_worktree_ref() {
+fn record_base_noops_when_standard_base_ref_is_available() {
     let fixture = rust_basic_pass_fixture();
     let temp = tempdir().expect("tempdir should exist");
     let worktree = setup_fixture_worktree(temp.path(), fixture);
+    run_git(&worktree, &["branch", "-M", "main"]);
+
+    let output = run_covgate_raw(&worktree, &["record-base".to_string()]);
+    assert_eq!(output.status.code(), Some(0));
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+    assert!(
+        stdout.contains("record-base` is unnecessary"),
+        "stdout={stdout}"
+    );
+    assert!(
+        stdout.contains("Base ref `main` is available"),
+        "stdout={stdout}"
+    );
+
+    let ref_sha = std::process::Command::new("git")
+        .args(["rev-parse", "--verify", "refs/worktree/covgate/base"])
+        .current_dir(&worktree)
+        .output()
+        .expect("git rev-parse should run");
+    assert!(!ref_sha.status.success(), "stdout={stdout}");
+}
+
+#[test]
+fn record_base_creates_worktree_ref_in_constrained_repo() {
+    let fixture = rust_basic_pass_fixture();
+    let temp = tempdir().expect("tempdir should exist");
+    let worktree = setup_fixture_worktree(temp.path(), fixture);
+    run_git(&worktree, &["branch", "-M", "task/record-base"]);
 
     let output = run_covgate_raw(&worktree, &["record-base".to_string()]);
     assert_eq!(output.status.code(), Some(0));
@@ -125,6 +153,69 @@ fn help_lists_record_base_as_subcommand() {
     assert!(stdout.contains("Commands:"), "stdout={stdout}");
     assert!(stdout.contains("check"), "stdout={stdout}");
     assert!(stdout.contains("record-base"), "stdout={stdout}");
+    assert!(!stdout.contains("./covgate.toml"), "stdout={stdout}");
+    assert!(
+        !stdout.contains("Supported defaults in v1"),
+        "stdout={stdout}"
+    );
+    assert!(!stdout.contains("Agent workflow"), "stdout={stdout}");
+}
+
+#[test]
+fn check_help_describes_arguments_and_options() {
+    let temp = tempdir().expect("tempdir should exist");
+
+    let output = run_covgate_raw(temp.path(), &["check".to_string(), "--help".to_string()]);
+    assert_eq!(output.status.code(), Some(0));
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+    assert!(stdout.contains("Arguments:"), "stdout={stdout}");
+    assert!(stdout.contains("Coverage report path"), "stdout={stdout}");
+    assert!(stdout.contains("Options:"), "stdout={stdout}");
+    assert!(
+        stdout.contains("Git base reference to diff against"),
+        "stdout={stdout}"
+    );
+    assert!(
+        stdout.contains("Precomputed unified diff file"),
+        "stdout={stdout}"
+    );
+    assert!(
+        stdout.contains("Minimum changed-region coverage percentage required to pass"),
+        "stdout={stdout}"
+    );
+    assert!(
+        stdout.contains("Write a Markdown summary to this file"),
+        "stdout={stdout}"
+    );
+}
+
+#[test]
+fn record_base_help_is_user_focused() {
+    let temp = tempdir().expect("tempdir should exist");
+
+    let output = run_covgate_raw(
+        temp.path(),
+        &["record-base".to_string(), "--help".to_string()],
+    );
+    assert_eq!(output.status.code(), Some(0));
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+    assert!(
+        stdout.contains("stable task-start base for constrained cloud-agent worktrees"),
+        "stdout={stdout}"
+    );
+    assert!(
+        stdout.contains("Run it once at the start of a task before"),
+        "stdout={stdout}"
+    );
+    assert!(stdout.contains("making Git changes"), "stdout={stdout}");
+    assert!(
+        stdout.contains("covgate check <coverage-report>"),
+        "stdout={stdout}"
+    );
+    assert!(
+        !stdout.contains("refs/worktree/covgate/base"),
+        "stdout={stdout}"
+    );
 }
 
 #[test]
@@ -132,6 +223,7 @@ fn record_base_is_idempotent() {
     let fixture = rust_basic_pass_fixture();
     let temp = tempdir().expect("tempdir should exist");
     let worktree = setup_fixture_worktree(temp.path(), fixture);
+    run_git(&worktree, &["branch", "-M", "task/idempotent"]);
 
     let first = run_covgate_raw(&worktree, &["record-base".to_string()]);
     assert_eq!(first.status.code(), Some(0));
@@ -165,7 +257,7 @@ fn record_base_refreshes_after_branch_switch() {
     let fixture = rust_basic_pass_fixture();
     let temp = tempdir().expect("tempdir should exist");
     let worktree = setup_fixture_worktree(temp.path(), fixture);
-    run_git(&worktree, &["branch", "-M", "main"]);
+    run_git(&worktree, &["branch", "-M", "task/base"]);
 
     let first = run_covgate_raw(&worktree, &["record-base".to_string()]);
     assert_eq!(first.status.code(), Some(0));
@@ -322,7 +414,7 @@ fn diff_file_mode_skips_untracked_files_warning() {
 }
 
 #[test]
-fn automatic_base_prefers_recorded_worktree_ref() {
+fn automatic_base_prefers_standard_branch_ref_over_recorded_worktree_ref() {
     let fixture = rust_basic_pass_fixture();
     let temp = tempdir().expect("tempdir should exist");
     let fixture_root = fixture.root();
@@ -331,11 +423,11 @@ fn automatic_base_prefers_recorded_worktree_ref() {
     let worktree = temp.path().join("repo");
     copy_tree(&repo_src, &worktree);
     init_git_repo(&worktree);
-    run_git(&worktree, &["branch", "-M", "main"]);
-    run_git(&worktree, &["checkout", "-b", "feature/recorded-base"]);
+    run_git(&worktree, &["branch", "-M", "task/recorded-base"]);
 
     let output = run_covgate_raw(&worktree, &["record-base".to_string()]);
     assert_eq!(output.status.code(), Some(0));
+    run_git(&worktree, &["branch", "main", "HEAD"]);
 
     copy_tree(&overlay_src, &worktree);
     run_git(&worktree, &["add", "."]);
@@ -349,7 +441,7 @@ fn automatic_base_prefers_recorded_worktree_ref() {
 
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-    assert!(stdout.contains("Diff: refs/worktree/covgate/base...WORKTREE"));
+    assert!(stdout.contains("Diff: main...WORKTREE"), "stdout={stdout}");
 }
 
 #[test]
@@ -362,11 +454,11 @@ fn explicit_base_overrides_recorded_worktree_ref() {
     let worktree = temp.path().join("repo");
     copy_tree(&repo_src, &worktree);
     init_git_repo(&worktree);
-    run_git(&worktree, &["branch", "-M", "main"]);
-    run_git(&worktree, &["checkout", "-b", "feature/explicit-base"]);
+    run_git(&worktree, &["branch", "-M", "task/explicit-base"]);
 
     let output = run_covgate_raw(&worktree, &["record-base".to_string()]);
     assert_eq!(output.status.code(), Some(0));
+    run_git(&worktree, &["branch", "main", "HEAD"]);
 
     copy_tree(&overlay_src, &worktree);
     run_git(&worktree, &["add", "."]);

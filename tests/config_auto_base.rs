@@ -50,6 +50,7 @@ fn config_uses_recorded_base_when_base_is_omitted() {
     let previous = std::env::current_dir().expect("cwd should resolve");
     let _guard = CwdGuard(previous);
     std::env::set_current_dir(repo).expect("should chdir");
+    run_git(repo, &["branch", "-M", "task/config-auto-base"]);
 
     record_base_ref().expect("record-base should succeed");
 

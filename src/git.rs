@@ -8,6 +8,13 @@ use anyhow::{Context, Result, bail};
 
 pub const RECORDED_BASE_REF: &str = "refs/worktree/covgate/base";
 const RECORDED_BASE_BRANCH_MARKER: &str = "refs/worktree/covgate/base.branch";
+const STANDARD_BASE_REFS: &[&str] = &[
+    "origin/HEAD",
+    "origin/main",
+    "origin/master",
+    "main",
+    "master",
+];
 
 struct GitOutput(Output);
 
@@ -219,14 +226,11 @@ fn is_ancestor(ancestor: &str, descendant: &str) -> Result<bool> {
 }
 
 pub fn discover_base_ref() -> Result<Option<String>> {
-    for candidate in [
-        RECORDED_BASE_REF,
-        "origin/HEAD",
-        "origin/main",
-        "origin/master",
-        "main",
-        "master",
-    ] {
+    for candidate in STANDARD_BASE_REFS
+        .iter()
+        .copied()
+        .chain([RECORDED_BASE_REF].into_iter())
+    {
         if resolve_ref_sha(candidate)?.is_some() {
             return Ok(Some(candidate.to_string()));
         }
@@ -235,7 +239,30 @@ pub fn discover_base_ref() -> Result<Option<String>> {
     Ok(None)
 }
 
+fn find_first_resolved_base_ref(
+    resolve_ref: fn(&str) -> Result<Option<String>>,
+) -> Result<Option<(&'static str, String)>> {
+    for candidate in STANDARD_BASE_REFS {
+        if let Some(sha) = resolve_ref(candidate)? {
+            return Ok(Some((candidate, sha)));
+        }
+    }
+
+    Ok(None)
+}
+
+fn discover_standard_base_ref() -> Result<Option<(&'static str, String)>> {
+    find_first_resolved_base_ref(resolve_ref_sha)
+}
+
 pub fn record_base_ref() -> Result<String> {
+    if let Some((base_ref, sha)) = discover_standard_base_ref()? {
+        println!(
+            "Base ref `{base_ref}` is available; `record-base` is unnecessary in this environment."
+        );
+        return Ok(sha);
+    }
+
     let head_sha = resolve_head_sha()?;
     let current_branch = resolve_current_branch()?;
 
@@ -280,7 +307,7 @@ pub fn record_base_ref() -> Result<String> {
 mod tests {
     use std::process::{ExitStatus, Output};
 
-    use super::GitOutput;
+    use super::{GitOutput, find_first_resolved_base_ref};
 
     #[cfg(unix)]
     fn exit_status(code: i32) -> ExitStatus {
@@ -324,5 +351,27 @@ mod tests {
             .stdout_utf8("utf8 should decode")
             .expect("stdout should decode");
         assert_eq!(stdout, "some-sha-123");
+    }
+
+    #[test]
+    fn first_resolved_base_ref_returns_first_match() {
+        let resolved = find_first_resolved_base_ref(|candidate| {
+            Ok(match candidate {
+                "origin/HEAD" => None,
+                "origin/main" => None,
+                _ => Some("later".to_string()),
+            })
+        })
+        .expect("base-ref scan should succeed");
+
+        assert_eq!(resolved, Some(("origin/master", "later".to_string())));
+    }
+
+    #[test]
+    fn first_resolved_base_ref_returns_none_when_nothing_resolves() {
+        let resolved =
+            find_first_resolved_base_ref(|_| Ok(None)).expect("empty base-ref scan should succeed");
+
+        assert_eq!(resolved, None);
     }
 }
