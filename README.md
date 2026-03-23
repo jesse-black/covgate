@@ -74,22 +74,21 @@ Run `covgate` in your CI pipeline after your tests generate coverage artifacts. 
 
 ### CLI Surface
 
-* `check <coverage-report>`: Run coverage checks for the provided report
-* `--base <REF>`: Git base reference to diff against
-* `--diff-file <FILE>`: Precomputed unified diff file
-* `--fail-under-regions <PERCENT>`: Fails if changed-region coverage is below this threshold
-* `--fail-under-lines <PERCENT>`: Fails if changed-line coverage is below this threshold
-* `--fail-under-branches <PERCENT>`: Fails if changed-branch coverage is below this threshold
-* `--fail-under-functions <PERCENT>`: Fails if changed-function coverage is below this threshold
-* `--fail-uncovered-regions <MAX>`: Fails if the raw count of uncovered regions exceeds this limit
-* `--fail-uncovered-lines <MAX>`: Fails if the raw count of uncovered lines exceeds this limit
-* `--fail-uncovered-branches <MAX>`: Fails if the raw count of uncovered branches exceeds this limit
-* `--fail-uncovered-functions <MAX>`: Fails if the raw count of uncovered functions exceeds this limit
-* `--markdown-output <FILE>`: Write a Markdown summary for CI interfaces like GitHub Actions
+`check <coverage-report>` runs coverage checks for the provided report.
+Options:
+- `--base <REF>` selects the Git base reference to diff against.
+- `--diff-file <FILE>` uses a precomputed unified diff instead of Git base discovery.
+- `--fail-under-regions <PERCENT>` fails if changed-region coverage is below this threshold.
+- `--fail-under-lines <PERCENT>` fails if changed-line coverage is below this threshold.
+- `--fail-under-branches <PERCENT>` fails if changed-branch coverage is below this threshold.
+- `--fail-under-functions <PERCENT>` fails if changed-function coverage is below this threshold.
+- `--fail-uncovered-regions <MAX>` fails if the raw count of uncovered regions exceeds this limit.
+- `--fail-uncovered-lines <MAX>` fails if the raw count of uncovered lines exceeds this limit.
+- `--fail-uncovered-branches <MAX>` fails if the raw count of uncovered branches exceeds this limit.
+- `--fail-uncovered-functions <MAX>` fails if the raw count of uncovered functions exceeds this limit.
+- `--markdown-output <FILE>` writes a Markdown summary for CI interfaces like GitHub Actions.
 
-`covgate` also supports a dedicated agent-workflow command:
-
-* `record-base`: Records `HEAD` into `refs/worktree/covgate/base` if that ref is not already set.
+`record-base` captures a stable task-start base when normal branch refs are unavailable.
 
 ### Gating a Pull Request Locally
 
@@ -101,13 +100,33 @@ cargo llvm-cov --json --output-path coverage.json
 covgate check coverage.json --base origin/main --fail-under-regions 80
 ```
 
-### Autonomous Agent Workflows: Recording a Stable Base
+### Standard Checkout Workflow
 
-In cloud agent environments, base branches like `origin/main` are intentionally inaccessible for security sandboxing. Run `covgate record-base` at task start to capture a stable per-worktree base commit.
-
-When `--base` is omitted, `covgate` automatically checks `refs/worktree/covgate/base` before checking standard fallback refs (`origin/HEAD`, `origin/main`, `main`). Explicit `--base` still takes precedence.
+In a standard checkout, the normal workflow is simply `covgate check <coverage-report>`. If `--base` is omitted, `covgate` automatically checks `origin/HEAD`, `origin/main`, `origin/master`, `main`, and `master`. No `record-base` step is needed in that case.
 
 When diffing against a Git base, `covgate` compares the merge-base snapshot to your current worktree. This includes committed changes plus staged/unstaged tracked edits, so local diagnosis reflects in-progress work.
+
+```bash
+# Generate JSON coverage report
+cargo llvm-cov --json --output-path coverage.json
+
+# Let covgate auto-discover the base ref in a standard checkout
+covgate check coverage.json --fail-under-lines 90 --fail-under-regions 85
+```
+
+If your team wants a non-default base, pass it explicitly:
+
+```bash
+covgate check coverage.json --base origin/main --fail-under-regions 80
+```
+
+### Cloud-Agent Workflow
+
+Use `covgate record-base` only in constrained cloud-agent or sandboxed worktree environments where normal base branches such as `main` or `origin/main` are unavailable.
+
+Run `covgate record-base` at the beginning of a task before the agent makes Git changes. Running it immediately before `covgate check` is too late because that would capture the post-change `HEAD` instead of the task-start base.
+
+When `--base` is omitted, `covgate` checks `refs/worktree/covgate/base` before trying the standard branch refs listed above. Explicit `--base` still takes precedence. If a default base branch ref is already available, `covgate record-base` will do nothing.
 
 The recorded base is kept per branch so separate agent task branches keep separate stable diff anchors.
 
@@ -126,7 +145,7 @@ The Codex Cloud environment settings maintenance script should include `covgate 
 
 ### Configuration (`covgate.toml`)
 
-`covgate` reads repository-local defaults from `covgate.toml` at the repository root so teams can keep their configuration checked in with the code. CLI flags always override config values.
+`covgate` reads repository-local defaults from `covgate.toml` so teams can keep their configuration checked in with the code. CLI flags always override config values.
 
 You can specify a default `base` and `markdown_output` at the top level, along with minimum percentage (`fail_under_*`) and maximum uncovered count (`fail_uncovered_*`) rules under `[gates]`.
 

@@ -15,14 +15,14 @@ This plan makes that split obvious and adds one small guardrail in the product i
 ## Progress
 
 - [x] (2026-03-23 16:05Z) Created this repository-specific active ExecPlan with concrete file targets, validation commands, and a tightly scoped goal: clarify when `record-base` is needed and add one small defensive behavior.
-- [x] (2026-03-23 16:10Z) Reviewed the current wording in `README.md`, `src/cli.rs`, and `docs/reference/environment-execution-contexts.md` to identify where `record-base` is presented too broadly.
+- [x] (2026-03-23 16:10Z) Reviewed the current wording in `README.md` and `src/cli.rs` to identify where `record-base` is presented too broadly.
 - [x] (2026-03-23 16:18Z) Expanded the plan scope to include one small behavior change: make `record-base` detect when a standard base ref is already available and explain that recording is unnecessary in that environment.
 - [x] (2026-03-23 16:40Z) Refined the CLI-help direction: remove config guidance from top-level `--help`, avoid examples blocks at the root command, move the cloud-agent workflow guidance into `record-base --help`, and ensure `check --help` includes descriptive argument and option text.
 - [ ] Rewrite `README.md` so the standard local/devcontainer workflow appears before the cloud-agent workflow and explicitly states that `record-base` is not the default in ordinary clones.
 - [x] (2026-03-23 16:45Z) Updated `src/cli.rs` so top-level `--help` no longer includes config prose or roadmap wording, `record-base --help` uses user-focused cloud-agent guidance, and `check --help` now describes its argument and options.
 - [x] (2026-03-23 17:35Z) Implemented a defensive `record-base` preflight in `src/git.rs` so standard local checkouts now emit an explanatory no-op when a normal base ref already resolves.
 - [x] (2026-03-23 17:35Z) Updated Git, CLI, and config tests to cover both sides of the contract: ordinary local checkouts no-op, while constrained task-branch repos still create and refresh `refs/worktree/covgate/base`.
-- [ ] Decide whether `docs/reference/environment-execution-contexts.md` needs a short clarification or whether README plus CLI help are sufficient for this scope.
+- [x] (2026-03-23 18:05Z) Narrowed the remaining documentation scope to `README.md` only; no update to `docs/reference/environment-execution-contexts.md` is needed for this plan.
 - [x] (2026-03-23 17:40Z) Revalidated the implementation with focused `record-base` test slices plus `cargo xtask quick`; remaining work is documentation alignment, not code behavior.
 
 ## Surprises & Discoveries
@@ -51,7 +51,7 @@ This plan makes that split obvious and adds one small guardrail in the product i
   Rationale: The main issue is still user guidance, but the proposed defensive no-op directly reinforces the intended model without turning this into a broader command redesign.
   Date/Author: 2026-03-23 / Codex
 
-- Decision: Keep the plan tightly scoped to the highest-signal user surfaces: `README.md`, `src/cli.rs`, and only one supporting reference doc if needed.
+- Decision: Keep the plan tightly scoped to the highest-signal user surfaces: `README.md`, `src/cli.rs`, and the small `src/git.rs` behavior change.
   Rationale: The confusion is happening at first-contact surfaces. Narrowing the scope keeps this follow-up concise and focused instead of reopening the broader completed `record-base` implementation plan.
   Date/Author: 2026-03-23 / Codex
 
@@ -73,13 +73,13 @@ This plan makes that split obvious and adds one small guardrail in the product i
 
 ## Outcomes & Retrospective
 
-Implementation is partially complete. The CLI help work and the defensive `record-base` preflight are now in place, along with regression coverage that distinguishes ordinary local checkouts from constrained task-branch repos. The remaining work is to align the README and decide whether the longer environment reference doc needs a short consistency update.
+Implementation is partially complete. The CLI help work and the defensive `record-base` preflight are now in place, along with regression coverage that distinguishes ordinary local checkouts from constrained task-branch repos. The remaining work is to align the README; no extra environment-reference-doc update is needed for this plan.
 
 The main lesson so far is that environment-specific guidance needs both wording and behavioral reinforcement. Once the command itself says “this is unnecessary here” in ordinary checkouts, the intended workflow becomes much harder to misread.
 
 ## Context and Orientation
 
-`covgate` is a Rust CLI in `src/` that computes diff coverage from a coverage report and a Git diff base. The main user-facing docs live in `README.md`. The top-level CLI help text is defined in `src/cli.rs` through Clap metadata, especially the `after_help` string shown by `covgate --help`. Longer-lived environment rationale lives in `docs/reference/environment-execution-contexts.md`. Git-base recording and base-ref discovery logic live in the Rust Git helpers under `src/git.rs` and config resolution under `src/config.rs`.
+`covgate` is a Rust CLI in `src/` that computes diff coverage from a coverage report and a Git diff base. The main user-facing docs live in `README.md`. The top-level CLI help text is defined in `src/cli.rs` through Clap metadata for the root command and subcommands. Git-base recording and base-ref discovery logic live in the Rust Git helpers under `src/git.rs` and config resolution under `src/config.rs`.
 
 In this repository, “automatic base discovery” means the path `covgate` uses when the user does not pass `--base`. It looks for an already recorded worktree-local ref first and then checks standard branch refs such as `origin/HEAD`, `origin/main`, and `main`. In a normal local clone or devcontainer, one of those standard refs is often available, so `covgate check <coverage-report>` should work without `record-base`.
 
@@ -96,8 +96,6 @@ Next, update `src/cli.rs` so `covgate --help` stays compact and current. Remove 
 While editing `src/cli.rs`, remove config guidance from `--help` entirely. Do not keep text that assumes the config file lives specifically at `./covgate.toml`, because the product now walks ancestor directories. Do not keep versioned phrasing such as `Supported defaults in v1:` because `--help` should describe current behavior, not roadmap or release-era context. Instead, make the subcommand help itself more useful by ensuring `check --help` includes descriptive text for every argument and option, and `record-base --help` explains the user problem it solves rather than Git internals.
 
 Then add the small defensive behavior in the Git path. Update `src/git.rs` so `covgate record-base` first checks the same standard branch refs that a normal local checkout would rely on. If one resolves cleanly, return without writing `refs/worktree/covgate/base` and print an explanatory message that `record-base` is unnecessary in this environment because a normal base ref is already available. Keep the command’s existing behavior for constrained environments where those standard refs do not resolve. This change must be intentionally narrow: it should reinforce the guidance, not redesign the command.
-
-After that, decide whether `docs/reference/environment-execution-contexts.md` needs a brief note pointing readers back to the same environment split. If the file currently does not discuss `record-base` at all, a short clarification is enough; do not bloat the plan into a broad environment-doc rewrite. The goal is consistency, not duplication.
 
 Finally, validate both behavior and wording as rendered output rather than only as source edits. Run `cargo run -- --help` to inspect the real help output, use focused tests to confirm the defensive no-op in normal local clones and the original recording behavior in constrained repos, and re-read the updated README sections to confirm that a novice would encounter the common local workflow before the exception path. If the wording still makes “agent” sound equivalent to “always record-base,” or if the command still records a worktree base in an ordinary clone where a standard base ref is available, keep revising until that ambiguity is gone.
 
@@ -152,8 +150,6 @@ In a constrained repository that lacks `origin/HEAD`, `origin/main`, and `main`,
 
 The final wording must also explain timing. A reader should be able to infer that `record-base` belongs at the beginning of a task before Git changes are made, not immediately before `covgate check`.
 
-If `docs/reference/environment-execution-contexts.md` is touched, it must reinforce the same split without adding contradictory or broader guidance.
-
 ## Idempotence and Recovery
 
 Most of this plan changes prose, and the one product change is intentionally narrow. If an edit makes the guidance more confusing, recover by restoring the simpler version and checking it against the plan’s core goals: narrow the scope, prioritize the normal workflow, describe `record-base` as an escape hatch, make task-start timing explicit, and keep the defensive behavior limited to an explanatory no-op when normal base refs already work.
@@ -197,7 +193,6 @@ This plan should not add any dependency. It changes one narrow Rust behavior and
 - `src/cli.rs` for the top-level `covgate --help` text.
 - `src/git.rs` for the defensive `record-base` preflight and explanatory no-op.
 - related tests in `tests/git_module.rs` and `tests/cli_interface.rs` to preserve both the normal-checkout and constrained-environment behaviors.
-- `docs/reference/environment-execution-contexts.md` only if a short consistency clarification is needed.
 
 The implementation must preserve the existing command surface: `covgate check <coverage-report>` for gating and `covgate record-base` for recording a worktree-local base. The intended change is explanatory: make it clear which command sequence belongs to which environment.
 
