@@ -15,7 +15,8 @@
 - `xtask/` – Repository-local automation for fast checks, full validation, and fixture coverage regeneration.
 
 ## Rust Workflow
-- Use `cargo xtask quick` for the test/check step of the edit-build-test loop during development.
-- Run `cargo xtask validate` before considering work complete.
+- Use `cargo xtask quick` for the fast test/check step during the edit-build-test loop. It is the iteration command and intentionally skips the slower coverage-oriented validation work.
+- Use `cargo xtask validate` as the final pre-completion check before declaring work complete. It is the full validation command, including coverage validation.
+- Treat `cargo xtask quick` and `cargo xtask validate` as alternatives for a given check pass, not a required pair to run back-to-back every time: `quick` during iteration, `validate` at the end.
 - Address bug reports and review findings with TDD: first reproduce the issue in a failing test, then fix the issue and rerun the relevant tests until they pass.
 - Never lower repository gate defaults (for example in `covgate.toml`) without explicit maintainer instruction.
