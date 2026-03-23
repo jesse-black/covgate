@@ -1,6 +1,6 @@
 # Clarify when `covgate record-base` is required and make the normal checkout workflow the default guidance
 
-Save this in-progress ExecPlan in `docs/exec-plans/active/covgate-clarify-record-base-guidance.md`. Move it to `docs/exec-plans/completed/covgate-clarify-record-base-guidance.md` only after the README, CLI help text, the defensive `record-base` behavior, and any supporting docs all describe the same environment split and the validation steps below pass.
+Save the canonical completed ExecPlan in `docs/exec-plans/completed/covgate-clarify-record-base-guidance.md`. This work is complete; keep any future follow-up changes in a new active ExecPlan rather than moving this file back.
 
 This ExecPlan is a living document. The sections `Progress`, `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
@@ -18,7 +18,7 @@ This plan makes that split obvious and adds one small guardrail in the product i
 - [x] (2026-03-23 16:10Z) Reviewed the current wording in `README.md` and `src/cli.rs` to identify where `record-base` is presented too broadly.
 - [x] (2026-03-23 16:18Z) Expanded the plan scope to include one small behavior change: make `record-base` detect when a standard base ref is already available and explain that recording is unnecessary in that environment.
 - [x] (2026-03-23 16:40Z) Refined the CLI-help direction: remove config guidance from top-level `--help`, avoid examples blocks at the root command, move the cloud-agent workflow guidance into `record-base --help`, and ensure `check --help` includes descriptive argument and option text.
-- [ ] Rewrite `README.md` so the standard local/devcontainer workflow appears before the cloud-agent workflow and explicitly states that `record-base` is not the default in ordinary clones.
+- [x] (2026-03-23 18:15Z) Rewrote `README.md` so the standard checkout workflow appears before the cloud-agent workflow and `record-base` is clearly conditional instead of the default in ordinary clones.
 - [x] (2026-03-23 16:45Z) Updated `src/cli.rs` so top-level `--help` no longer includes config prose or roadmap wording, `record-base --help` uses user-focused cloud-agent guidance, and `check --help` now describes its argument and options.
 - [x] (2026-03-23 17:35Z) Implemented a defensive `record-base` preflight in `src/git.rs` so standard local checkouts now emit an explanatory no-op when a normal base ref already resolves.
 - [x] (2026-03-23 17:35Z) Updated Git, CLI, and config tests to cover both sides of the contract: ordinary local checkouts no-op, while constrained task-branch repos still create and refresh `refs/worktree/covgate/base`.
@@ -73,9 +73,9 @@ This plan makes that split obvious and adds one small guardrail in the product i
 
 ## Outcomes & Retrospective
 
-Implementation is partially complete. The CLI help work and the defensive `record-base` preflight are now in place, along with regression coverage that distinguishes ordinary local checkouts from constrained task-branch repos. The remaining work is to align the README; no extra environment-reference-doc update is needed for this plan.
+Implementation is complete. The CLI help work, README rewrite, and defensive `record-base` preflight are all in place, along with regression coverage that distinguishes ordinary local checkouts from constrained task-branch repos. No extra environment-reference-doc update was needed.
 
-The main lesson so far is that environment-specific guidance needs both wording and behavioral reinforcement. Once the command itself says “this is unnecessary here” in ordinary checkouts, the intended workflow becomes much harder to misread.
+The main lesson is that environment-specific guidance needs both wording and behavioral reinforcement. Once the command itself says “this is unnecessary here” in ordinary checkouts, the intended workflow becomes much harder to misread.
 
 ## Context and Orientation
 
@@ -196,4 +196,6 @@ This plan should not add any dependency. It changes one narrow Rust behavior and
 
 The implementation must preserve the existing command surface: `covgate check <coverage-report>` for gating and `covgate record-base` for recording a worktree-local base. The intended change is explanatory: make it clear which command sequence belongs to which environment.
 
-Plan revision note: created on 2026-03-23 as a focused active ExecPlan with explicit file targets, validation commands, and an intentionally narrow scope: clarify when `record-base` is needed, improve CLI help and docs, and add one defensive no-op for standard checkouts.
+Plan revision note: created on 2026-03-23 as a focused ExecPlan with explicit file targets, validation commands, and an intentionally narrow scope: clarify when `record-base` is needed, improve CLI help and docs, and add one defensive no-op for standard checkouts.
+
+Change note (2026-03-23): Closed out the plan after landing the CLI help cleanup, the README workflow rewrite, the defensive `record-base` no-op in standard checkouts, and the associated regression coverage and validation runs.
