@@ -30,11 +30,11 @@ pub(crate) fn parse_str_with_repo_root(input: &str, repo_root: &Path) -> Result<
                 continue;
             };
 
-            for (class_name, methods_value) in classes {
+            for methods_value in classes.values() {
                 let Some(methods) = methods_value.as_object() else {
                     continue;
                 };
-                for (method_name, method_value) in methods {
+                for method_value in methods.values() {
                     let Ok(method) = serde_json::from_value::<CoverletMethod>(method_value.clone())
                     else {
                         continue;
@@ -49,10 +49,6 @@ pub(crate) fn parse_str_with_repo_root(input: &str, repo_root: &Path) -> Result<
                     }
 
                     branch_records.extend(method.branches);
-
-                    if should_skip_function_method(class_name, method_name) {
-                        continue;
-                    }
 
                     let start_line = method.lines.keys().copied().min();
                     let end_line = method.lines.keys().copied().max();
@@ -172,11 +168,6 @@ fn normalize_path(value: &str, repo_root: &Path) -> PathBuf {
 
 fn lexical_normalize(path: impl AsRef<Path>) -> PathBuf {
     path.as_ref().components().collect()
-}
-
-fn should_skip_function_method(class_name: &str, method_name: &str) -> bool {
-    let class_segment = class_name.rsplit('/').next().unwrap_or(class_name);
-    class_segment.starts_with("<>c") && method_name.contains("b__")
 }
 
 #[derive(Debug, Deserialize)]
@@ -428,53 +419,5 @@ mod tests {
             .expect("coverlet json should parse");
 
         assert!(!report.totals_by_file.contains_key(&MetricKind::Function));
-    }
-
-    #[test]
-    fn skips_compiler_generated_lambda_helper_methods_for_function_totals() {
-        let input = r#"
-        {
-          "Demo.dll": {
-            "src/lib.cs": {
-              "Demo.Shapes/<>c": {
-                "System.String Demo.Shapes/<>c::<HandleAsync>b__0_0(System.String)": {
-                  "Lines": {"7": 3},
-                  "Branches": []
-                }
-              },
-              "Demo.Shapes/<HandleAsync>d__0": {
-                "System.Void Demo.Shapes/<HandleAsync>d__0::MoveNext()": {
-                  "Lines": {"6": 1, "7": 3, "8": 1},
-                  "Branches": [
-                    {"Line": 7, "Hits": 1},
-                    {"Line": 7, "Hits": 1}
-                  ]
-                }
-              }
-            }
-          }
-        }
-        "#;
-
-        let report = parse_str_with_repo_root(input, Path::new("/workspace/covgate"))
-            .expect("coverlet json should parse");
-
-        let function_totals = report
-            .totals_by_file
-            .get(&MetricKind::Function)
-            .expect("function totals should exist")
-            .get(&PathBuf::from("src/lib.cs"))
-            .expect("file totals should exist");
-        assert_eq!(function_totals.covered, 1);
-        assert_eq!(function_totals.total, 1);
-
-        let function_ops: Vec<_> = report
-            .opportunities
-            .iter()
-            .filter(|op| op.kind == OpportunityKind::Function)
-            .collect();
-        assert_eq!(function_ops.len(), 1);
-        assert_eq!(function_ops[0].span.start_line, 6);
-        assert_eq!(function_ops[0].span.end_line, 8);
     }
 }
