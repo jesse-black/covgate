@@ -114,6 +114,20 @@ pub fn vitest_statement_line_divergence_fixture() -> Fixture {
     }
 }
 
+pub fn vitest_empty_branch_locations_fixture() -> Fixture {
+    Fixture {
+        language: "vitest",
+        name: "empty-branch-locations",
+    }
+}
+
+pub fn vitest_tsx_line_summary_fixture() -> Fixture {
+    Fixture {
+        language: "vitest",
+        name: "tsx-line-summary",
+    }
+}
+
 pub fn fail_fixtures_with_regions() -> Vec<Fixture> {
     vec![
         rust_basic_fail_fixture(),
@@ -268,6 +282,7 @@ pub fn write_absolute_path_coverage_fixture(fixture: Fixture, worktree: &Path, d
         "swift" => "Sources/CovgateDemo/CovgateDemo.swift",
         "dotnet" => "src/CovgateDemo/MathOps.cs",
         "vitest" if fixture.name == "empty-branch-locations" => "src/fixtures/fixtureSeed.ts",
+        "vitest" if fixture.name == "tsx-line-summary" => "src/profileCard.tsx",
         "vitest" => "src/math.js",
         _ => "src/lib.rs",
     };

@@ -223,6 +223,12 @@ const FIXTURE_COVERAGE_SPECS: &[FixtureCoverageSpec] = &[
         toolchain: FixtureToolchain::Vitest,
         run_mode: RunMode::NoCalls,
     },
+    FixtureCoverageSpec {
+        id: "vitest/tsx-line-summary",
+        source_file: "src/profileCard.tsx",
+        toolchain: FixtureToolchain::Vitest,
+        run_mode: RunMode::NoCalls,
+    },
 ];
 
 fn regen_fixture_coverage(fixture_id: &str) -> Result<()> {

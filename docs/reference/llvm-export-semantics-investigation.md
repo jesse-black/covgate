@@ -2,6 +2,13 @@
 
 This document records the current investigation into why `covgate` still disagrees with LLVM on line and region totals even after the Rust function-identity fix landed.
 
+The most important update since the original investigation is that line and region discrepancies should no longer be treated as the same class of problem.
+
+- The region discrepancy currently looks like a narrow summary-rule gap inside LLVM's segment semantics.
+- The line discrepancy currently looks broader and more structurally ambiguous because LLVM exposes multiple externally visible line views for the same run.
+
+That distinction matters for both confidence claims and test design.
+
 The important takeaway is that there may be more than one "LLVM truth" visible to downstream tools:
 
 - exported JSON detail such as `files[].segments` and `functions[].regions`
@@ -25,6 +32,11 @@ On the checked-in real LLVM repro fixture in `tests/fixtures/llvm-real/covgate-s
 
 That is the red test in `tests/llvm_real_parity.rs`.
 
+The repository should read that red test carefully:
+
+- it is strong evidence that `covgate` does not match LLVM summary totals for lines and regions on the real fixture
+- it is not, by itself, proof that the line and region discrepancies have the same root cause
+
 ## Live investigation finding: text view and summary view can disagree
 
 For a live repository coverage run, we generated both:
@@ -47,6 +59,8 @@ Examples:
   - file summary: covered `133`, total `133`
 
 This means a downstream parser can match LLVM's visible text rendering for a file and still fail summary parity for that same file.
+
+This is the key reason the line discrepancy should not be bucketed together with the region discrepancy. For regions, we have evidence of a remaining small summary-rule gap. For lines, we have evidence that LLVM itself exposes multiple line semantics through different outputs.
 
 ## What `covgate` currently matches
 
@@ -214,6 +228,12 @@ This strongly suggests LLVM is exporting two different notions of line accountin
 
 So a downstream parser that works from concrete line listings or derivable executable lines should not assume it can always reproduce the summary `LF/LH` line totals exactly from those concrete entries alone.
 
+At this point the strongest current line-specific conclusion is not "LLVM line summaries are internally inconsistent in exactly the same way as regions." The stronger conclusion is:
+
+- LLVM line summaries, concrete LCOV `DA:` line listings, and text-rendered executable lines are competing visible views
+- `covgate` may already match one of those views for some files while still disagreeing with another
+- the remaining line work must identify which external line oracle should define confidence for diff gating before treating summary disagreement as a parser defect
+
 ## Region-side finding: gap regions are not the cause in the live drift files
 
 For the high-drift live files we inspected, the file-segment data had:
@@ -247,6 +267,8 @@ That means "count all non-entry segments too" would overshoot badly, but "ignore
 
 So the remaining region mismatch also appears to depend on a narrower LLVM rule than the simple heuristics tested so far.
 
+This is an important contrast with the line story. The region evidence points toward a still-unresolved summary-rule detail inside one semantic family. The line evidence points toward multiple semantic families that LLVM exposes simultaneously.
+
 ## Current hypotheses that remain plausible
 
 Based on the evidence collected so far, the remaining possibilities include:
@@ -277,6 +299,8 @@ Only after answering those questions should we decide whether the red parity tes
 - a real parser bug in `covgate`
 - an upstream LLVM export-detail limitation
 - or a mixture of both
+
+For lines and regions, those answers may now legitimately diverge. The current repository evidence does not justify assuming one shared explanation.
 
 ## What should give `covgate` confidence for diff gating
 
@@ -323,6 +347,8 @@ So line-gating confidence should come from fixture-backed tests that:
 
 Summary parity remains useful as a secondary signal, but it should not be the only acceptance bar for line gating.
 
+The repository's current line-focused tests do not yet fully reach that bar. They prove `covgate`'s changed-line behavior is internally consistent on real LLVM exports, but they do not yet compare changed line opportunities against LLVM text output or LCOV `DA:` entries directly.
+
 ### Region gating
 
 For region gating, the strongest confidence evidence should come from targeted LLVM segment-pattern fixtures plus diff overlap behavior.
@@ -361,6 +387,11 @@ In other words:
 
 That should shape the next tests we add.
 
+More concretely:
+
+- the line follow-up should be an external-oracle confidence plan
+- the region follow-up should stay a parser- and segment-semantics investigation
+
 ## Current test-suite gap
 
 The existing repository tests already prove some important pieces:
@@ -387,6 +418,26 @@ The first step in that direction now exists:
 - `tests/llvm_diff_regression.rs` now also uses the checked-in real multi-file LLVM export with synthetic diffs for `src/config.rs` and `src/coverage/llvm_json.rs`, asserting exact changed line, region, and function outcomes on higher-complexity report shapes
 - `tests/llvm_diff_regression.rs` also runs end-to-end `covgate check` assertions on real-export diff slices for `src/config.rs`, `src/coverage/coverlet_json.rs`, and `src/render/markdown.rs`, proving the actual rule pass/fail outcomes users see for percent and uncovered-count gates
 
+That improves confidence meaningfully, but it is still important to describe the limit precisely:
+
+- these tests prove `covgate`'s changed-line, changed-region, and changed-function behavior on real LLVM exports is stable and explicit
+- they do not yet prove that the changed line opportunities match LLVM's best external concrete-line oracle
+- they are therefore stronger evidence for diff-gating consistency than for LLVM line-oracle parity
+
+That limit matters much more for lines than for regions, because the line investigation has already shown multiple competing external views.
+
+## Current repository state
+
+The repository is in a stronger position than it was when the original parity work closed, but the confidence picture is asymmetric:
+
+- `tests/llvm_real_parity.rs` still documents real-summary disagreement for lines and regions on `tests/fixtures/llvm-real/covgate-self-full.json`
+- `tests/llvm_diff_regression.rs` now proves exact changed opportunities and CLI gate outcomes on small LLVM fixtures and on several higher-complexity slices of the real LLVM export
+- function parity is on much firmer ground because the normalized-name fix closed the real fixture mismatch
+- region confidence is improved by the explicit real-export diff regressions, but the remaining summary mismatch still looks like a segment-rule investigation
+- line confidence is improved for diff gating, but not yet for external-oracle parity, because no test currently compares changed line opportunities to LLVM text output or LCOV `DA:` entries
+
+In other words, the repository now has good evidence that `covgate`'s LLVM line gating is coherent on the exercised real diffs. It does not yet have enough evidence to say that the remaining LLVM line summary mismatch is "the same kind of internal inconsistency" as the region mismatch.
+
 That does not resolve the harder live-summary ambiguity yet, but it is the right shape of proof for trusting diff gating.
 
 ## Practical guidance
@@ -396,6 +447,7 @@ Until this is resolved:
 - do not "fix" summary parity by passing LLVM summary data through production code
 - do not assume LLVM text view and LLVM summary totals are interchangeable or derived from the same exposed detail
 - do use live side-by-side comparisons between exported detail, rendered text, and summary totals when investigating any new LLVM line or region mismatch
+- do treat new line discrepancies and new region discrepancies as potentially different problems until a concrete repro proves otherwise
 
 ## Source pointers
 

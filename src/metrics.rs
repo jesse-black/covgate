@@ -178,4 +178,24 @@ mod tests {
         assert_eq!(metric.covered, 1);
         assert_eq!(metric.total, 2);
     }
+
+    #[test]
+    fn changed_line_metric_keeps_uncovered_fixture_seed_call_visible() {
+        let report = parse_str_with_repo_root(
+            include_str!("../tests/fixtures/vitest/empty-branch-locations/coverage.json"),
+            std::path::Path::new("."),
+        )
+        .expect("fixture should parse");
+        let diff = vec![ChangedFile {
+            path: PathBuf::from("src/fixtures/fixtureSeed.ts"),
+            changed_lines: vec![LineRange { start: 20, end: 20 }],
+        }];
+
+        let metric =
+            compute_changed_metric(&report, &diff, MetricKind::Line).expect("metric works");
+
+        assert_eq!(metric.covered, 0);
+        assert_eq!(metric.total, 1);
+        assert_eq!(metric.uncovered_changed_opportunities.len(), 1);
+    }
 }
