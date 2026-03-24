@@ -1,0 +1,32 @@
+changelog:
+  categories:
+    - title: Features
+      labels:
+        - feature
+        - enhancement
+        - feat
+    - title: Fixes
+      labels:
+        - fix
+        - bug
+        - regression
+    - title: Breaking Changes
+      labels:
+        - breaking
+    - title: Documentation
+      labels:
+        - docs
+    - title: Internal
+      labels:
+        - internal
+        - chore
+        - ci
+        - refactor
+        - test
+  exclude:
+    labels:
+      - skip-release-notes
+      - duplicate
+      - invalid
+      - wontfix
+      - question
