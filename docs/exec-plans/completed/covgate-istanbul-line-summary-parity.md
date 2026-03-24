@@ -1,6 +1,6 @@
 # Lock Istanbul line-summary behavior to native Vitest v8 semantics and realistic fixture-backed regressions
 
-Save this in-progress ExecPlan in `docs/exec-plans/active/covgate-istanbul-line-summary-parity.md`. Move it to `docs/exec-plans/completed/covgate-istanbul-line-summary-parity.md` only after the remaining validation, documentation updates, and any final fixture expansions are complete.
+This completed ExecPlan is the canonical record of the Istanbul line-summary parity work. It now lives in `docs/exec-plans/completed/covgate-istanbul-line-summary-parity.md` because the fixture expansion, documentation updates, and final validation sweep are finished.
 
 This ExecPlan is a living document. The sections `Progress`, `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
@@ -10,7 +10,7 @@ Maintain this document in accordance with `docs/PLANS.md`. Re-read that file bef
 
 `covgate` now accepts larger Istanbul JSON artifacts from Vitest v8 and no longer reports obviously impossible line coverage in the small checked-in `fixtureSeed.ts` repro, but the more important user promise is stronger than “the parser no longer crashes.” A user should be able to run Vitest with the default v8 coverage provider, hand the resulting Istanbul JSON to `covgate`, and trust that the overall line totals in `covgate`’s Markdown summary reflect the same line semantics that Vitest itself reports in `coverage-summary.json`.
 
-After the work already completed under this plan, a novice can run the checked-in Vitest summary regressions and see that `covgate` now matches the realistic multi-file `empty-branch-locations` fixture as well as the compact `statement-line-divergence` fixture. The remaining work is to preserve that confidence by documenting the semantics clearly, keeping the fixture-backed parity regressions explicit, and widening validation only when a new native-generated repro shows a remaining mismatch.
+After the work recorded in this plan, a novice can run the checked-in Vitest summary regressions and see that `covgate` now matches the realistic multi-file `empty-branch-locations` fixture, the compact `statement-line-divergence` fixture, and the dedicated TSX-backed `tsx-line-summary` fixture. The repository now documents those semantics explicitly and validates them through the regular test and validation commands.
 
 ## Progress
 
@@ -24,11 +24,12 @@ After the work already completed under this plan, a novice can run the checked-i
 - [x] (2026-03-23 03:40Z) Added `tests/fixtures/vitest/empty-branch-locations` to `tests/overall_summary.rs` so the realistic multi-file Vitest fixture now participates in line-summary parity regressions.
 - [x] (2026-03-23 03:55Z) Ran `cargo test istanbul_json -- --nocapture`, `cargo test overall_summary -- --nocapture`, and `cargo xtask quick` after the semantic change and observed all checks pass.
 - [x] (2026-03-23 23:55Z) Decided that the next Istanbul confidence expansion will include a dedicated TSX-backed Vitest fixture rather than stopping at `.ts` coverage evidence.
-- [ ] Document the final Istanbul line model in repository reference material so future contributors understand that the current parser follows native Vitest `coverage-summary.json` line totals, not union-of-span executable lines.
-- [ ] Add at least one native-generated TSX-backed Vitest fixture under `tests/fixtures/vitest/` that exercises JSX or TSX-heavy source and feeds into the same Istanbul line-summary parity path as the existing `.ts` fixtures.
-- [ ] Regenerate the new TSX fixture through `cargo xtask regen-fixture-coverage vitest/<scenario>`, check in its `coverage.json` and `native-summary.json`, and extend `tests/overall_summary.rs` so the TSX fixture participates in line-summary parity assertions.
-- [ ] If the TSX fixture exposes new parser drift, add the failing regression first and then adjust `src/coverage/istanbul_json.rs` so the parser still matches the captured native summary artifact.
-- [ ] Run `cargo xtask validate` after the documentation update or any new fixture work before closing this plan.
+- [x] (2026-03-24 00:10Z) Added the new `tests/fixtures/vitest/tsx-line-summary/` fixture source tree and wired it into `xtask`, `tests/support/mod.rs`, `tests/overall_summary.rs`, and the Vitest fixture README so it follows the same native-summary parity path as the existing Vitest repros.
+- [x] (2026-03-24 00:25Z) Regenerated `tests/fixtures/vitest/tsx-line-summary/` through `cargo xtask regen-fixture-coverage vitest/tsx-line-summary` using the discovered `fnm` Node path and captured native summary totals of line `7/9`, branch `3/6`, and function `3/4`.
+- [x] (2026-03-24 00:30Z) Verified that the new TSX-backed Vitest fixture participates in `tests/overall_summary.rs` and that `cargo test overall_summary_line_totals_match_native_summary_for_all_line_capable_fixtures -- --nocapture` and `cargo test line_repro_fixtures_use_captured_native_summary_artifacts -- --nocapture` both pass without further Istanbul parser changes.
+- [x] (2026-03-24 00:40Z) Documented the final Istanbul line model in repository reference material so future contributors can see that the parser follows captured Vitest `coverage-summary.json` line totals rather than union-of-span executable lines.
+- [x] (2026-03-24 00:40Z) Confirmed that the first dedicated TSX-backed Vitest fixture did not expose new parser drift, so no additional Istanbul parser change was required after the TSX expansion.
+- [x] (2026-03-24 01:05Z) Ran `cargo xtask validate` after the TSX fixture regeneration and documentation updates; the full repository validation sweep passed, including the overall-summary parity suite and the final `covgate check`.
 
 ## Surprises & Discoveries
 
@@ -44,8 +45,14 @@ After the work already completed under this plan, a novice can run the checked-i
 - Observation: The environment used for local investigation did not expose `node`, `npm`, or Linuxbrew on `PATH`, even though `~/.zprofile` configures both Homebrew and `fnm`.
   Evidence: `which node`, `which npm`, and `brew --prefix node` all failed in this agent session, but probing `~/.local/share/fnm/node-versions/v24.14.0/installation/bin/node` confirmed an installed `fnm`-managed Node binary exists.
 
-- Observation: The repository currently has realistic `.ts` Vitest fixtures, but no dedicated `.tsx` or JSX-backed Istanbul repro yet.
-  Evidence: the checked-in Vitest fixtures under `tests/fixtures/vitest/` use `.js` and `.ts` sources today, and the user explicitly called out the absence of a TSX fixture during review of this plan.
+- Observation: The repository now has a dedicated `.tsx` Istanbul repro in addition to the existing `.ts` fixtures.
+  Evidence: `tests/fixtures/vitest/tsx-line-summary/` contains checked-in `repo/src/profileCard.tsx`, `overlay/src/profileCard.tsx`, `coverage.json`, and `native-summary.json` artifacts generated through `cargo xtask regen-fixture-coverage vitest/tsx-line-summary`.
+
+- Observation: A minimal TSX-backed fixture can stay browser-free by using `react-dom/server` inside Vitest rather than introducing jsdom or a full frontend app shell.
+  Evidence: the new `tests/fixtures/vitest/tsx-line-summary/` fixture renders its TSX component with `renderToStaticMarkup(...)`, which exercises JSX and TSX transformation while keeping the native test setup small.
+
+- Observation: The first dedicated TSX-backed Vitest fixture matched the current parser model immediately.
+  Evidence: `tests/fixtures/vitest/tsx-line-summary/native-summary.json` records line totals `7/9`, and `cargo test overall_summary_line_totals_match_native_summary_for_all_line_capable_fixtures -- --nocapture` passed after adding `support::vitest_tsx_line_summary_fixture()` to the parity matrix.
 
 ## Decision Log
 
@@ -69,13 +76,17 @@ After the work already completed under this plan, a novice can run the checked-i
   Rationale: the repository now has stronger confidence for `.ts` fixtures, but TSX and JSX-heavy source are common real-world shapes where statement-start semantics may still drift. The plan should close only after that source shape is represented in the native-summary parity matrix.
   Date/Author: 2026-03-23 / Codex
 
+- Decision: Keep the current unique-statement-start-line Istanbul parser model after adding the first TSX-backed fixture.
+  Rationale: the captured `tests/fixtures/vitest/tsx-line-summary/native-summary.json` totals already match the parser without another semantic change, so changing the parser again would add risk without new evidence.
+  Date/Author: 2026-03-24 / Codex
+
 ## Outcomes & Retrospective
 
 The parser and regression work completed so far materially improved user trust. `covgate` no longer rejects the realistic Vitest branch-location shape, it no longer masks the uncovered nested `fixtureSeed.ts` call as a covered line, and its overall line totals now match the captured Vitest native summaries for both the compact line-summary fixture and the larger multi-file fixture.
 
 The main lesson is that the important semantic boundary for Istanbul in this repository is not “all lines touched by a statement span.” The practical, user-visible contract is “whatever Vitest v8 itself reports in `coverage-summary.json` for line totals,” and the checked-in fixtures now provide concrete evidence that unique statement start lines match that contract on the exercised artifacts.
 
-This plan remains open because the repository still needs a small amount of follow-through: document the final model plainly, add the promised TSX-backed Vitest fixture, keep the fixture-backed regressions explicit, and only close after a full `cargo xtask validate` pass on the final fixture and documentation state.
+The TSX follow-through is now in place. The repository has a native-generated TSX-backed Vitest fixture under `tests/fixtures/vitest/tsx-line-summary/`, the parity matrix includes that fixture alongside the `.ts` repros, and the parser did not need another semantic change to satisfy the new native summary artifact. `cargo xtask validate` also passed on the documentation-complete state, so the work described here is ready to move from `docs/exec-plans/active/` to `docs/exec-plans/completed/`.
 
 ## Context and Orientation
 
@@ -93,7 +104,7 @@ Keep the current parser model in `src/coverage/istanbul_json.rs` as the implemen
 
 Review `tests/overall_summary.rs`, `tests/support/mod.rs`, and the Vitest fixture README so a novice can see exactly which fixtures act as native-summary parity oracles. If a short comment or additional prose is needed to explain why `empty-branch-locations` now belongs in the line-summary parity matrix, add that explanation in the relevant test helper or README, keeping the wording focused on observable behavior rather than implementation folklore.
 
-Then add a dedicated TSX-backed fixture under `tests/fixtures/vitest/` that keeps the source tree small but clearly JSX- or TSX-heavy enough to exercise statement-start behavior in a realistic frontend shape. Regenerate it through `cargo xtask regen-fixture-coverage vitest/<scenario>`, check in both `coverage.json` and `native-summary.json`, and extend the same parity tests instead of introducing a new ad hoc comparison path.
+Then add a dedicated TSX-backed fixture under `tests/fixtures/vitest/` that keeps the source tree small but clearly JSX- or TSX-heavy enough to exercise statement-start behavior in a realistic frontend shape. That fixture is now `tests/fixtures/vitest/tsx-line-summary/`. It is regenerated through `cargo xtask regen-fixture-coverage vitest/tsx-line-summary`, checks in both `coverage.json` and `native-summary.json`, and participates in the same parity tests instead of introducing a new ad hoc comparison path.
 
 Only after the TSX fixture is in place should the plan decide whether more fixture expansion is necessary. If the TSX fixture is green under the current parser, record that as stronger evidence that the unique-statement-start-line model is holding across both `.ts` and `.tsx` source. If it is red, add the failing regression first and then adjust the parser.
 
@@ -111,7 +122,7 @@ Run all commands from the repository root, the directory containing `Cargo.toml`
 
    Expected result: the parser clearly counts line totals from `statement.start.line`, and the realistic Vitest fixtures appear in the line-summary parity matrix.
 
-2. Verify the focused regressions that protect the fixed behavior before adding TSX.
+2. Verify the focused regressions that protect the fixed behavior before closing the TSX follow-up.
 
     cargo test istanbul_json -- --nocapture
     cargo test changed_line_metric_keeps_uncovered_fixture_seed_call_visible -- --nocapture
@@ -119,12 +130,13 @@ Run all commands from the repository root, the directory containing `Cargo.toml`
 
    Expected result: the parser tests, changed-line `fixtureSeed.ts` regression, and overall-summary parity matrix all pass.
 
-3. Add the new TSX-backed fixture and wire it into the parity matrix.
+3. Rebuild and verify the dedicated TSX-backed fixture that is already wired into the parity matrix.
 
-    cargo xtask regen-fixture-coverage vitest/<tsx-scenario>
+    cargo xtask regen-fixture-coverage vitest/tsx-line-summary
     cargo test overall_summary_line_totals_match_native_summary_for_all_line_capable_fixtures -- --nocapture
+    cargo test line_repro_fixtures_use_captured_native_summary_artifacts -- --nocapture
 
-   Expected result: the new fixture writes native-generated `coverage.json` and `native-summary.json`, and the line-summary parity test either passes immediately or fails with an explicit TSX-specific mismatch that can drive a parser regression.
+   Expected result: the TSX fixture writes native-generated `coverage.json` and `native-summary.json`, and the line-summary parity tests either pass immediately or fail with an explicit TSX-specific mismatch that can drive a parser regression.
 
 4. If documentation, test-helper, or parser updates are made, rerun the fast repository loop.
 
@@ -146,7 +158,7 @@ The Istanbul parser in `src/coverage/istanbul_json.rs` accepts realistic Vitest 
 
 The `fixtureSeed.ts` regression remains visible as an uncovered line opportunity rather than being masked by a larger enclosing covered statement span.
 
-The realistic `tests/fixtures/vitest/empty-branch-locations/` scenario remains part of the line-summary parity matrix in `tests/overall_summary.rs`, and at least one dedicated TSX-backed Vitest fixture also participates in that same matrix, so future parser changes are forced to match captured native summary totals across both `.ts` and `.tsx` source shapes.
+The realistic `tests/fixtures/vitest/empty-branch-locations/` scenario remains part of the line-summary parity matrix in `tests/overall_summary.rs`, and the dedicated TSX-backed `tests/fixtures/vitest/tsx-line-summary/` fixture also participates in that same matrix, so future parser changes are forced to match captured native summary totals across both `.ts` and `.tsx` source shapes.
 
 `cargo test istanbul_json -- --nocapture`, `cargo test overall_summary -- --nocapture`, and `cargo xtask validate` all pass after the final documentation state is committed.
 
@@ -182,12 +194,15 @@ Representative parity proof after the semantic change:
     cargo test overall_summary -- --nocapture
     test overall_summary_line_totals_match_native_summary_for_all_line_capable_fixtures ... ok
 
-Representative follow-up expectation for this still-open plan:
+Representative TSX parity evidence captured for this plan:
 
-    tests/fixtures/vitest/<tsx-scenario>/repo/src/...
-    tests/fixtures/vitest/<tsx-scenario>/overlay/src/...
-    tests/fixtures/vitest/<tsx-scenario>/coverage.json
-    tests/fixtures/vitest/<tsx-scenario>/native-summary.json
+    tests/fixtures/vitest/tsx-line-summary/native-summary.json
+    {
+      "line": {
+        "covered": 7,
+        "total": 9
+      }
+    }
 
 ## Interfaces and Dependencies
 
@@ -197,7 +212,7 @@ The final repository state for this plan should preserve these interfaces:
 
 `tests/support/mod.rs::MetricFixtureCase::native_overall_totals()` must continue to prefer a checked-in `native-summary.json` artifact when one exists for a Vitest fixture.
 
-`tests/overall_summary.rs` must continue to include both `support::vitest_statement_line_divergence_fixture()` and `support::vitest_empty_branch_locations_fixture()` in the line-summary parity coverage, and it must gain a dedicated TSX-backed Vitest fixture entry before this plan closes.
+`tests/overall_summary.rs` must continue to include both `support::vitest_statement_line_divergence_fixture()` and `support::vitest_empty_branch_locations_fixture()` in the line-summary parity coverage, and it must also include `support::vitest_tsx_line_summary_fixture()`.
 
 `xtask/src/main.rs` remains the only supported regeneration path for native Vitest fixture artifacts and native summary capture.
 
@@ -206,3 +221,9 @@ At the bottom of this plan, append a revision note every time the plan changes m
 Revision note: Initial plan created after the Istanbul parser no longer crashed on empty branch locations and after the line model was corrected to match realistic Vitest native summaries. The plan separates the now-fixed Istanbul line-summary work from the still-open Coverlet function investigation so each ecosystem can be reasoned about on its own terms.
 
 Revision note: Updated the plan after deciding explicitly that the remaining Istanbul confidence work will include a TSX-backed fixture. The plan now treats TSX coverage as a required follow-up rather than an optional future enhancement.
+
+Revision note: Added the `vitest/tsx-line-summary` fixture scaffolding and wired it into xtask regeneration and the overall-summary parity matrix so the remaining work can validate a real TSX source shape through the same native-summary path.
+
+Revision note: Updated the plan after regenerating the TSX fixture, confirming that its native summary already matches the current unique-statement-start-line parser model, and documenting the final Istanbul line semantics in repository reference material. The remaining work is now only the final repository validation pass.
+
+Revision note: Recorded the final `cargo xtask validate` pass and marked the plan complete so it can move to `docs/exec-plans/completed/`.

@@ -1,0 +1,353 @@
+{
+  "src/profileCard.tsx": {
+    "b": {
+      "0": [
+        0,
+        1
+      ],
+      "1": [
+        1,
+        0
+      ],
+      "2": [
+        1,
+        0
+      ]
+    },
+    "branchMap": {
+      "0": {
+        "line": 8,
+        "loc": {
+          "end": {
+            "column": null,
+            "line": 9
+          },
+          "start": {
+            "column": 2,
+            "line": 8
+          }
+        },
+        "locations": [
+          {
+            "end": {
+              "column": null,
+              "line": 9
+            },
+            "start": {
+              "column": 2,
+              "line": 8
+            }
+          },
+          {
+            "end": {},
+            "start": {}
+          }
+        ],
+        "type": "if"
+      },
+      "1": {
+        "line": 39,
+        "loc": {
+          "end": {
+            "column": null,
+            "line": 42
+          },
+          "start": {
+            "column": 7,
+            "line": 39
+          }
+        },
+        "locations": [
+          {
+            "end": {
+              "column": 9,
+              "line": 42
+            },
+            "start": {
+              "column": 8,
+              "line": 40
+            }
+          },
+          {
+            "end": {
+              "column": null,
+              "line": 42
+            },
+            "start": {
+              "column": 8,
+              "line": 42
+            }
+          }
+        ],
+        "type": "cond-expr"
+      },
+      "2": {
+        "line": 40,
+        "loc": {
+          "end": {
+            "column": 55,
+            "line": 40
+          },
+          "start": {
+            "column": 15,
+            "line": 40
+          }
+        },
+        "locations": [
+          {
+            "end": {
+              "column": 38,
+              "line": 40
+            },
+            "start": {
+              "column": 15,
+              "line": 40
+            }
+          },
+          {
+            "end": {
+              "column": 55,
+              "line": 40
+            },
+            "start": {
+              "column": 38,
+              "line": 40
+            }
+          }
+        ],
+        "type": "binary-expr"
+      }
+    },
+    "f": {
+      "0": 1,
+      "1": 1,
+      "2": 2,
+      "3": 0
+    },
+    "fnMap": {
+      "0": {
+        "decl": {
+          "end": {
+            "column": 32,
+            "line": 7
+          },
+          "start": {
+            "column": 16,
+            "line": 7
+          }
+        },
+        "line": 7,
+        "loc": {
+          "end": {
+            "column": null,
+            "line": 12
+          },
+          "start": {
+            "column": 48,
+            "line": 7
+          }
+        },
+        "name": "buildTagSummary"
+      },
+      "1": {
+        "decl": {
+          "end": {
+            "column": 28,
+            "line": 15
+          },
+          "start": {
+            "column": 16,
+            "line": 15
+          }
+        },
+        "line": 15,
+        "loc": {
+          "end": {
+            "column": null,
+            "line": 42
+          },
+          "start": {
+            "column": 77,
+            "line": 15
+          }
+        },
+        "name": "ProfileCard"
+      },
+      "2": {
+        "decl": {
+          "end": {
+            "column": 10,
+            "line": 17
+          },
+          "start": {
+            "column": 5,
+            "line": 17
+          }
+        },
+        "line": 17,
+        "loc": {
+          "end": {
+            "column": 28,
+            "line": 17
+          },
+          "start": {
+            "column": 18,
+            "line": 17
+          }
+        },
+        "name": "(anonymous_2)"
+      },
+      "3": {
+        "decl": {
+          "end": {
+            "column": 31,
+            "line": 48
+          },
+          "start": {
+            "column": 16,
+            "line": 48
+          }
+        },
+        "line": 48,
+        "loc": {
+          "end": {
+            "column": null,
+            "line": 53
+          },
+          "start": {
+            "column": 60,
+            "line": 48
+          }
+        },
+        "name": "CompactProfile"
+      }
+    },
+    "meta": {
+      "lastBranch": 3,
+      "lastFunction": 4,
+      "lastStatement": 9,
+      "seen": {
+        "b:40:15:40:38:40:38:40:55": 2,
+        "b:40:8:42:9:42:8:42:Infinity": 1,
+        "b:8:2:9:Infinity:undefined:undefined:undefined:undefined": 0,
+        "f:15:16:15:28": 1,
+        "f:17:5:17:10": 2,
+        "f:48:16:48:31": 3,
+        "f:7:16:7:32": 0,
+        "s:12:2:12:Infinity": 2,
+        "s:16:25:18:20": 3,
+        "s:17:18:17:28": 4,
+        "s:19:18:19:49": 5,
+        "s:21:4:30:Infinity": 6,
+        "s:33:2:42:Infinity": 7,
+        "s:49:2:53:Infinity": 8,
+        "s:8:2:9:Infinity": 0,
+        "s:9:4:9:Infinity": 1
+      }
+    },
+    "path": "src/profileCard.tsx",
+    "s": {
+      "0": 1,
+      "1": 0,
+      "2": 1,
+      "3": 1,
+      "4": 2,
+      "5": 1,
+      "6": 1,
+      "7": 1,
+      "8": 0
+    },
+    "statementMap": {
+      "0": {
+        "end": {
+          "column": null,
+          "line": 9
+        },
+        "start": {
+          "column": 2,
+          "line": 8
+        }
+      },
+      "1": {
+        "end": {
+          "column": null,
+          "line": 9
+        },
+        "start": {
+          "column": 4,
+          "line": 9
+        }
+      },
+      "2": {
+        "end": {
+          "column": null,
+          "line": 12
+        },
+        "start": {
+          "column": 2,
+          "line": 12
+        }
+      },
+      "3": {
+        "end": {
+          "column": 20,
+          "line": 18
+        },
+        "start": {
+          "column": 25,
+          "line": 16
+        }
+      },
+      "4": {
+        "end": {
+          "column": 28,
+          "line": 17
+        },
+        "start": {
+          "column": 18,
+          "line": 17
+        }
+      },
+      "5": {
+        "end": {
+          "column": 49,
+          "line": 19
+        },
+        "start": {
+          "column": 18,
+          "line": 19
+        }
+      },
+      "6": {
+        "end": {
+          "column": null,
+          "line": 30
+        },
+        "start": {
+          "column": 4,
+          "line": 21
+        }
+      },
+      "7": {
+        "end": {
+          "column": null,
+          "line": 42
+        },
+        "start": {
+          "column": 2,
+          "line": 33
+        }
+      },
+      "8": {
+        "end": {
+          "column": null,
+          "line": 53
+        },
+        "start": {
+          "column": 2,
+          "line": 49
+        }
+      }
+    }
+  }
+}

@@ -39,6 +39,7 @@ fn overall_summary_line_totals_match_native_summary_for_all_line_capable_fixture
             support::dotnet_duplicate_lines_fixture(),
             support::vitest_statement_line_divergence_fixture(),
             support::vitest_empty_branch_locations_fixture(),
+            support::vitest_tsx_line_summary_fixture(),
         ])
         .collect::<Vec<_>>();
 
@@ -65,6 +66,7 @@ fn line_repro_fixtures_use_captured_native_summary_artifacts() {
         support::dotnet_duplicate_lines_fixture(),
         support::vitest_statement_line_divergence_fixture(),
         support::vitest_empty_branch_locations_fixture(),
+        support::vitest_tsx_line_summary_fixture(),
     ] {
         let case = MetricFixtureCase::new(fixture, "line");
         let captured = case
