@@ -7,6 +7,8 @@ use std::{
 use anyhow::{Context, Result, bail};
 
 pub const RECORDED_BASE_REF: &str = "refs/worktree/covgate/base";
+pub const GIT_REQUIRED_MESSAGE: &str = "covgate requires `git` in PATH to run";
+pub const GIT_REPOSITORY_REQUIRED_MESSAGE: &str = "covgate requires a git repository to run";
 const RECORDED_BASE_BRANCH_MARKER: &str = "refs/worktree/covgate/base.branch";
 const STANDARD_BASE_REFS: &[&str] = &[
     "origin/HEAD",
@@ -19,11 +21,11 @@ const STANDARD_BASE_REFS: &[&str] = &[
 struct GitOutput(Output);
 
 fn git_output(args: &[&str], context: &'static str) -> Result<GitOutput> {
-    Command::new("git")
-        .args(args)
-        .output()
-        .context(context)
-        .map(GitOutput)
+    match Command::new("git").args(args).output() {
+        Ok(output) => Ok(GitOutput(output)),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => bail!(GIT_REQUIRED_MESSAGE),
+        Err(err) => Err(err).context(context),
+    }
 }
 
 impl GitOutput {
@@ -32,24 +34,39 @@ impl GitOutput {
             return Ok(self);
         }
 
+        if self.is_not_a_repository() {
+            bail!(GIT_REPOSITORY_REQUIRED_MESSAGE);
+        }
+
         bail!("{}", failure_message(&self))
     }
 
-    fn optional_on_nonzero(self) -> Option<Self> {
+    fn optional_on_nonzero(self) -> Result<Option<Self>> {
         if self.0.status.success() {
-            Some(self)
-        } else {
-            None
+            return Ok(Some(self));
         }
+
+        if self.is_not_a_repository() {
+            bail!(GIT_REPOSITORY_REQUIRED_MESSAGE);
+        }
+
+        Ok(None)
     }
+
+    fn is_not_a_repository(&self) -> bool {
+        let stderr = self.stderr_text();
+        stderr.contains("not a git repository")
+            || stderr.contains("this operation must be run in a work tree")
+            || stderr.contains("must be run in a work tree")
+    }
+
+    fn ignore_stdout(self) {}
 
     fn stdout_utf8(self, context: &'static str) -> Result<String> {
         String::from_utf8(self.0.stdout)
             .context(context)
             .map(|text| text.trim().to_string())
     }
-
-    fn ignore_stdout(self) {}
 
     fn stderr_text(&self) -> String {
         String::from_utf8_lossy(&self.0.stderr).trim().to_string()
@@ -62,24 +79,6 @@ impl GitOutput {
     fn status(&self) -> &std::process::ExitStatus {
         &self.0.status
     }
-}
-
-pub fn ensure_available() -> Result<()> {
-    git_output(
-        &["--version"],
-        "git is required to run covgate but was not found in PATH",
-    )?
-    .require_success(|output| {
-        let stderr = output.stderr_text();
-        if stderr.is_empty() {
-            "git is required to run covgate but `git --version` failed".to_string()
-        } else {
-            format!("git is required to run covgate but `git --version` failed: {stderr}")
-        }
-    })?
-    .ignore_stdout();
-
-    Ok(())
 }
 
 pub fn resolve_head_sha() -> Result<String> {
@@ -96,7 +95,7 @@ pub fn resolve_ref_sha(reference: &str) -> Result<Option<String>> {
         &["rev-parse", "--verify", "--quiet", reference],
         "failed to run git rev-parse for reference",
     )?
-    .optional_on_nonzero()
+    .optional_on_nonzero()?
     .map(|output| output.stdout_utf8("git rev-parse output was not valid utf-8"))
     .transpose()
 }
@@ -106,7 +105,7 @@ pub fn resolve_repo_root() -> Result<Option<PathBuf>> {
         &["rev-parse", "--show-toplevel"],
         "failed to run git rev-parse for repository root",
     )?
-    .optional_on_nonzero()
+    .optional_on_nonzero()?
     .map(|output| output.stdout_utf8("git rev-parse output was not valid utf-8"))
     .transpose()
     .map(|root| root.and_then(|root| (!root.is_empty()).then(|| PathBuf::from(root))))
@@ -221,7 +220,7 @@ fn is_ancestor(ancestor: &str, descendant: &str) -> Result<bool> {
         &["merge-base", "--is-ancestor", ancestor, descendant],
         "failed to run git merge-base --is-ancestor",
     )?
-    .optional_on_nonzero()
+    .optional_on_nonzero()?
     .is_some())
 }
 
@@ -342,7 +341,12 @@ mod tests {
 
     #[test]
     fn optional_on_nonzero_returns_none_for_nonzero_status() {
-        assert!(mock_output(1, "", "").optional_on_nonzero().is_none());
+        assert!(
+            mock_output(1, "", "")
+                .optional_on_nonzero()
+                .expect("nonzero without repo error should return ok")
+                .is_none()
+        );
     }
 
     #[test]

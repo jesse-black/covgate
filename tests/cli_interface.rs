@@ -78,7 +78,7 @@ fn record_base_fails_outside_git_repo() {
     assert_eq!(output.status.code(), Some(1));
     let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
     assert!(
-        stderr.contains("failed to resolve HEAD commit"),
+        stderr.contains("covgate requires a git repository to run"),
         "stderr={stderr}"
     );
 }
@@ -92,7 +92,7 @@ fn record_base_fails_fast_when_git_is_missing() {
     assert_eq!(output.status.code(), Some(1));
     let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
     assert!(
-        stderr.contains("git is required to run covgate but was not found in PATH"),
+        stderr.contains("covgate requires `git` in PATH to run"),
         "stderr={stderr}"
     );
 }
@@ -138,7 +138,7 @@ fn check_fails_fast_when_git_is_missing() {
     assert_eq!(output.status.code(), Some(1));
     let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
     assert!(
-        stderr.contains("git is required to run covgate but was not found in PATH"),
+        stderr.contains("covgate requires `git` in PATH to run"),
         "stderr={stderr}"
     );
 }
@@ -481,7 +481,7 @@ fn explicit_base_overrides_recorded_worktree_ref() {
 }
 
 #[test]
-fn failure_text_mentions_record_base_when_base_is_unresolved() {
+fn failure_text_requires_git_repo_when_run_outside_repository() {
     let fixture = rust_basic_pass_fixture();
     let temp = tempdir().expect("tempdir should exist");
 
@@ -493,7 +493,10 @@ fn failure_text_mentions_record_base_when_base_is_unresolved() {
 
     assert_eq!(output.status.code(), Some(1));
     let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
-    assert!(stderr.contains("covgate record-base"), "stderr={stderr}");
+    assert!(
+        stderr.contains("covgate requires a git repository to run"),
+        "stderr={stderr}"
+    );
 }
 
 #[test]

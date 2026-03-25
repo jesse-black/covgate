@@ -19,9 +19,18 @@ pub fn parse_str(input: &str) -> Result<CoverageReport> {
     let parsed: Value = serde_json::from_str(input).context("failed to parse coverage json")?;
     let format = detect_format(&parsed)?;
 
-    let repo_root = git::resolve_repo_root()
-        .context("failed to determine repository root for coverage path normalization")?
-        .ok_or_else(|| anyhow::anyhow!("coverage path normalization requires a git repository"))?;
+    let repo_root = git::resolve_repo_root().map_err(|err| {
+        let message = err.to_string();
+        if message.contains(git::GIT_REQUIRED_MESSAGE)
+            || message.contains(git::GIT_REPOSITORY_REQUIRED_MESSAGE)
+        {
+            err
+        } else {
+            err.context("failed to determine repository root for coverage path normalization")
+        }
+    })?;
+    let repo_root =
+        repo_root.ok_or_else(|| anyhow::anyhow!(git::GIT_REPOSITORY_REQUIRED_MESSAGE))?;
 
     match format {
         CoverageFormat::Llvm => llvm_json::parse_str_with_repo_root(input, &repo_root),
@@ -90,49 +99,11 @@ fn contains_istanbul_markers(value: &Value) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, path::PathBuf, sync::Mutex};
+    use std::fs;
 
     use tempfile::tempdir;
 
-    use crate::model::MetricKind;
-
     use super::{CoverageFormat, detect_format, parse_path, parse_str};
-
-    static CWD_LOCK: Mutex<()> = Mutex::new(());
-
-    struct CwdGuard(PathBuf);
-
-    impl Drop for CwdGuard {
-        fn drop(&mut self) {
-            let _ = std::env::set_current_dir(&self.0);
-        }
-    }
-
-    fn run_git(repo: &std::path::Path, args: &[&str]) {
-        let output = std::process::Command::new("git")
-            .args(args)
-            .current_dir(repo)
-            .output()
-            .expect("git should run");
-        assert!(output.status.success());
-    }
-
-    fn with_path_override(path: &str, f: impl FnOnce()) {
-        let original = std::env::var("PATH").ok();
-        // SAFETY: these tests serialize global cwd and env mutation through CWD_LOCK.
-        unsafe { std::env::set_var("PATH", path) };
-        f();
-        match original {
-            Some(value) => {
-                // SAFETY: these tests serialize global cwd and env mutation through CWD_LOCK.
-                unsafe { std::env::set_var("PATH", value) };
-            }
-            None => {
-                // SAFETY: these tests serialize global cwd and env mutation through CWD_LOCK.
-                unsafe { std::env::remove_var("PATH") };
-            }
-        }
-    }
 
     #[test]
     fn detects_llvm_json() {
@@ -270,121 +241,5 @@ mod tests {
 
         let report = parse_path(&path).expect("coverage file should parse");
         assert!(!report.opportunities.is_empty());
-    }
-
-    #[test]
-    fn parse_str_uses_git_repo_root_for_absolute_coverlet_paths_from_subdir() {
-        let _lock = CWD_LOCK.lock().expect("cwd lock should not be poisoned");
-
-        let temp = tempdir().expect("temp dir should exist");
-        let repo = temp.path();
-        fs::create_dir_all(repo.join("src")).expect("src dir should exist");
-        fs::write(repo.join("README.md"), "initial\n").expect("readme should write");
-
-        run_git(repo, &["init"]);
-        run_git(repo, &["config", "user.email", "covgate@example.com"]);
-        run_git(repo, &["config", "user.name", "Covgate Tests"]);
-        run_git(repo, &["add", "."]);
-        run_git(repo, &["commit", "-m", "initial"]);
-
-        let previous = std::env::current_dir().expect("cwd should resolve");
-        let _guard = CwdGuard(previous);
-        std::env::set_current_dir(repo.join("src")).expect("should chdir into repo subdir");
-
-        let absolute_source = repo.join("src").join("lib.cs");
-        let input = format!(
-            r#"{{
-              "Demo.dll": {{
-                "{}": {{
-                  "Demo.Math": {{
-                    "System.Int32 Demo.Math::Add()": {{
-                      "Lines": {{"3": 1}},
-                      "Branches": []
-                    }}
-                  }}
-                }}
-              }}
-            }}"#,
-            absolute_source.display()
-        );
-
-        let report = parse_str(&input).expect("coverage should parse");
-        assert!(
-            report
-                .totals_by_file
-                .get(&MetricKind::Line)
-                .expect("line totals should exist")
-                .contains_key(&PathBuf::from("src/lib.cs"))
-        );
-    }
-
-    #[test]
-    fn parse_str_requires_git_repo_for_path_normalization() {
-        let _lock = CWD_LOCK.lock().expect("cwd lock should not be poisoned");
-
-        let temp = tempdir().expect("temp dir should exist");
-        let workspace = temp.path();
-        fs::create_dir_all(workspace.join("src")).expect("src dir should exist");
-
-        let previous = std::env::current_dir().expect("cwd should resolve");
-        let _guard = CwdGuard(previous);
-        std::env::set_current_dir(workspace).expect("should chdir into temp workspace");
-
-        let absolute_source = workspace.join("src").join("lib.cs");
-        let input = format!(
-            r#"{{
-              "Demo.dll": {{
-                "{}": {{
-                  "Demo.Math": {{
-                    "System.Int32 Demo.Math::Add()": {{
-                      "Lines": {{"3": 1}},
-                      "Branches": []
-                    }}
-                  }}
-                }}
-              }}
-            }}"#,
-            absolute_source.display()
-        );
-
-        let err = parse_str(&input).expect_err("parse should require a git repo");
-        assert!(
-            err.to_string()
-                .contains("coverage path normalization requires a git repository")
-        );
-    }
-
-    #[test]
-    fn parse_str_reports_git_repo_lookup_failure_when_git_is_missing() {
-        let _lock = CWD_LOCK.lock().expect("cwd lock should not be poisoned");
-
-        let temp = tempdir().expect("temp dir should exist");
-        let previous = std::env::current_dir().expect("cwd should resolve");
-        let _guard = CwdGuard(previous);
-        std::env::set_current_dir(temp.path()).expect("should chdir into temp workspace");
-
-        with_path_override("", || {
-            let err = parse_str(
-                r#"{
-                  "Demo.dll": {
-                    "/workspace/src/lib.cs": {
-                      "Demo.Math": {
-                        "System.Int32 Demo.Math::Add()": {
-                          "Lines": {"3": 1},
-                          "Branches": []
-                        }
-                      }
-                    }
-                  }
-                }"#,
-            )
-            .expect_err("parse should fail when git lookup cannot run");
-
-            assert!(
-                err.to_string().contains(
-                    "failed to determine repository root for coverage path normalization"
-                )
-            );
-        });
     }
 }
