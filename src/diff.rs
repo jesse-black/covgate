@@ -16,7 +16,7 @@ pub enum DiffSource {
 impl DiffSource {
     pub fn describe(&self) -> String {
         match self {
-            Self::GitBase(base) => format!("{base}...WORKTREE"),
+            Self::GitBase(base) => format!("{base}...HEAD, staged and unstaged changes"),
             Self::DiffFile(path) => path.display().to_string(),
         }
     }

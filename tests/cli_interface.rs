@@ -441,7 +441,10 @@ fn automatic_base_prefers_standard_branch_ref_over_recorded_worktree_ref() {
 
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-    assert!(stdout.contains("Diff: main...WORKTREE"), "stdout={stdout}");
+    assert!(
+        stdout.contains("Diff: main...HEAD, staged and unstaged changes"),
+        "stdout={stdout}"
+    );
 }
 
 #[test]
@@ -477,7 +480,10 @@ fn explicit_base_overrides_recorded_worktree_ref() {
 
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-    assert!(stdout.contains("Diff: main...WORKTREE"), "stdout={stdout}");
+    assert!(
+        stdout.contains("Diff: main...HEAD, staged and unstaged changes"),
+        "stdout={stdout}"
+    );
 }
 
 #[test]
@@ -598,7 +604,7 @@ fn pr_branch_against_main_fixture() {
 
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-    assert!(stdout.contains("Diff: main...WORKTREE"));
+    assert!(stdout.contains("Diff: main...HEAD, staged and unstaged changes"));
     assert!(stdout.contains("Diff Coverage: PASS"));
     assert!(stdout.contains("Coverage: 100.00%"));
 }
@@ -631,7 +637,7 @@ fn uses_repo_config_defaults_for_base_and_threshold() {
 
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-    assert!(stdout.contains("Diff: main...WORKTREE"));
+    assert!(stdout.contains("Diff: main...HEAD, staged and unstaged changes"));
     assert!(stdout.contains("Rule fail-under-regions: PASS"));
     assert!(stdout.contains("Coverage:"));
 }
@@ -668,7 +674,7 @@ fn uses_repo_config_defaults_from_parent_directory() {
 
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-    assert!(stdout.contains("Diff: main...WORKTREE"));
+    assert!(stdout.contains("Diff: main...HEAD, staged and unstaged changes"));
     assert!(stdout.contains("Rule fail-under-regions: PASS"));
     assert!(stdout.contains("Coverage:"));
 }
@@ -705,7 +711,7 @@ fn mixed_cli_over_toml_precedence() {
 
     assert_eq!(output.status.code(), Some(1));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-    assert!(stdout.contains("Diff: main...WORKTREE"));
+    assert!(stdout.contains("Diff: main...HEAD, staged and unstaged changes"));
     assert!(stdout.contains("Rule fail-under-regions: PASS"));
     assert!(stdout.contains("Rule fail-uncovered-regions: FAIL"));
     assert!(stdout.contains("Diff Coverage: FAIL"));
@@ -743,7 +749,7 @@ fn cli_threshold_overrides_repo_config_default() {
 
     assert_eq!(output.status.code(), Some(1));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-    assert!(stdout.contains("Diff: main...WORKTREE"));
+    assert!(stdout.contains("Diff: main...HEAD, staged and unstaged changes"));
     assert!(stdout.contains("Rule fail-under-regions: FAIL"));
     assert!(stdout.contains("Diff Coverage: FAIL"));
 }
