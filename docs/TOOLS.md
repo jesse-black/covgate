@@ -13,7 +13,7 @@ See `docs/reference/environment-execution-contexts.md` for deeper rationale, sou
 - C/C++ workflows: `build-essential`, `cmake`, `ninja`, `clang`, `llvm-cov`, `llvm-profdata`
 - Swift workflows: Swift via `swiftly`
 - .NET workflows: `dotnet` SDK
-- Rust workflows: `cargo llvm-cov`, `cargo-machete`, `cargo-deny` (plus `llvm-tools-preview` via `rustup component add` when `rustup` is present)
+- Rust workflows: `covgate`, `cargo llvm-cov`, `cargo-machete`, `cargo-deny` (plus `llvm-tools-preview` via `rustup component add` when `rustup` is present)
 
 ### Available in devcontainer
 

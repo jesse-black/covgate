@@ -7,7 +7,7 @@ use std::{
 use anyhow::{Context, Result, bail};
 
 pub const RECORDED_BASE_REF: &str = "refs/worktree/covgate/base";
-const RECORDED_BASE_BRANCH_MARKER: &str = "refs/worktree/covgate/base.branch";
+const RECORDED_BASE_BRANCH_MARKER: &str = "covgate/base.branch";
 const STANDARD_BASE_REFS: &[&str] = &[
     "origin/HEAD",
     "origin/main",

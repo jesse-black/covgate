@@ -165,11 +165,7 @@ fn record_base_recreates_missing_branch_marker_without_refreshing_ref() {
         let recorded = record_base_ref().expect("record-base should succeed");
 
         let marker_path_output = std::process::Command::new("git")
-            .args([
-                "rev-parse",
-                "--git-path",
-                "refs/worktree/covgate/base.branch",
-            ])
+            .args(["rev-parse", "--git-path", "covgate/base.branch"])
             .current_dir(repo)
             .output()
             .expect("git rev-parse should run");
@@ -650,11 +646,7 @@ fn record_base_rewrites_empty_branch_marker() {
         let recorded = record_base_ref().expect("record-base should succeed");
 
         let marker_path_output = std::process::Command::new("git")
-            .args([
-                "rev-parse",
-                "--git-path",
-                "refs/worktree/covgate/base.branch",
-            ])
+            .args(["rev-parse", "--git-path", "covgate/base.branch"])
             .current_dir(repo)
             .output()
             .expect("git rev-parse should run");
@@ -725,11 +717,7 @@ fn record_base_reports_directory_branch_marker_read_failure() {
         record_base_ref().expect("record-base should succeed");
 
         let marker_path_output = std::process::Command::new("git")
-            .args([
-                "rev-parse",
-                "--git-path",
-                "refs/worktree/covgate/base.branch",
-            ])
+            .args(["rev-parse", "--git-path", "covgate/base.branch"])
             .current_dir(repo)
             .output()
             .expect("git rev-parse should run");
