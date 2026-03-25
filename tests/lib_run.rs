@@ -134,7 +134,7 @@ fn run_with_git_base_skips_warning_when_no_untracked_files_exist() {
 }
 
 #[test]
-fn run_with_git_base_reports_status_failure_for_untracked_lookup_outside_repo() {
+fn run_with_git_base_requires_git_repo_for_coverage_path_normalization() {
     let _lock = CWD_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
     let fixture = support::rust_basic_pass_fixture();
     let temp = tempdir().expect("tempdir should exist");
@@ -144,7 +144,8 @@ fn run_with_git_base_reports_status_failure_for_untracked_lookup_outside_repo() 
 
     let err = run(git_base_config(fixture.coverage_json())).expect_err("run should fail");
     assert!(
-        err.to_string().contains("failed to list untracked files"),
+        err.to_string()
+            .contains("coverage path normalization requires a git repository"),
         "error={err:?}"
     );
 }
