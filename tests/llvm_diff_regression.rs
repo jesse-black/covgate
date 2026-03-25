@@ -42,6 +42,31 @@ fn load_changed_metric(
     result
 }
 
+fn load_changed_metric_from_subdir(
+    fixture: support::Fixture,
+    metric: MetricKind,
+    subdir: &str,
+) -> anyhow::Result<ComputedMetric> {
+    let temp = tempdir()?;
+    let worktree = setup_fixture_worktree(temp.path(), fixture);
+    let diff_file = write_worktree_diff(temp.path(), &worktree);
+    let coverage_json = temp.path().join("coverage-absolute.json");
+    write_absolute_path_coverage_fixture(fixture, &worktree, &coverage_json);
+
+    let _lock = CWD_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
+    let original_cwd = env::current_dir()?;
+    env::set_current_dir(worktree.join(subdir))?;
+
+    let result = (|| {
+        let report = coverage::parse_path(&coverage_json)?;
+        let diff = diff::load_changed_lines(&diff::DiffSource::DiffFile(diff_file))?;
+        compute_changed_metric(&report, &diff, metric)
+    })();
+
+    env::set_current_dir(original_cwd)?;
+    result
+}
+
 fn changed_spans(metric: &ComputedMetric) -> Vec<(PathBuf, u32, u32)> {
     metric
         .uncovered_changed_opportunities
@@ -135,6 +160,15 @@ fn real_fixture_config_range_tracks_exact_changed_llvm_opportunities() {
             (PathBuf::from("src/config.rs"), 82, 82),
         ]
     );
+}
+
+#[test]
+fn absolute_llvm_paths_still_match_diff_when_invoked_from_subdir() {
+    let region_metric =
+        load_changed_metric_from_subdir(rust_basic_pass_fixture(), MetricKind::Region, "src")
+            .expect("region metric should load from subdir");
+
+    assert!(region_metric.total > 0, "metric={region_metric:?}");
 }
 
 #[test]
