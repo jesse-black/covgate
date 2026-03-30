@@ -13,7 +13,6 @@ keywords = ["coverage", "diff", "ci", "git", "cli"]
 categories = ["command-line-utilities", "development-tools::testing"]
 include = [
   "src/**",
-  ".cargo/config.toml",
   "Cargo.toml",
   "Cargo.lock",
   "README.md",
