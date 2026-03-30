@@ -17,16 +17,23 @@ pub fn parse_path(path: &Path) -> Result<CoverageReport> {
 
 pub fn parse_str(input: &str) -> Result<CoverageReport> {
     let parsed: Value = serde_json::from_str(input).context("failed to parse coverage json")?;
-    let format = detect_format(&parsed)?;
+    let _format = detect_format(&parsed)?;
 
     let repo_root = git::resolve_repo_root()
         .context("failed to determine repository root for coverage path normalization")?
         .ok_or_else(|| anyhow::anyhow!("coverage path normalization requires a git repository"))?;
 
+    parse_with_repo_root(input, &repo_root)
+}
+
+fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<CoverageReport> {
+    let parsed: Value = serde_json::from_str(input).context("failed to parse coverage json")?;
+    let format = detect_format(&parsed)?;
+
     match format {
-        CoverageFormat::Llvm => llvm_json::parse_str_with_repo_root(input, &repo_root),
-        CoverageFormat::Coverlet => coverlet_json::parse_str_with_repo_root(input, &repo_root),
-        CoverageFormat::Istanbul => istanbul_json::parse_str_with_repo_root(input, &repo_root),
+        CoverageFormat::Llvm => llvm_json::parse_str_with_repo_root(input, repo_root),
+        CoverageFormat::Coverlet => coverlet_json::parse_str_with_repo_root(input, repo_root),
+        CoverageFormat::Istanbul => istanbul_json::parse_str_with_repo_root(input, repo_root),
     }
 }
 
@@ -248,9 +255,37 @@ mod tests {
     }
 
     #[test]
-    fn parse_path_reads_file_and_dispatches() {
+    fn parse_str_rejects_unknown_format_before_git_lookup() {
+        let _lock = CWD_LOCK.lock().expect("cwd lock should not be poisoned");
+
         let temp = tempdir().expect("temp dir should exist");
-        let path = temp.path().join("coverage.json");
+        let previous = std::env::current_dir().expect("cwd should resolve");
+        let _guard = CwdGuard(previous);
+        std::env::set_current_dir(temp.path()).expect("should chdir into temp workspace");
+
+        let err = parse_str(r#"{"foo":"bar"}"#).expect_err("parse should fail");
+        assert!(err.to_string().contains("unsupported coverage format"));
+    }
+
+    #[test]
+    fn parse_path_reads_file_and_dispatches() {
+        let _lock = CWD_LOCK.lock().expect("cwd lock should not be poisoned");
+
+        let temp = tempdir().expect("temp dir should exist");
+        let repo = temp.path();
+        fs::write(repo.join("README.md"), "initial\n").expect("readme should write");
+
+        run_git(repo, &["init"]);
+        run_git(repo, &["config", "user.email", "covgate@example.com"]);
+        run_git(repo, &["config", "user.name", "Covgate Tests"]);
+        run_git(repo, &["add", "."]);
+        run_git(repo, &["commit", "-m", "initial"]);
+
+        let previous = std::env::current_dir().expect("cwd should resolve");
+        let _guard = CwdGuard(previous);
+        std::env::set_current_dir(repo).expect("should chdir into temp repo");
+
+        let path = repo.join("coverage.json");
         fs::write(
             &path,
             r#"{
@@ -263,6 +298,99 @@ mod tests {
                     }
                 }
               }
+              }
+            }"#,
+        )
+        .expect("coverage file should be written");
+
+        let report = parse_path(&path).expect("coverage file should parse");
+        assert!(!report.opportunities.is_empty());
+    }
+
+    #[test]
+    fn parse_path_prefers_git_repo_root_for_absolute_coverlet_paths() {
+        let _lock = CWD_LOCK.lock().expect("cwd lock should not be poisoned");
+
+        let temp = tempdir().expect("temp dir should exist");
+        let repo = temp.path();
+        fs::create_dir_all(repo.join("src")).expect("src dir should exist");
+        fs::write(repo.join("README.md"), "initial\n").expect("readme should write");
+
+        run_git(repo, &["init"]);
+        run_git(repo, &["config", "user.email", "covgate@example.com"]);
+        run_git(repo, &["config", "user.name", "Covgate Tests"]);
+        run_git(repo, &["add", "."]);
+        run_git(repo, &["commit", "-m", "initial"]);
+
+        let previous = std::env::current_dir().expect("cwd should resolve");
+        let _guard = CwdGuard(previous);
+        std::env::set_current_dir(repo.join("src")).expect("should chdir into repo subdir");
+
+        let absolute_source = repo.join("src").join("lib.cs");
+        let coverage_path = repo.join("coverage.json");
+        fs::write(
+            &coverage_path,
+            format!(
+                r#"{{
+                  "Demo.dll": {{
+                    "{}": {{
+                      "Demo.Math": {{
+                        "System.Int32 Demo.Math::Add()": {{
+                          "Lines": {{"3": 1}},
+                          "Branches": []
+                        }}
+                      }}
+                    }}
+                  }}
+                }}"#,
+                absolute_source.display()
+            ),
+        )
+        .expect("coverage file should be written");
+
+        let report = parse_path(&coverage_path).expect("coverage file should parse");
+        assert!(
+            report
+                .totals_by_file
+                .get(&MetricKind::Line)
+                .expect("line totals should exist")
+                .contains_key(&PathBuf::from("src/lib.cs"))
+        );
+    }
+
+    #[test]
+    fn parse_path_reads_istanbul_file_and_dispatches() {
+        let _lock = CWD_LOCK.lock().expect("cwd lock should not be poisoned");
+
+        let temp = tempdir().expect("temp dir should exist");
+        let repo = temp.path();
+        fs::write(repo.join("README.md"), "initial\n").expect("readme should write");
+
+        run_git(repo, &["init"]);
+        run_git(repo, &["config", "user.email", "covgate@example.com"]);
+        run_git(repo, &["config", "user.name", "Covgate Tests"]);
+        run_git(repo, &["add", "."]);
+        run_git(repo, &["commit", "-m", "initial"]);
+
+        let previous = std::env::current_dir().expect("cwd should resolve");
+        let _guard = CwdGuard(previous);
+        std::env::set_current_dir(repo).expect("should chdir into temp repo");
+
+        let path = repo.join("coverage.json");
+        fs::write(
+            &path,
+            r#"{
+              "src/math.js": {
+                "statementMap": {
+                  "0": {"start": {"line": 1}, "end": {"line": 1}}
+                },
+                "fnMap": {
+                  "0": {"loc": {"start": {"line": 1}, "end": {"line": 1}}}
+                },
+                "branchMap": {},
+                "s": {"0": 1},
+                "f": {"0": 1},
+                "b": {}
               }
             }"#,
         )
