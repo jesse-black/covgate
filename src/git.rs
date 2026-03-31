@@ -9,7 +9,7 @@ use anyhow::{Context, Result, bail};
 pub const RECORDED_BASE_REF: &str = "refs/worktree/covgate/base";
 pub const GIT_REQUIRED_MESSAGE: &str = "covgate requires `git` in PATH to run";
 pub const GIT_REPOSITORY_REQUIRED_MESSAGE: &str = "covgate requires a git repository to run";
-const RECORDED_BASE_BRANCH_MARKER: &str = "refs/worktree/covgate/base.branch";
+const RECORDED_BASE_BRANCH_MARKER: &str = "covgate/base.branch";
 const STANDARD_BASE_REFS: &[&str] = &[
     "origin/HEAD",
     "origin/main",

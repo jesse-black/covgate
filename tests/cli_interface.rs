@@ -71,6 +71,28 @@ fn record_base_creates_worktree_ref_in_constrained_repo() {
 }
 
 #[test]
+fn record_base_does_not_break_git_ref_enumeration() {
+    let fixture = rust_basic_pass_fixture();
+    let temp = tempdir().expect("tempdir should exist");
+    let worktree = setup_fixture_worktree(temp.path(), fixture);
+    run_git(&worktree, &["branch", "-M", "task/record-base"]);
+
+    let output = run_covgate_raw(&worktree, &["record-base".to_string()]);
+    assert_eq!(output.status.code(), Some(0));
+
+    let show_ref = std::process::Command::new("git")
+        .args(["show-ref"])
+        .current_dir(&worktree)
+        .output()
+        .expect("git show-ref should run");
+    assert!(
+        show_ref.status.success(),
+        "stderr={}",
+        String::from_utf8_lossy(&show_ref.stderr)
+    );
+}
+
+#[test]
 fn record_base_fails_outside_git_repo() {
     let temp = tempdir().expect("tempdir should exist");
 

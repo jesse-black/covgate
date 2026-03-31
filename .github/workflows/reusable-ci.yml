@@ -7,13 +7,16 @@ jobs:
   quality-check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@efa25f7f19611383d5b0ccf2d1c8914531636bf9 # master
         with:
+          toolchain: stable
           components: clippy, rustfmt
-      - uses: taiki-e/install-action@cargo-llvm-cov
+      - uses: taiki-e/install-action@cd3548cd4edc365cc6652d1d62387d6015646e92 # main
+        with:
+          tool: cargo-llvm-cov@0.8.5
       - name: Format
         run: cargo fmt --check
       - name: Clippy
@@ -28,17 +31,25 @@ jobs:
   dependency-hygiene:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: taiki-e/install-action@cargo-machete
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: dtolnay/rust-toolchain@efa25f7f19611383d5b0ccf2d1c8914531636bf9 # master
+        with:
+          toolchain: stable
+      - uses: taiki-e/install-action@cd3548cd4edc365cc6652d1d62387d6015646e92 # main
+        with:
+          tool: cargo-machete@0.9.1
       - name: Dependency hygiene
         run: cargo machete
 
   dependency-policy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: taiki-e/install-action@cargo-deny
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: dtolnay/rust-toolchain@efa25f7f19611383d5b0ccf2d1c8914531636bf9 # master
+        with:
+          toolchain: stable
+      - uses: taiki-e/install-action@cd3548cd4edc365cc6652d1d62387d6015646e92 # main
+        with:
+          tool: cargo-deny@0.19.0
       - name: Dependency policy
         run: cargo deny check advisories licenses sources bans

@@ -128,10 +128,10 @@ ensure_cargo_tool_binary() {
 	if ! command -v "$binary_name" >/dev/null 2>&1; then
 		echo "${SETUP_LABEL}: downloading ${binary_name} ${version}"
 		local filename
-		if [[ "$binary_name" == "cargo-machete" || "$binary_name" == "cargo-deny" ]]; then
-			filename="${binary_name}-${version}-x86_64-unknown-linux-musl.tar.gz"
-		else
+		if [[ "$binary_name" == "cargo-llvm-cov" ]]; then
 			filename="${binary_name}-x86_64-unknown-linux-gnu.tar.gz"
+		else
+			filename="${binary_name}-${version}-x86_64-unknown-linux-musl.tar.gz"
 		fi
 		local url="https://github.com/${repo}/releases/download/${version}/${filename}"
 		mkdir -p ~/.cargo/bin
@@ -262,5 +262,6 @@ fi
 ensure_cargo_tool_binary "cargo-llvm-cov" "taiki-e/cargo-llvm-cov" "$(get_latest_release 'taiki-e/cargo-llvm-cov')"
 ensure_cargo_tool_binary "cargo-machete" "bnjbvr/cargo-machete" "$(get_latest_release 'bnjbvr/cargo-machete')"
 ensure_cargo_tool_binary "cargo-deny" "EmbarkStudios/cargo-deny" "$(get_latest_release 'EmbarkStudios/cargo-deny')"
+ensure_cargo_tool_binary "covgate" "jesse-black/covgate" "$(get_latest_release 'jesse-black/covgate')"
 
 echo "${SETUP_LABEL}: Complete!"
