@@ -75,7 +75,7 @@ pub fn compute_changed_metric(
 mod tests {
     use std::{collections::BTreeMap, path::PathBuf};
 
-    use crate::coverage::istanbul_json::parse_str_with_repo_root;
+    use crate::coverage::istanbul_json::parse_with_repo_root;
     use crate::model::{
         ChangedFile, CoverageOpportunity, CoverageReport, FileTotals, LineRange, MetricKind,
         OpportunityKind, SourceSpan,
@@ -162,7 +162,7 @@ mod tests {
 
     #[test]
     fn changed_branch_metric_counts_multiline_vitest_branch_outcomes() {
-        let report = parse_str_with_repo_root(
+        let report = parse_with_repo_root(
             include_str!("../tests/fixtures/vitest/empty-branch-locations/coverage.json"),
             std::path::Path::new("."),
         )
@@ -181,7 +181,7 @@ mod tests {
 
     #[test]
     fn changed_line_metric_keeps_uncovered_fixture_seed_call_visible() {
-        let report = parse_str_with_repo_root(
+        let report = parse_with_repo_root(
             include_str!("../tests/fixtures/vitest/empty-branch-locations/coverage.json"),
             std::path::Path::new("."),
         )

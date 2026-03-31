@@ -1,6 +1,6 @@
 use std::{fs, path::PathBuf, sync::Mutex};
 
-use covgate::{coverage::parse_str, git, model::MetricKind};
+use covgate::{coverage::load_from_path, git, model::MetricKind};
 use tempfile::tempdir;
 
 static CWD_LOCK: Mutex<()> = Mutex::new(());
@@ -40,7 +40,7 @@ fn with_path_override(path: &str, f: impl FnOnce()) {
 }
 
 #[test]
-fn parse_str_uses_git_repo_root_for_absolute_coverlet_paths_from_subdir() {
+fn load_from_path_uses_git_repo_root_for_absolute_coverlet_paths_from_subdir() {
     let _lock = CWD_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
 
     let temp = tempdir().expect("temp dir should exist");
@@ -59,8 +59,11 @@ fn parse_str_uses_git_repo_root_for_absolute_coverlet_paths_from_subdir() {
     std::env::set_current_dir(repo.join("src")).expect("should chdir into repo subdir");
 
     let absolute_source = repo.join("src").join("lib.cs");
-    let input = format!(
-        r#"{{
+    let coverage_path = repo.join("coverage.json");
+    fs::write(
+        &coverage_path,
+        format!(
+            r#"{{
           "Demo.dll": {{
             "{}": {{
               "Demo.Math": {{
@@ -72,10 +75,12 @@ fn parse_str_uses_git_repo_root_for_absolute_coverlet_paths_from_subdir() {
             }}
           }}
         }}"#,
-        absolute_source.display()
-    );
+            absolute_source.display()
+        ),
+    )
+    .expect("coverage file should write");
 
-    let report = parse_str(&input).expect("coverage should parse");
+    let report = load_from_path(&coverage_path).expect("coverage should parse");
     assert!(
         report
             .totals_by_file
@@ -86,7 +91,7 @@ fn parse_str_uses_git_repo_root_for_absolute_coverlet_paths_from_subdir() {
 }
 
 #[test]
-fn parse_str_requires_git_repo_for_path_normalization() {
+fn load_from_path_requires_git_repo_for_path_normalization() {
     let _lock = CWD_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
 
     let temp = tempdir().expect("temp dir should exist");
@@ -98,8 +103,11 @@ fn parse_str_requires_git_repo_for_path_normalization() {
     std::env::set_current_dir(workspace).expect("should chdir into temp workspace");
 
     let absolute_source = workspace.join("src").join("lib.cs");
-    let input = format!(
-        r#"{{
+    let coverage_path = workspace.join("coverage.json");
+    fs::write(
+        &coverage_path,
+        format!(
+            r#"{{
           "Demo.dll": {{
             "{}": {{
               "Demo.Math": {{
@@ -111,10 +119,12 @@ fn parse_str_requires_git_repo_for_path_normalization() {
             }}
           }}
         }}"#,
-        absolute_source.display()
-    );
+            absolute_source.display()
+        ),
+    )
+    .expect("coverage file should write");
 
-    let err = parse_str(&input).expect_err("parse should require a git repo");
+    let err = load_from_path(&coverage_path).expect_err("parse should require a git repo");
     assert!(
         err.to_string()
             .contains(git::GIT_REPOSITORY_REQUIRED_MESSAGE)
@@ -122,7 +132,7 @@ fn parse_str_requires_git_repo_for_path_normalization() {
 }
 
 #[test]
-fn parse_str_reports_git_repo_lookup_failure_when_git_is_missing() {
+fn load_from_path_reports_git_repo_lookup_failure_when_git_is_missing() {
     let _lock = CWD_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
 
     let temp = tempdir().expect("temp dir should exist");
@@ -131,7 +141,9 @@ fn parse_str_reports_git_repo_lookup_failure_when_git_is_missing() {
     std::env::set_current_dir(temp.path()).expect("should chdir into temp workspace");
 
     with_path_override("", || {
-        let err = parse_str(
+        let coverage_path = temp.path().join("coverage.json");
+        fs::write(
+            &coverage_path,
             r#"{
               "Demo.dll": {
                 "/workspace/src/lib.cs": {
@@ -145,14 +157,17 @@ fn parse_str_reports_git_repo_lookup_failure_when_git_is_missing() {
               }
             }"#,
         )
-        .expect_err("parse should fail when git lookup cannot run");
+        .expect("coverage file should write");
+
+        let err = load_from_path(&coverage_path)
+            .expect_err("parse should fail when git lookup cannot run");
 
         assert!(err.to_string().contains(git::GIT_REQUIRED_MESSAGE));
     });
 }
 
 #[test]
-fn parse_str_reports_repo_root_context_for_non_path_git_spawn_failure() {
+fn load_from_path_reports_repo_root_context_for_non_path_git_spawn_failure() {
     let _lock = CWD_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
 
     let temp = tempdir().expect("temp dir should exist");
@@ -176,7 +191,9 @@ fn parse_str_reports_repo_root_context_for_non_path_git_spawn_failure() {
 
     let path = workspace.display().to_string();
     with_path_override(&path, || {
-        let err = parse_str(
+        let coverage_path = workspace.join("coverage.json");
+        fs::write(
+            &coverage_path,
             r#"{
               "Demo.dll": {
                 "/workspace/src/lib.cs": {
@@ -190,7 +207,10 @@ fn parse_str_reports_repo_root_context_for_non_path_git_spawn_failure() {
               }
             }"#,
         )
-        .expect_err("parse should surface git repo root context");
+        .expect("coverage file should write");
+
+        let err =
+            load_from_path(&coverage_path).expect_err("parse should surface git repo root context");
 
         assert!(
             err.to_string()
@@ -200,7 +220,7 @@ fn parse_str_reports_repo_root_context_for_non_path_git_spawn_failure() {
 }
 
 #[test]
-fn parse_str_requires_git_repo_when_repo_root_command_returns_empty_output() {
+fn load_from_path_requires_git_repo_when_repo_root_command_returns_empty_output() {
     let _lock = CWD_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
 
     let temp = tempdir().expect("temp dir should exist");
@@ -228,7 +248,9 @@ fn parse_str_requires_git_repo_when_repo_root_command_returns_empty_output() {
 
     let path = workspace.display().to_string();
     with_path_override(&path, || {
-        let err = parse_str(
+        let coverage_path = workspace.join("coverage.json");
+        fs::write(
+            &coverage_path,
             r#"{
               "Demo.dll": {
                 "/workspace/src/lib.cs": {
@@ -242,7 +264,10 @@ fn parse_str_requires_git_repo_when_repo_root_command_returns_empty_output() {
               }
             }"#,
         )
-        .expect_err("parse should require a git repo when repo root is empty");
+        .expect("coverage file should write");
+
+        let err = load_from_path(&coverage_path)
+            .expect_err("parse should require a git repo when repo root is empty");
 
         assert!(
             err.to_string()

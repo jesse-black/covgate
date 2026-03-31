@@ -50,7 +50,8 @@ fn real_multi_file_llvm_export_markdown_totals_match_covgate_calculations() {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let report = coverage::parse_path(&coverage_report).expect("real llvm fixture should parse");
+    let report =
+        coverage::load_from_path(&coverage_report).expect("real llvm fixture should parse");
     let markdown =
         fs::read_to_string(&markdown_output).expect("markdown summary should be readable");
 
@@ -86,7 +87,8 @@ fn real_multi_file_llvm_export_documents_summary_semantics_disagreement() {
         &fs::read_to_string(&coverage_report).expect("real llvm fixture should be readable"),
     )
     .expect("real llvm fixture should parse");
-    let report = coverage::parse_path(&coverage_report).expect("real llvm fixture should parse");
+    let report =
+        coverage::load_from_path(&coverage_report).expect("real llvm fixture should parse");
 
     let native_region = llvm_totals(&native_json, "regions").expect("region totals should exist");
     let native_line = llvm_totals(&native_json, "lines").expect("line totals should exist");

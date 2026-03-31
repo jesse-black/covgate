@@ -13,7 +13,7 @@ use anyhow::Result;
 use crate::{config::Config, diff::DiffSource, model::ChangedFile};
 
 pub fn run(config: Config) -> Result<i32> {
-    let report = coverage::parse_path(&config.coverage_report)?;
+    let report = coverage::load_from_path(&config.coverage_report)?;
     let diff = load_changed_lines_with_warnings(&config.diff_source)?;
 
     let mut metrics = Vec::new();

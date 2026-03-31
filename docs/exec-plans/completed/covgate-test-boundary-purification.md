@@ -1,6 +1,6 @@
 # Purify Internal Tests And Move I/O Coverage To Integration
 
-Save this in-progress ExecPlan in `docs/exec-plans/active/covgate-test-boundary-purification.md`. Move it to `docs/exec-plans/completed/covgate-test-boundary-purification.md` only after implementation, validation, and documentation updates are complete.
+Save the canonical completed ExecPlan in `docs/exec-plans/completed/covgate-test-boundary-purification.md`.
 
 This ExecPlan is a living document. The sections `Progress`, `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
@@ -18,13 +18,14 @@ After this change, the tests that live inside `src/` will better match the desig
 - [x] (2026-03-25 00:00Z) Addressed the Coverlet outside-repo absolute-path normalization bug without regressing in-repo relative matching.
 - [x] (2026-03-31 21:22Z) Refactored `src/coverage/mod.rs` so `parse_str` is a thin repository-root lookup wrapper over `parse_with_repo_root`, preserving the direct git-required and git-repository-required error contract.
 - [x] (2026-03-31 21:22Z) Added integration coverage in `tests/coverage_parse.rs` for repo-root lookup, missing-git behavior, empty repo-root output, and subdirectory invocation.
-- [ ] Refactor config discovery so path-selection logic and TOML parsing can be tested without touching the filesystem.
-- [ ] Refactor `resolve_rules` to remove the repeated CLI-versus-config fallback pattern without changing rule semantics.
-- [ ] Extract the shared coverage path-normalization primitives used across the format adapters while preserving format-specific behavior where it genuinely differs.
-- [ ] Move the file-backed `parse_path` coverage tests out of `src/coverage/mod.rs` and into `tests/`.
-- [ ] Split config discovery coverage into pure unit tests for ancestor-selection logic plus integration tests for actual file reads and parse failures.
-- [ ] Apply any further small refactors needed to simplify coverage/config logic and complete the test-boundary purification cleanly.
-- [ ] Run the remaining targeted tests during iteration, then run `cargo xtask validate` once after the remaining config and `parse_path` moves are complete.
+- [x] (2026-03-31 22:54Z) Refactored config discovery into pure candidate-selection and TOML-parsing helpers, then rewrote the in-module tests to stay in-memory.
+- [x] (2026-03-31 22:54Z) Refactored `resolve_rules` through small helper functions so CLI-over-config precedence stays identical without eight repeated fallback blocks.
+- [x] (2026-03-31 22:54Z) Extracted shared lexical-normalization and repo-root-relativization helpers into `src/coverage/path.rs`, preserving the format-specific prefix handling that still differs between Coverlet and Istanbul.
+- [x] (2026-03-31 22:54Z) Renamed the top-level coverage entrypoint to `load_from_path`, removed the ambient string parser, aligned the format adapters on `parse_with_repo_root`, and moved the file-backed coverage behavior into `tests/coverage_parse.rs`.
+- [x] (2026-03-31 22:54Z) Added `tests/config_discovery.rs` so real file discovery, repo-root stopping, unknown-repo-root fallback, and read/parse failures are covered at the integration boundary.
+- [x] (2026-03-31 22:54Z) Ran the remaining targeted test commands during iteration: `cargo test config::`, `cargo test coverage::`, `cargo test --test coverage_parse`, `cargo test --test config_discovery`, `cargo test --test llvm_diff_regression`, and `cargo test --test llvm_real_parity`.
+- [x] (2026-03-31 22:54Z) Ran `cargo xtask validate` as the final repository check. The sweep passed, including `fmt`, `clippy`, full tests, self-coverage gating, `cargo-machete`, and `cargo-deny`.
+- [x] (2026-03-31 22:54Z) Updated this ExecPlan to reflect the finished state and prepared it to move from `docs/exec-plans/active/` to `docs/exec-plans/completed/`.
 
 ## Surprises & Discoveries
 
@@ -45,6 +46,9 @@ After this change, the tests that live inside `src/` will better match the desig
 
 - Observation: The current top-level coverage entrypoint names hide important semantics. `parse_path` sounds like it parses a filesystem path string, but the function actually reads coverage JSON from disk, and `parse_str` currently mixes parsing with environment-driven repository-root discovery.
   Evidence: `src/coverage/mod.rs` reads file contents inside `parse_path`, and `parse_str` calls `git::resolve_repo_root` before dispatching.
+
+- Observation: Repo-root stopping behavior in config discovery only becomes observable in integration tests when the test creates a real Git repository, not merely a `.git` directory.
+  Evidence: `tests/config_discovery.rs` initially kept discovering the parent `covgate.toml` until the test switched from creating `repo/.git/` manually to running `git init`, after which `Config::try_from` stopped at the repository root as intended.
 
 ## Decision Log
 
@@ -96,9 +100,13 @@ After this change, the tests that live inside `src/` will better match the desig
   Rationale: These names express the actual boundary clearly, stay format-agnostic at the public API layer, and keep parallel naming across the format-specific parser modules.
   Date/Author: 2026-03-31 / Codex
 
+- Decision: Remove the ambient string-based coverage entrypoint instead of keeping it solely for tests, and rewrite the integration coverage to exercise `load_from_path`.
+  Rationale: There was no non-test caller for the ambient parser anymore, and keeping it would have preserved an API shape that no longer matched the intended purity boundary.
+  Date/Author: 2026-03-31 / Codex
+
 ## Outcomes & Retrospective
 
-This work is still in progress, but the coverage side is further along than this plan originally recorded. `src/coverage/mod.rs` now has a clear pure-core direction, and `tests/coverage_parse.rs` covers subdirectory invocation, missing-git handling, empty repo-root output, and contextual repo-root lookup failures. The remaining work is concentrated in `src/config.rs`, plus finishing the move and likely rename of the file-backed coverage entrypoint so the public API describes loading versus parsing more clearly.
+The config and coverage cleanup landed cleanly and the final repository validation passed. `src/config.rs` now separates candidate-path selection, TOML parsing, and file I/O so the in-module tests stay pure, while `tests/config_discovery.rs` proves the real discovery behavior over directories and Git state. `src/coverage/mod.rs` now exposes `load_from_path` and `parse_with_repo_root`, the format adapters share the same parsing vocabulary, and the file-backed behavior moved into `tests/coverage_parse.rs`. The targeted regression runs and `cargo xtask validate` both passed, so this plan is ready to live under `docs/exec-plans/completed/`.
 
 ## Context and Orientation
 
@@ -209,3 +217,5 @@ Revision note: created this ExecPlan to turn the current verbal classification o
 Revision note (2026-03-31): updated this ExecPlan after the merge to reflect that the Coverlet normalization fix and `parse_str`/repo-root integration coverage are already in place, while config-boundary cleanup and `parse_path` test relocation remain outstanding.
 
 Revision note (2026-03-31, later): updated this ExecPlan again during planning to simplify the target coverage API to `load_from_path` plus `parse_with_repo_root`, and to align the format adapter modules on the same `parse_with_repo_root` naming.
+
+Revision note (2026-03-31 22:54Z): updated Progress, Surprises & Discoveries, Decision Log, and Outcomes & Retrospective after landing the remaining config-boundary cleanup, coverage API rename, new integration tests, targeted regression runs, and the final successful `cargo xtask validate` pass, then prepared the document to move to `completed/`.

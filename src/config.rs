@@ -71,27 +71,36 @@ fn load_file_config() -> Result<Option<FileConfig>> {
     load_file_config_from_with_repo_root(&dir, repo_root.as_deref())
 }
 
-#[cfg(test)]
-fn load_file_config_from(dir: &Path) -> Result<Option<FileConfig>> {
-    load_file_config_from_with_repo_root(dir, None)
+fn config_candidate_paths(dir: &Path, repo_root: Option<&Path>) -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+
+    for candidate_dir in dir.ancestors() {
+        candidates.push(candidate_dir.join(CONFIG_FILE_NAME));
+        if repo_root.is_some_and(|root| candidate_dir == root) {
+            break;
+        }
+    }
+
+    candidates
+}
+
+fn parse_file_config(text: &str) -> Result<FileConfig> {
+    toml::from_str::<FileConfig>(text).context("failed to parse covgate config text")
 }
 
 fn load_file_config_from_with_repo_root(
     dir: &Path,
     repo_root: Option<&Path>,
 ) -> Result<Option<FileConfig>> {
-    for candidate_dir in dir.ancestors() {
-        let path = candidate_dir.join(CONFIG_FILE_NAME);
+    for path in config_candidate_paths(dir, repo_root) {
         if !path.exists() {
-            if repo_root.is_some_and(|root| candidate_dir == root) {
-                break;
-            }
             continue;
         }
 
         let text = fs::read_to_string(&path)
             .with_context(|| format!("failed to read config file: {}", path.display()))?;
-        let config = toml::from_str::<FileConfig>(&text)
+        let config = parse_file_config(&text)
+            .context("failed to parse covgate config text")
             .with_context(|| format!("failed to parse config file: {}", path.display()))?;
         return Ok(Some(config));
     }
@@ -124,109 +133,54 @@ fn resolve_diff_source(args: &Args, file_config: Option<&FileConfig>) -> Result<
 fn resolve_rules(args: &Args, file_config: Option<&FileConfig>) -> Result<Vec<GateRule>> {
     let mut configured = Vec::new();
 
-    // fail_under_regions
-    if let Some(minimum_percent) = args.fail_under_regions {
-        configured.push(GateRule::Percent {
-            metric: MetricKind::Region,
-            minimum_percent,
-        });
-    } else if let Some(minimum_percent) = file_config.and_then(|c| c.gates.fail_under_regions) {
-        configured.push(GateRule::Percent {
-            metric: MetricKind::Region,
-            minimum_percent,
-        });
-    }
-
-    // fail_under_lines
-    if let Some(minimum_percent) = args.fail_under_lines {
-        configured.push(GateRule::Percent {
-            metric: MetricKind::Line,
-            minimum_percent,
-        });
-    } else if let Some(minimum_percent) = file_config.and_then(|c| c.gates.fail_under_lines) {
-        configured.push(GateRule::Percent {
-            metric: MetricKind::Line,
-            minimum_percent,
-        });
-    }
-
-    // fail_under_branches
-    if let Some(minimum_percent) = args.fail_under_branches {
-        configured.push(GateRule::Percent {
-            metric: MetricKind::Branch,
-            minimum_percent,
-        });
-    } else if let Some(minimum_percent) = file_config.and_then(|c| c.gates.fail_under_branches) {
-        configured.push(GateRule::Percent {
-            metric: MetricKind::Branch,
-            minimum_percent,
-        });
-    }
-
-    // fail_uncovered_regions
-    if let Some(maximum_count) = args.fail_uncovered_regions {
-        configured.push(GateRule::UncoveredCount {
-            metric: MetricKind::Region,
-            maximum_count,
-        });
-    } else if let Some(maximum_count) = file_config.and_then(|c| c.gates.fail_uncovered_regions) {
-        configured.push(GateRule::UncoveredCount {
-            metric: MetricKind::Region,
-            maximum_count,
-        });
-    }
-
-    // fail_uncovered_lines
-    if let Some(maximum_count) = args.fail_uncovered_lines {
-        configured.push(GateRule::UncoveredCount {
-            metric: MetricKind::Line,
-            maximum_count,
-        });
-    } else if let Some(maximum_count) = file_config.and_then(|c| c.gates.fail_uncovered_lines) {
-        configured.push(GateRule::UncoveredCount {
-            metric: MetricKind::Line,
-            maximum_count,
-        });
-    }
-
-    // fail_under_functions
-    if let Some(minimum_percent) = args.fail_under_functions {
-        configured.push(GateRule::Percent {
-            metric: MetricKind::Function,
-            minimum_percent,
-        });
-    } else if let Some(minimum_percent) = file_config.and_then(|c| c.gates.fail_under_functions) {
-        configured.push(GateRule::Percent {
-            metric: MetricKind::Function,
-            minimum_percent,
-        });
-    }
-
-    // fail_uncovered_branches
-    if let Some(maximum_count) = args.fail_uncovered_branches {
-        configured.push(GateRule::UncoveredCount {
-            metric: MetricKind::Branch,
-            maximum_count,
-        });
-    } else if let Some(maximum_count) = file_config.and_then(|c| c.gates.fail_uncovered_branches) {
-        configured.push(GateRule::UncoveredCount {
-            metric: MetricKind::Branch,
-            maximum_count,
-        });
-    }
-
-    // fail_uncovered_functions
-    if let Some(maximum_count) = args.fail_uncovered_functions {
-        configured.push(GateRule::UncoveredCount {
-            metric: MetricKind::Function,
-            maximum_count,
-        });
-    } else if let Some(maximum_count) = file_config.and_then(|c| c.gates.fail_uncovered_functions) {
-        configured.push(GateRule::UncoveredCount {
-            metric: MetricKind::Function,
-            maximum_count,
-        });
-    }
+    push_percent_rule(
+        &mut configured,
+        MetricKind::Region,
+        args.fail_under_regions,
+        file_config.and_then(|c| c.gates.fail_under_regions),
+    );
+    push_percent_rule(
+        &mut configured,
+        MetricKind::Line,
+        args.fail_under_lines,
+        file_config.and_then(|c| c.gates.fail_under_lines),
+    );
+    push_percent_rule(
+        &mut configured,
+        MetricKind::Branch,
+        args.fail_under_branches,
+        file_config.and_then(|c| c.gates.fail_under_branches),
+    );
+    push_uncovered_rule(
+        &mut configured,
+        MetricKind::Region,
+        args.fail_uncovered_regions,
+        file_config.and_then(|c| c.gates.fail_uncovered_regions),
+    );
+    push_uncovered_rule(
+        &mut configured,
+        MetricKind::Line,
+        args.fail_uncovered_lines,
+        file_config.and_then(|c| c.gates.fail_uncovered_lines),
+    );
+    push_percent_rule(
+        &mut configured,
+        MetricKind::Function,
+        args.fail_under_functions,
+        file_config.and_then(|c| c.gates.fail_under_functions),
+    );
+    push_uncovered_rule(
+        &mut configured,
+        MetricKind::Branch,
+        args.fail_uncovered_branches,
+        file_config.and_then(|c| c.gates.fail_uncovered_branches),
+    );
+    push_uncovered_rule(
+        &mut configured,
+        MetricKind::Function,
+        args.fail_uncovered_functions,
+        file_config.and_then(|c| c.gates.fail_uncovered_functions),
+    );
 
     if configured.is_empty() {
         bail!(
@@ -238,15 +192,40 @@ fn resolve_rules(args: &Args, file_config: Option<&FileConfig>) -> Result<Vec<Ga
     Ok(configured)
 }
 
+fn push_percent_rule(
+    configured: &mut Vec<GateRule>,
+    metric: MetricKind,
+    cli_value: Option<f64>,
+    config_value: Option<f64>,
+) {
+    if let Some(minimum_percent) = cli_value.or(config_value) {
+        configured.push(GateRule::Percent {
+            metric,
+            minimum_percent,
+        });
+    }
+}
+
+fn push_uncovered_rule(
+    configured: &mut Vec<GateRule>,
+    metric: MetricKind,
+    cli_value: Option<usize>,
+    config_value: Option<usize>,
+) {
+    if let Some(maximum_count) = cli_value.or(config_value) {
+        configured.push(GateRule::UncoveredCount {
+            metric,
+            maximum_count,
+        });
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use std::fs;
-
-    use tempfile::tempdir;
+    use std::path::PathBuf;
 
     use super::{
-        CONFIG_FILE_NAME, FileConfig, load_file_config_from, load_file_config_from_with_repo_root,
-        resolve_diff_source, resolve_rules,
+        FileConfig, config_candidate_paths, parse_file_config, resolve_diff_source, resolve_rules,
     };
     use crate::{
         cli::Args,
@@ -446,113 +425,59 @@ mod tests {
     }
 
     #[test]
-    fn loads_repo_config_file_when_present() {
-        let temp = tempdir().expect("tempdir");
-        fs::write(
-            temp.path().join(CONFIG_FILE_NAME),
-            "base = \"main\"\nmarkdown_output = \"summary.md\"\n[gates]\nfail_under_regions = 80\nfail_uncovered_regions = 1\n",
-        )
-        .expect("write config");
+    fn config_candidate_paths_stop_at_repo_root() {
+        let dir = std::path::Path::new("/workspace/repo/nested/deeper");
+        let repo_root = std::path::Path::new("/workspace/repo");
 
-        let config = load_file_config_from(temp.path())
-            .expect("config should load")
-            .expect("config file");
+        let candidates = config_candidate_paths(dir, Some(repo_root));
 
-        assert_eq!(config.base.as_deref(), Some("main"));
         assert_eq!(
-            config.markdown_output.as_deref(),
-            Some(std::path::Path::new("summary.md"))
+            candidates,
+            vec![
+                PathBuf::from("/workspace/repo/nested/deeper/covgate.toml"),
+                PathBuf::from("/workspace/repo/nested/covgate.toml"),
+                PathBuf::from("/workspace/repo/covgate.toml"),
+            ]
         );
-        assert_eq!(config.gates.fail_under_regions, Some(80.0));
-        assert_eq!(config.gates.fail_uncovered_regions, Some(1));
     }
 
     #[test]
-    fn loads_repo_config_file_from_parent_directory() {
-        let temp = tempdir().expect("tempdir");
-        let nested = temp.path().join("nested").join("deeper");
-        fs::create_dir_all(&nested).expect("nested dir should exist");
-        fs::write(
-            temp.path().join(CONFIG_FILE_NAME),
-            "base = \"main\"\n[gates]\nfail_under_regions = 80\n",
-        )
-        .expect("write config");
+    fn config_candidate_paths_walk_to_filesystem_root_when_repo_root_is_unknown() {
+        let dir = std::path::Path::new("/workspace/repo/nested");
 
-        let config = load_file_config_from(&nested)
-            .expect("config should load")
-            .expect("config file");
+        let candidates = config_candidate_paths(dir, None);
+
+        assert_eq!(
+            candidates,
+            vec![
+                PathBuf::from("/workspace/repo/nested/covgate.toml"),
+                PathBuf::from("/workspace/repo/covgate.toml"),
+                PathBuf::from("/workspace/covgate.toml"),
+                PathBuf::from("/covgate.toml"),
+            ]
+        );
+    }
+
+    #[test]
+    fn parses_file_config_from_toml_text() {
+        let config = parse_file_config(
+            "base = \"main\"\nmarkdown_output = \"summary.md\"\n[gates]\nfail_under_regions = 80\n",
+        )
+        .expect("config should parse");
 
         assert_eq!(config.base.as_deref(), Some("main"));
+        assert_eq!(config.markdown_output, Some(PathBuf::from("summary.md")));
         assert_eq!(config.gates.fail_under_regions, Some(80.0));
     }
 
     #[test]
-    fn does_not_walk_past_repo_root_when_config_is_missing_in_repo() {
-        let temp = tempdir().expect("tempdir");
-        let outer = temp.path().join("outer");
-        let repo_root = outer.join("repo");
-        let nested = repo_root.join("nested").join("deeper");
-        fs::create_dir_all(&nested).expect("nested dir should exist");
-        fs::write(
-            outer.join(CONFIG_FILE_NAME),
-            "base = \"outside\"\n[gates]\nfail_under_regions = 12\n",
-        )
-        .expect("outer config should be written");
-
-        let config = load_file_config_from_with_repo_root(&nested, Some(&repo_root))
-            .expect("config load should succeed");
-
-        assert!(config.is_none());
-    }
-
-    #[test]
-    fn still_walks_past_parent_boundaries_when_repo_root_is_unknown() {
-        let temp = tempdir().expect("tempdir");
-        let outer = temp.path().join("outer");
-        let nested = outer.join("repo").join("nested");
-        fs::create_dir_all(&nested).expect("nested dir should exist");
-        fs::write(
-            outer.join(CONFIG_FILE_NAME),
-            "base = \"outside\"\n[gates]\nfail_under_regions = 12\n",
-        )
-        .expect("outer config should be written");
-
-        let config = load_file_config_from_with_repo_root(&nested, None)
-            .expect("config load should succeed")
-            .expect("config should be found");
-
-        assert_eq!(config.base.as_deref(), Some("outside"));
-        assert_eq!(config.gates.fail_under_regions, Some(12.0));
-    }
-
-    #[test]
-    fn reports_read_errors_for_parent_directory_config_candidates() {
-        let temp = tempdir().expect("tempdir");
-        let nested = temp.path().join("nested");
-        fs::create_dir_all(&nested).expect("nested dir should exist");
-        fs::create_dir(temp.path().join(CONFIG_FILE_NAME))
-            .expect("config path should exist as directory");
-
-        let error = load_file_config_from(&nested).expect_err("config load should fail");
-        let error_text = format!("{error:#}");
-
-        assert!(error_text.contains("failed to read config file"));
-        assert!(error_text.contains(CONFIG_FILE_NAME));
-    }
-
-    #[test]
-    fn reports_parse_errors_for_parent_directory_config_candidates() {
-        let temp = tempdir().expect("tempdir");
-        let nested = temp.path().join("nested");
-        fs::create_dir_all(&nested).expect("nested dir should exist");
-        fs::write(temp.path().join(CONFIG_FILE_NAME), "not = [valid toml")
-            .expect("invalid config should be written");
-
-        let error = load_file_config_from(&nested).expect_err("config load should fail");
-        let error_text = format!("{error:#}");
-
-        assert!(error_text.contains("failed to parse config file"));
-        assert!(error_text.contains(CONFIG_FILE_NAME));
+    fn parse_file_config_reports_invalid_toml() {
+        let error = parse_file_config("not = [valid toml").expect_err("config should fail");
+        assert!(
+            error
+                .to_string()
+                .contains("failed to parse covgate config text")
+        );
     }
 
     #[test]

@@ -10,7 +10,9 @@ use crate::model::{
     CoverageOpportunity, CoverageReport, FileTotals, MetricKind, OpportunityKind, SourceSpan,
 };
 
-pub(crate) fn parse_str_with_repo_root(input: &str, repo_root: &Path) -> Result<CoverageReport> {
+use super::path::{lexical_normalize, relativize_absolute_path};
+
+pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<CoverageReport> {
     let report: HashMap<String, IstanbulFileCoverage> =
         serde_json::from_str(input).context("failed to parse istanbul json")?;
 
@@ -158,19 +160,7 @@ fn normalize_path(value: &str, repo_root: &Path) -> PathBuf {
         return lexical_normalize(Path::new(stripped));
     }
 
-    let path = lexical_normalize(Path::new(&normalized_value));
-    let repo_root = lexical_normalize(repo_root);
-    if path.is_absolute() {
-        path.strip_prefix(&repo_root)
-            .map(lexical_normalize)
-            .unwrap_or(path)
-    } else {
-        path
-    }
-}
-
-fn lexical_normalize(path: impl AsRef<Path>) -> PathBuf {
-    path.as_ref().components().collect()
+    relativize_absolute_path(Path::new(&normalized_value), repo_root)
 }
 
 #[derive(Debug, Deserialize)]
@@ -246,7 +236,7 @@ mod tests {
 
     use crate::model::{MetricKind, OpportunityKind};
 
-    use super::parse_str_with_repo_root;
+    use super::parse_with_repo_root;
 
     #[test]
     fn parses_istanbul_line_branch_and_function_totals() {
@@ -283,7 +273,7 @@ mod tests {
         }
         "#;
 
-        let report = parse_str_with_repo_root(input, Path::new("/workspace/covgate"))
+        let report = parse_with_repo_root(input, Path::new("/workspace/covgate"))
             .expect("istanbul json should parse");
 
         let line_totals = report
@@ -316,7 +306,7 @@ mod tests {
 
     #[test]
     fn parse_rejects_invalid_json() {
-        let error = parse_str_with_repo_root("{", Path::new("/workspace/covgate"))
+        let error = parse_with_repo_root("{", Path::new("/workspace/covgate"))
             .expect_err("invalid json should fail");
         assert!(error.to_string().contains("failed to parse istanbul json"));
     }
@@ -326,7 +316,7 @@ mod tests {
         let input =
             include_str!("../../tests/fixtures/vitest/empty-branch-locations/coverage.json");
 
-        let report = parse_str_with_repo_root(input, Path::new("/workspace/covgate"))
+        let report = parse_with_repo_root(input, Path::new("/workspace/covgate"))
             .expect("checked-in vitest fixture should parse");
 
         let branch_totals = report
@@ -377,7 +367,7 @@ mod tests {
         }
         "#;
 
-        let report = parse_str_with_repo_root(input, Path::new("/workspace/covgate"))
+        let report = parse_with_repo_root(input, Path::new("/workspace/covgate"))
             .expect("istanbul json should parse");
 
         let line_totals = report
@@ -412,7 +402,7 @@ mod tests {
         }
         "#;
 
-        let report = parse_str_with_repo_root(input, Path::new("/workspace/covgate"))
+        let report = parse_with_repo_root(input, Path::new("/workspace/covgate"))
             .expect("istanbul json should parse");
 
         let line_totals = report
@@ -442,7 +432,7 @@ mod tests {
         let input =
             include_str!("../../tests/fixtures/vitest/empty-branch-locations/coverage.json");
 
-        let report = parse_str_with_repo_root(input, Path::new("/workspace/covgate"))
+        let report = parse_with_repo_root(input, Path::new("/workspace/covgate"))
             .expect("checked-in vitest fixture should parse");
 
         let line_20 = report
@@ -463,7 +453,7 @@ mod tests {
 
     #[test]
     fn normalizes_repo_prefixed_and_absolute_paths() {
-        let prefixed = parse_str_with_repo_root(
+        let prefixed = parse_with_repo_root(
             r#"{
               "/workspace/covgate/src/math.js": {
                 "statementMap": {"0": {"start": {"line": 1}, "end": {"line": 1}}},
@@ -485,7 +475,7 @@ mod tests {
                 .contains_key(&PathBuf::from("src/math.js"))
         );
 
-        let absolute_outside = parse_str_with_repo_root(
+        let absolute_outside = parse_with_repo_root(
             r#"{
               "/opt/other/math.js": {
                 "statementMap": {"0": {"start": {"line": 1}, "end": {"line": 1}}},
@@ -510,7 +500,7 @@ mod tests {
 
     #[test]
     fn does_not_strip_repo_root_text_prefix_when_not_path_boundary() {
-        let report = parse_str_with_repo_root(
+        let report = parse_with_repo_root(
             r#"{
               "/workspace/covgate-old/src/math.js": {
                 "statementMap": {"0": {"start": {"line": 1}, "end": {"line": 1}}},
