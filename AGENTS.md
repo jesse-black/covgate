@@ -2,7 +2,7 @@
 
 ## Development Process
 ### Must Follow
-- ALWAYS run `cargo xtask validate` before declaring code changes complete unless the user explicitly tells you not to or the command is blocked.
+- ALWAYS run `cargo xtask validate` before declaring code changes complete unless the the change is documentation only.
 - NEVER declare work complete after `cargo xtask quick` alone.
 - NEVER run `cargo xtask quick` and `cargo xtask validate` at the same time for the same check pass.
 - ALWAYS address bug reports and review findings with TDD: first reproduce the issue in a failing test, then fix the issue and rerun the relevant tests until they pass.
@@ -21,6 +21,7 @@
 ### Start Here for Planning and Repository Guidance
 - `docs/` – Repository knowledge system of record, including design docs, references, generated docs, product specs, and execution plans.
 - `docs/PLANS.md` – Execution plan authoring and maintenance rules. Use this when creating, updating, or completing ExecPlans in `docs/exec-plans/`.
+- `docs/TODO.md` - Small tasks and cleanups that came up during planning but aren't big enough or ready enough for a full exec plan.
 
 ### Start Here for Testing, Bugs, and Validation
 - `docs/TESTING.md` – Canonical testing process and quality philosophy for unit, integration, CLI, and coverage validation.

@@ -13,24 +13,38 @@ After this change, the tests that live inside `src/` will better match the desig
 ## Progress
 
 - [x] (2026-03-23 00:00Z) Created this ExecPlan to turn the current test-boundary classification into a concrete implementation plan.
-- [ ] Reproduce the Coverlet absolute-outside-repo path-normalization bug with a failing test before changing production code.
+- [x] (2026-03-25 00:00Z) Reproduced the Coverlet absolute-outside-repo path-normalization bug with a failing parser test before changing production code.
+- [x] (2026-03-25 00:00Z) Ensured the existing Istanbul and LLVM path-normalization tests remained in place as regression guards while adjusting Coverlet normalization.
+- [x] (2026-03-25 00:00Z) Addressed the Coverlet outside-repo absolute-path normalization bug without regressing in-repo relative matching.
+- [x] (2026-03-31 21:22Z) Refactored `src/coverage/mod.rs` so `parse_str` is a thin repository-root lookup wrapper over `parse_with_repo_root`, preserving the direct git-required and git-repository-required error contract.
+- [x] (2026-03-31 21:22Z) Added integration coverage in `tests/coverage_parse.rs` for repo-root lookup, missing-git behavior, empty repo-root output, and subdirectory invocation.
 - [ ] Refactor config discovery so path-selection logic and TOML parsing can be tested without touching the filesystem.
-- [ ] Refactor coverage parsing so `env::current_dir()` is isolated in a thin wrapper and the core parser dispatch can be tested with an explicit repository root.
-- [ ] Ensure the existing Istanbul and LLVM path-normalization tests still guard against regressions before consolidating shared normalization logic.
-- [ ] Consolidate parser path-normalization logic where the cross-format behavior is truly shared.
-- [ ] Address the Coverlet outside-repo absolute-path normalization bug without regressing in-repo relative matching.
-- [ ] Move the file-backed `parse_path` coverage test out of `src/coverage/mod.rs` and into `tests/`.
+- [ ] Refactor `resolve_rules` to remove the repeated CLI-versus-config fallback pattern without changing rule semantics.
+- [ ] Extract the shared coverage path-normalization primitives used across the format adapters while preserving format-specific behavior where it genuinely differs.
+- [ ] Move the file-backed `parse_path` coverage tests out of `src/coverage/mod.rs` and into `tests/`.
 - [ ] Split config discovery coverage into pure unit tests for ancestor-selection logic plus integration tests for actual file reads and parse failures.
 - [ ] Apply any further small refactors needed to simplify coverage/config logic and complete the test-boundary purification cleanly.
-- [ ] Run the relevant targeted tests during iteration, then run `cargo xtask validate` once before declaring the work complete.
+- [ ] Run the remaining targeted tests during iteration, then run `cargo xtask validate` once after the remaining config and `parse_path` moves are complete.
 
 ## Surprises & Discoveries
 
 - Observation: The only remaining impure tests inside `src/` are filesystem-based, not subprocess-based.
-  Evidence: `src/config.rs` uses `tempdir`, `fs::write`, and `fs::create_dir_all` in the config discovery tests, while `src/coverage/mod.rs` uses `tempdir` and `fs::write` only for `parse_path_reads_file_and_dispatches`.
+  Evidence: `src/config.rs` uses `tempdir`, `fs::write`, and `fs::create_dir_all` in the config discovery tests, while `src/coverage/mod.rs` uses `tempdir`, `fs::write`, and git setup only for file-backed entrypoint coverage.
 
-- Observation: `src/config.rs` currently mixes three responsibilities in one path: candidate-directory selection, file I/O, and TOML parsing.
+- Observation: `src/config.rs` still mixes three responsibilities in one path: candidate-directory selection, file I/O, and TOML parsing.
   Evidence: `load_file_config_from_with_repo_root` in `src/config.rs` both walks `dir.ancestors()` and calls `fs::read_to_string` and `toml::from_str`.
+
+- Observation: `resolve_rules` in `src/config.rs` repeats the same precedence pattern for each metric and rule type.
+  Evidence: the function contains eight nearly identical `if let Some(...)` / `else if let Some(...)` blocks that differ mainly by `MetricKind` and `GateRule` variant.
+
+- Observation: The coverage half of the plan is only partially purified after the merge. `parse_str` now has a pure helper boundary plus integration coverage, but the file-backed `parse_path` tests still live in `src/coverage/mod.rs`.
+  Evidence: `src/coverage/mod.rs` now contains private `parse_with_repo_root`, while `tests/coverage_parse.rs` exercises `parse_str` behavior and `src/coverage/mod.rs` still contains `parse_path_reads_file_and_dispatches`, `parse_path_prefers_git_repo_root_for_absolute_coverlet_paths`, and `parse_path_reads_istanbul_file_and_dispatches`.
+
+- Observation: The Coverlet outside-repo normalization bug is already fixed at the parser layer, so the remaining work is mostly test-boundary cleanup rather than parser-correctness repair.
+  Evidence: `src/coverage/coverlet_json.rs` contains `keeps_absolute_paths_outside_repo_as_absolute`, and `cargo test --test coverage_parse` passed on 2026-03-31 with repo-root and git-failure scenarios.
+
+- Observation: The current top-level coverage entrypoint names hide important semantics. `parse_path` sounds like it parses a filesystem path string, but the function actually reads coverage JSON from disk, and `parse_str` currently mixes parsing with environment-driven repository-root discovery.
+  Evidence: `src/coverage/mod.rs` reads file contents inside `parse_path`, and `parse_str` calls `git::resolve_repo_root` before dispatching.
 
 ## Decision Log
 
@@ -58,57 +72,82 @@ After this change, the tests that live inside `src/` will better match the desig
   Rationale: `src/config.rs` and `src/coverage/mod.rs` each benefit more from extracting pure helper boundaries than from building reusable pipelines across multiple callsites.
   Date/Author: 2026-03-23 / Codex
 
+- Decision: After the merge, treat the coverage parsing seam as partially complete and update this plan to focus the remaining work on config discovery and `parse_path` test relocation.
+  Rationale: `src/coverage/mod.rs` now has the intended thin-wrapper shape for `parse_str`, and integration coverage already exists for repository-root lookup behavior. Marking that progress explicitly avoids sending a future contributor back into already-finished work.
+  Date/Author: 2026-03-31 / Codex
+
+- Decision: Keep the parser-normalization consolidation item open, but lower its priority behind the test-boundary moves.
+  Rationale: The merge left three format-specific normalization helpers in place. That duplication is now a cleanup opportunity rather than a blocker because the bug fix and regression coverage already exist.
+  Date/Author: 2026-03-31 / Codex
+
+- Decision: Include a small `resolve_rules` refactor in this plan as part of the config-boundary cleanup.
+  Rationale: The current repetition makes the config module harder to read and increases the cost of future rule additions. A small helper-based cleanup supports the plan’s overall goal of clearer pure seams without changing behavior.
+  Date/Author: 2026-03-31 / Codex
+
+- Decision: Simplify the top-level coverage entrypoints to two responsibilities: one file-loading wrapper and one pure explicit-repository-root parser.
+  Rationale: There is no meaningful non-test consumer for a public “string plus ambient cwd/git lookup” API today. Removing that middle shape reduces duplicate parsing work and makes test purification line up with the real purity boundary.
+  Date/Author: 2026-03-31 / Codex
+
+- Decision: Revisit the top-level function names as part of the remaining coverage cleanup, favoring names that describe loading versus parsing rather than the raw argument type alone.
+  Rationale: Names like `parse_path` are easy to misread as “parse a path string.” The remaining cleanup is a good point to choose names that remain clear even when read without full module context.
+  Date/Author: 2026-03-31 / Codex
+
+- Decision: Adopt `load_from_path` for the top-level impure wrapper, `parse_with_repo_root` for the top-level pure core, and `parse_with_repo_root` for each format adapter module.
+  Rationale: These names express the actual boundary clearly, stay format-agnostic at the public API layer, and keep parallel naming across the format-specific parser modules.
+  Date/Author: 2026-03-31 / Codex
+
 ## Outcomes & Retrospective
 
-This section is intentionally incomplete because the work has not been implemented yet. At completion, record which pure helper seams were introduced in `src/config.rs` and `src/coverage/mod.rs`, which integration tests replaced the old in-module filesystem tests, and whether the final layout reduced duplication without weakening behavior coverage.
+This work is still in progress, but the coverage side is further along than this plan originally recorded. `src/coverage/mod.rs` now has a clear pure-core direction, and `tests/coverage_parse.rs` covers subdirectory invocation, missing-git handling, empty repo-root output, and contextual repo-root lookup failures. The remaining work is concentrated in `src/config.rs`, plus finishing the move and likely rename of the file-backed coverage entrypoint so the public API describes loading versus parsing more clearly.
 
 ## Context and Orientation
 
 `covgate` is a Rust CLI in `src/` with integration coverage in `tests/`. Tests inside `src/` are conventional Rust unit tests that can directly call private helpers in the same module. Tests in `tests/` are integration tests that exercise public behavior through the crate boundary, usually with real files, fixture trees, or CLI processes.
 
-The current cleanup target is limited to two modules. `src/config.rs` builds runtime configuration by combining CLI arguments, `covgate.toml`, and Git-derived defaults. Its helper `load_file_config_from_with_repo_root` currently walks ancestor directories, reads files from disk, and parses TOML in one function. `src/coverage/mod.rs` provides two entrypoints: `parse_str`, which parses a JSON string already in memory, and `parse_path`, which reads a JSON file from disk before delegating to the same parser family. `parse_str` currently also resolves the current working directory before dispatching to the format-specific parser modules. The rest of the in-module tests in this repository are already pure and should stay where they are.
+The current cleanup target is limited to two modules. `src/config.rs` builds runtime configuration by combining CLI arguments, `covgate.toml`, and Git-derived defaults. Its helper `load_file_config_from_with_repo_root` still walks ancestor directories, reads files from disk, and parses TOML in one function, and its filesystem-backed tests still live inside the module. `src/coverage/mod.rs` currently exposes a file-loading entrypoint and a string-based entrypoint, but those names do not yet clearly distinguish “load coverage JSON from disk” from “parse already-loaded coverage text with an explicit repository root.” The remaining cleanup should leave one impure file-loading wrapper named `load_from_path` and one pure explicit-repository-root parser named `parse_with_repo_root`. The format-specific modules should also expose `parse_with_repo_root` so the dispatch layer and the adapters share one vocabulary. The rest of the in-module tests in this repository are already pure and should stay where they are.
 
 In this plan, “pure unit test” means a test that operates only on in-memory values and does not create files, directories, or subprocesses. “Integration test” means a test under `tests/` that intentionally exercises a public file-backed or CLI-backed entrypoint using the operating system.
 
 ## Plan of Work
 
-Start on the coverage side with TDD. First, add a failing reproducer for the reported Coverlet bug: when `covgate` is invoked from a subdirectory and uses the Git toplevel as the repository root, an absolute path outside the repository such as `/workspace/covgate-tools/a.cs` must remain absolute rather than being mis-normalized into a fake repo-relative path. Before consolidating any logic, verify that the existing Istanbul and LLVM path-normalization tests still cover their current intended behaviors so they can serve as regression guards during refactoring.
+The path-normalization bug fix already landed, so do not reopen that work unless a new regression appears. Instead, begin from the current merged state. Confirm the existing Coverlet, Istanbul, and LLVM normalization tests still describe the intended boundaries, then leave parser behavior alone unless a cleanup clearly reduces duplication without changing semantics.
 
-Once that reproducer exists, inspect the three parser-specific normalization paths and consolidate only the behavior that is genuinely shared across formats: separator normalization, repo-relative conversion for paths actually under the repository root, and preservation of absolute paths outside the repository. Keep any format-specific preprocessing in the format adapter that truly needs it. Address the Coverlet bug through that work without regressing existing in-repo matching behavior.
+Finish the coverage-boundary cleanup by collapsing the top-level API into two responsibilities. Keep one impure file-loading wrapper named `load_from_path` that accepts a filesystem path, reads coverage JSON, resolves the repository root, and delegates. Keep one pure parser named `parse_with_repo_root` that accepts coverage text plus an explicit repository root. Remove the ambient-environment string entrypoint if no non-test caller needs it. Rename the format-specific adapter entrypoints to `parse_with_repo_root` as well so the dispatch layer and the adapters line up naturally. Move the file-backed tests for the wrapper out of `src/coverage/mod.rs` and into `tests/`. Keep `detect_format` and explicit-repository-root parsing tests in-module, because those are pure and close to the parser implementation.
 
-After the normalization fix is in place, continue with the original test-boundary purification work. In `src/config.rs`, extract the ancestor-selection logic from `load_file_config_from_with_repo_root` into a helper that accepts a starting directory and an optional repository root and returns the ordered config candidates to consider, stopping at the repository root when one is supplied. Keep this helper pure so it can be tested with `Path` and `PathBuf` values alone. Extract TOML parsing into a small helper that accepts `&str` and returns `FileConfig`. Leave a thin file-I/O layer in `load_file_config_from_with_repo_root` that iterates those candidates, checks for existence, reads the first matching `covgate.toml`, and parses it through the new helper.
+Then complete the original config-boundary cleanup. In `src/config.rs`, extract the ancestor-selection logic from `load_file_config_from_with_repo_root` into a helper that accepts a starting directory and an optional repository root and returns the ordered config candidates to consider, stopping at the repository root when one is supplied. Keep this helper pure so it can be tested with `Path` and `PathBuf` values alone. Extract TOML parsing into a small helper that accepts `&str` and returns `FileConfig`. Leave a thin file-I/O layer in `load_file_config_from_with_repo_root` that iterates those candidates, checks for existence, reads the first matching `covgate.toml`, and parses it through the new helper. While in the same module, refactor `resolve_rules` to remove the repeated “CLI value overrides config value” blocks through a small helper or data-driven pattern, but do not change rule precedence or error behavior.
+
+As part of the coverage cleanup, extract only the truly shared path-normalization primitives from the three format adapters. Shared behavior includes lexical path normalization, repo-root-relative conversion for absolute paths that are actually inside the repository, and preservation of absolute paths outside the repository. Keep format-specific preprocessing, such as string-prefix handling that is unique to a native format, inside the individual adapter module.
 
 Once that split exists, rewrite the current in-module config tests by intent. Keep pure tests in `src/config.rs` for candidate selection, CLI-versus-config precedence, and TOML parsing from strings. Move file-backed discovery tests into a new or existing integration test file under `tests/` so the actual disk behavior is still proven with temp directories. The ancestor-discovery cases should be covered twice: once as pure selection logic and once as integration behavior over a real directory tree. Read and parse failure behavior may remain integration coverage because those failures are specifically about filesystem interaction and path-context error reporting.
-
-Then finish cleaning up `src/coverage/mod.rs`. Extract a `parse_str_with_repo_root`-style helper that accepts the input string and an explicit repository root path, and make the current `parse_str` implementation a thin wrapper that performs only the environment and repository lookup before delegating. Remove the file-backed `parse_path_reads_file_and_dispatches` unit test from the module and recreate it as an integration test under `tests/`. Keep the current in-memory `detect_format` tests in `src/coverage/mod.rs`, and expand the pure parsing coverage around the explicit-repo-root entrypoint instead of relying on filesystem-backed tests for dispatch behavior. Make any further small, behavior-preserving refactors needed to keep the logic simple and to align pure tests and integration tests with the intended boundaries.
 
 Do not broaden the scope into changing parser semantics, changing config lookup behavior, or moving already-pure tests out of their modules. The goal is to align tests with the boundaries that already exist.
 
 ## Concrete Steps
 
-From the repository root, implement the work in this order:
+From the repository root, implement the remaining work in this order:
 
-1. Edit `src/config.rs` to extract a pure helper for candidate config-path selection, a pure helper for parsing `FileConfig` from TOML text, and keep file reading in a thin wrapper.
-1. Add a failing test that reproduces the Coverlet absolute-outside-repo path-normalization bug before changing production code.
-2. Confirm the existing Istanbul and LLVM normalization tests still cover their intended regression boundaries and strengthen them if needed before any consolidation.
-3. Consolidate shared path-normalization behavior across coverage parsers where possible, while preserving format-specific logic where necessary.
-4. Fix the Coverlet outside-repo absolute-path normalization bug and rerun the targeted parser tests until they pass.
-5. Edit `src/config.rs` to extract a pure helper for candidate config-path selection, a pure helper for parsing `FileConfig` from TOML text, and keep file reading in a thin wrapper.
-6. Update `src/config.rs` tests so only pure logic remains in-module.
-7. Add integration tests under `tests/` for config file discovery, repo-root stopping behavior, unknown-repo-root fallback behavior, and config read/parse failures.
-8. Edit `src/coverage/mod.rs` to introduce an explicit-repo-root parsing entrypoint and make `parse_str` a thin environment-reading wrapper.
-9. Remove the file-backed `parse_path` unit test from `src/coverage/mod.rs` and keep only pure detection and parsing tests in-module.
-10. Add an integration test under `tests/` that writes a coverage JSON file to disk and proves `coverage::parse_path` still dispatches correctly.
+1. Confirm the existing normalization regression tests still cover the current Coverlet, Istanbul, and LLVM expectations, but do not reopen parser behavior unless a cleanup is clearly behavior-preserving.
+2. On the coverage side, replace the current three-shape arrangement with two responsibilities: top-level `load_from_path` as the impure file-loading wrapper and top-level `parse_with_repo_root` as the pure explicit-repository-root parser. Remove the ambient-environment string entrypoint if no real caller needs it.
+3. Rename the format-specific adapter entrypoints in `src/coverage/llvm_json.rs`, `src/coverage/coverlet_json.rs`, and `src/coverage/istanbul_json.rs` to `parse_with_repo_root` so the dispatch layer and the adapter modules share the same name.
+4. Extract the shared coverage path-normalization primitives used by the adapters, but keep any format-specific prefix handling local to the adapter that needs it.
+5. Update callers and test names to use `load_from_path` and `parse_with_repo_root`, then remove the file-backed coverage tests from `src/coverage/mod.rs` and keep only pure detection and explicit-repository-root parsing tests in-module.
+6. Add or expand integration tests under `tests/` that write coverage JSON to disk and prove `coverage::load_from_path` still dispatches correctly for the supported parser families.
+7. Edit `src/config.rs` to extract a pure helper for candidate config-path selection, a pure helper for parsing `FileConfig` from TOML text, and keep file reading in a thin wrapper.
+8. Refactor `resolve_rules` to remove the repeated CLI-versus-config fallback pattern while preserving the current precedence and error behavior.
+9. Update `src/config.rs` tests so only pure config logic remains in-module.
+10. Add or expand integration tests under `tests/` for config file discovery, repo-root stopping behavior, unknown-repo-root fallback behavior, and config read/parse failures.
 11. Make any further small refactors needed to simplify the logic and finish the test-boundary purification cleanly.
 12. During iteration, run only the targeted tests that exercise the edited modules.
-13. Once the work is complete, run `cargo xtask validate` exactly once as the final repository check.
+13. Once the remaining work is complete, run `cargo xtask validate` exactly once as the final repository check.
 
 Expected targeted commands during implementation include:
 
     cargo test config::
     cargo test coverage::
-    cargo test --test <new-config-integration-test>
-    cargo test --test <new-coverage-integration-test>
+    cargo test --test coverage_parse
+    cargo test --test llvm_diff_regression
+    cargo test --test llvm_real_parity
+    cargo test --test <new-or-updated-config-integration-test>
 
 Expected final validation command:
 
@@ -118,11 +157,11 @@ Expected final validation command:
 
 Acceptance is behavior-based, not just structural. The work is complete when all of the following are true:
 
-The in-module tests for `src/config.rs` and `src/coverage/mod.rs` no longer create temp directories or write files. The pure config tests prove ancestor-selection, precedence logic, and TOML parsing using only in-memory paths and values. The pure coverage tests exercise format detection and parsing through an explicit-repository-root entrypoint rather than relying on `env::current_dir()`. The integration tests under `tests/` prove that `covgate.toml` is found in a parent directory, is not discovered past a known repository root, is still discovered when the repository root is unknown, and reports contextual read and parse failures when the discovered file cannot be read or parsed. The integration coverage for `coverage::parse_path` proves that a real JSON file on disk is read and dispatched into the correct parser family.
+The in-module tests for `src/config.rs` and `src/coverage/mod.rs` no longer create temp directories or write files. The pure config tests prove ancestor-selection, precedence logic, TOML parsing using only in-memory paths and values, and the preserved CLI-over-config rule precedence after the `resolve_rules` cleanup. The pure coverage tests exercise format detection and `parse_with_repo_root` without relying on `env::current_dir()` or file I/O. The integration tests under `tests/` prove that `covgate.toml` is found in a parent directory, is not discovered past a known repository root, is still discovered when the repository root is unknown, and reports contextual read and parse failures when the discovered file cannot be read or parsed. The integration coverage for `coverage::load_from_path` proves that a real coverage file on disk is read and dispatched into the correct parser family.
 
-The Coverlet regression is reproduced first by a failing test, then fixed so that absolute paths outside the repository remain absolute instead of being converted into fake repo-relative paths. Any consolidation of path normalization preserves the existing intended Istanbul and LLVM behaviors, with tests that would fail if shared normalization regressed those formats.
+The Coverlet regression remains fixed so that absolute paths outside the repository stay absolute instead of being converted into fake repo-relative paths. Any extracted shared path-normalization helper must preserve the existing intended Istanbul and LLVM behaviors, with tests that would fail if the shared logic regressed those formats.
 
-Run the targeted test commands from the repository root while iterating and expect them to pass after the refactor. Before closing the work, run `cargo xtask validate` from the repository root and expect the repository validation to pass. Per `AGENTS.md`, do not run `cargo xtask quick` in addition to that final validation step.
+Run the targeted test commands from the repository root while iterating and expect them to pass after the refactor. `cargo test --test coverage_parse` already passes in the merged state and should continue to pass while the remaining cleanup lands. Before closing the work, run `cargo xtask validate` from the repository root and expect the repository validation to pass. Per `AGENTS.md`, do not run `cargo xtask quick` in addition to that final validation step.
 
 ## Idempotence and Recovery
 
@@ -130,7 +169,7 @@ This work is safe to repeat because it only rearranges test boundaries and intro
 
 ## Artifacts and Notes
 
-The current impure in-module test blocks that this plan is expected to replace or split are:
+The current impure in-module test blocks that still need to be replaced or split are:
 
     src/config.rs:
       - loads_repo_config_file_when_present
@@ -141,7 +180,7 @@ The current impure in-module test blocks that this plan is expected to replace o
       - reports_parse_errors_for_parent_directory_config_candidates
 
     src/coverage/mod.rs:
-      - parse_path_reads_file_and_dispatches
+      - file-loading coverage entrypoint tests currently named with `parse_path_*`, to be renamed around `load_from_path`
 
 The desired end state is:
 
@@ -156,12 +195,17 @@ The desired end state is:
     Integration tests:
       - config discovery over real directory trees
       - config file read and parse failures with real paths
-      - coverage file reading through parse_path
+      - coverage file reading through `load_from_path`
+      - repository-root lookup behavior for string parsing entrypoints
 
 ## Interfaces and Dependencies
 
 The implementation should keep using the existing standard-library and crate dependencies already present in the repository: `std::path::{Path, PathBuf}`, `std::fs`, `tempfile`, `toml`, `serde_json`, and the existing public coverage and config interfaces. In `src/config.rs`, introduce a private helper that exposes the config-candidate selection boundary in a pure form. Its exact name may vary, but it must accept the same core inputs as `load_file_config_from_with_repo_root`: a starting directory and an optional repository root. Add a second private helper that parses `FileConfig` from TOML text. `load_file_config_from_with_repo_root` should remain the public-in-module orchestration point that performs the actual file read and parse work using those helpers.
 
-In `src/coverage/mod.rs`, introduce a parsing entrypoint that accepts both the coverage text and an explicit repository root path, then make the existing `parse_str` function a thin wrapper that resolves the current directory and delegates. `parse_path` should remain the file-reading entrypoint that reads text from disk and delegates into the string-based parser path.
+In `src/coverage/mod.rs`, the desired end state is one pure parser named `parse_with_repo_root` that accepts both coverage text and an explicit repository root path, plus one impure wrapper named `load_from_path` that loads coverage data from a filesystem path and delegates. In `src/coverage/llvm_json.rs`, `src/coverage/coverlet_json.rs`, and `src/coverage/istanbul_json.rs`, the format-specific adapter entrypoints should also be named `parse_with_repo_root` so the dispatch layer and adapter modules share a consistent naming scheme.
 
 Revision note: created this ExecPlan to turn the current verbal classification of impure `src/` tests into a concrete, repository-specific implementation plan with explicit file targets and validation expectations.
+
+Revision note (2026-03-31): updated this ExecPlan after the merge to reflect that the Coverlet normalization fix and `parse_str`/repo-root integration coverage are already in place, while config-boundary cleanup and `parse_path` test relocation remain outstanding.
+
+Revision note (2026-03-31, later): updated this ExecPlan again during planning to simplify the target coverage API to `load_from_path` plus `parse_with_repo_root`, and to align the format adapter modules on the same `parse_with_repo_root` naming.
