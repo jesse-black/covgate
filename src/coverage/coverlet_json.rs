@@ -10,7 +10,9 @@ use crate::model::{
     CoverageOpportunity, CoverageReport, FileTotals, MetricKind, OpportunityKind, SourceSpan,
 };
 
-pub(crate) fn parse_str_with_repo_root(input: &str, repo_root: &Path) -> Result<CoverageReport> {
+use super::path::{lexical_normalize, relativize_absolute_path};
+
+pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<CoverageReport> {
     let export: HashMap<String, HashMap<String, serde_json::Value>> =
         serde_json::from_str(input).context("failed to parse coverlet json")?;
 
@@ -155,19 +157,7 @@ fn normalize_path(value: &str, repo_root: &Path) -> PathBuf {
         return lexical_normalize(Path::new(trimmed));
     }
 
-    let path = lexical_normalize(Path::new(&normalized_value));
-    let repo_root = lexical_normalize(repo_root);
-    if path.is_absolute() {
-        path.strip_prefix(&repo_root)
-            .map(lexical_normalize)
-            .unwrap_or(path)
-    } else {
-        path
-    }
-}
-
-fn lexical_normalize(path: impl AsRef<Path>) -> PathBuf {
-    path.as_ref().components().collect()
+    relativize_absolute_path(Path::new(&normalized_value), repo_root)
 }
 
 #[derive(Debug, Deserialize)]
@@ -214,7 +204,7 @@ mod tests {
 
     use crate::model::{MetricKind, OpportunityKind};
 
-    use super::{normalize_path, parse_str_with_repo_root};
+    use super::{normalize_path, parse_with_repo_root};
 
     #[test]
     fn parses_coverlet_lines_and_branches() {
@@ -239,7 +229,7 @@ mod tests {
         }
         "#;
 
-        let report = parse_str_with_repo_root(input, Path::new("/workspace/covgate"))
+        let report = parse_with_repo_root(input, Path::new("/workspace/covgate"))
             .expect("coverlet json should parse");
 
         let line_totals = report
@@ -285,7 +275,7 @@ mod tests {
         }
         "#;
 
-        let report = parse_str_with_repo_root(input, Path::new("/workspace/covgate"))
+        let report = parse_with_repo_root(input, Path::new("/workspace/covgate"))
             .expect("coverlet json should parse");
 
         let function_ops: Vec<_> = report
@@ -328,7 +318,7 @@ mod tests {
         }
         "#;
 
-        let report = parse_str_with_repo_root(input, Path::new("/workspace/covgate"))
+        let report = parse_with_repo_root(input, Path::new("/workspace/covgate"))
             .expect("coverlet json should parse");
 
         let line_totals = report
@@ -357,7 +347,7 @@ mod tests {
         }
         "#;
 
-        let report = parse_str_with_repo_root(input, Path::new("/workspace/covgate"))
+        let report = parse_with_repo_root(input, Path::new("/workspace/covgate"))
             .expect("coverlet json should parse");
         let lines: Vec<_> = report
             .opportunities
@@ -382,7 +372,7 @@ mod tests {
         }
         "#;
 
-        let report = parse_str_with_repo_root(input, Path::new("/workspace/covgate"))
+        let report = parse_with_repo_root(input, Path::new("/workspace/covgate"))
             .expect("coverlet json should parse");
         let line_totals = report
             .totals_by_file
@@ -415,7 +405,7 @@ mod tests {
         }
         "#;
 
-        let report = parse_str_with_repo_root(input, Path::new("/workspace/covgate"))
+        let report = parse_with_repo_root(input, Path::new("/workspace/covgate"))
             .expect("coverlet json should parse");
 
         assert!(!report.totals_by_file.contains_key(&MetricKind::Function));

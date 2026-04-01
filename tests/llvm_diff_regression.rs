@@ -33,7 +33,7 @@ fn load_changed_metric(
     env::set_current_dir(&worktree)?;
 
     let result = (|| {
-        let report = coverage::parse_path(&coverage_json)?;
+        let report = coverage::load_from_path(&coverage_json)?;
         let diff = diff::load_changed_lines(&diff::DiffSource::DiffFile(diff_file))?;
         compute_changed_metric(&report, &diff, metric)
     })();
@@ -58,7 +58,7 @@ fn load_changed_metric_from_subdir(
     env::set_current_dir(worktree.join(subdir))?;
 
     let result = (|| {
-        let report = coverage::parse_path(&coverage_json)?;
+        let report = coverage::load_from_path(&coverage_json)?;
         let diff = diff::load_changed_lines(&diff::DiffSource::DiffFile(diff_file))?;
         compute_changed_metric(&report, &diff, metric)
     })();
@@ -90,7 +90,7 @@ fn load_real_fixture_changed_metric(
     env::set_current_dir(env!("CARGO_MANIFEST_DIR"))?;
 
     let result = (|| {
-        let report = coverage::parse_path(&coverage_json)?;
+        let report = coverage::load_from_path(&coverage_json)?;
         let diff = diff::load_changed_lines(&diff::DiffSource::DiffFile(diff_file))?;
         compute_changed_metric(&report, &diff, metric)
     })();

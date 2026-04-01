@@ -6,9 +6,9 @@ use std::sync::Mutex;
 use tempfile::tempdir;
 
 use covgate::git::{
-    RECORDED_BASE_REF, create_ref, diff_with_unified_zero, discover_base_ref, ensure_available,
-    list_untracked_files, merge_base, record_base_ref, resolve_head_sha, resolve_ref_sha,
-    resolve_repo_root,
+    GIT_REPOSITORY_REQUIRED_MESSAGE, GIT_REQUIRED_MESSAGE, RECORDED_BASE_REF, create_ref,
+    diff_with_unified_zero, discover_base_ref, list_untracked_files, merge_base, record_base_ref,
+    resolve_head_sha, resolve_ref_sha, resolve_repo_root,
 };
 use support::run_git;
 
@@ -269,68 +269,28 @@ fn resolve_repo_root_reports_missing_git_command() {
 
     with_path_override("", || {
         let err = resolve_repo_root().expect_err("resolve_repo_root should fail");
-        assert!(
-            err.to_string()
-                .contains("failed to run git rev-parse for repository root")
-        );
+        assert!(err.to_string().contains(GIT_REQUIRED_MESSAGE));
     });
 }
 
 #[test]
-fn ensure_available_reports_missing_git_command() {
-    let _lock = CWD_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
-
-    with_path_override("", || {
-        let err = ensure_available().expect_err("ensure_available should fail");
-        assert!(
-            err.to_string()
-                .contains("git is required to run covgate but was not found in PATH")
-        );
-    });
-}
-
-#[test]
-fn ensure_available_reports_failed_version_without_stderr() {
+fn nonzero_git_command_preserves_specific_failure_message() {
     let _lock = CWD_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
 
     with_fake_git(
         r#"#!/usr/bin/env bash
-if [ "$1" = "--version" ]; then
-  exit 1
+if [ "$1" = "merge-base" ]; then
+  printf 'merge-base failed\n' >&2
+  exit 2
 fi
 printf 'unexpected args: %s\n' "$*" >&2
 exit 99
 "#,
         || {
-            let err = ensure_available().expect_err("ensure_available should fail");
+            let err = merge_base("main", "HEAD").expect_err("merge-base should fail");
             assert!(
                 err.to_string()
-                    .contains("git is required to run covgate but `git --version` failed"),
-                "err={err:#}"
-            );
-        },
-    );
-}
-
-#[test]
-fn ensure_available_reports_failed_version_with_stderr() {
-    let _lock = CWD_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
-
-    with_fake_git(
-        r#"#!/usr/bin/env bash
-if [ "$1" = "--version" ]; then
-  printf 'version failed\n' >&2
-  exit 1
-fi
-printf 'unexpected args: %s\n' "$*" >&2
-exit 99
-"#,
-        || {
-            let err = ensure_available().expect_err("ensure_available should fail");
-            assert!(
-                err.to_string().contains(
-                    "git is required to run covgate but `git --version` failed: version failed"
-                ),
+                    .contains("git merge-base failed with status"),
                 "err={err:#}"
             );
         },
@@ -362,8 +322,7 @@ fn resolve_head_fails_outside_git_repo() {
     let err = resolve_head_sha().expect_err("HEAD lookup should fail outside git repo");
     let message = err.to_string();
     assert!(
-        message.contains("failed to resolve HEAD commit")
-            || message.contains("failed to run git rev-parse for HEAD"),
+        message.contains(GIT_REPOSITORY_REQUIRED_MESSAGE),
         "message={message}"
     );
 }
@@ -374,26 +333,14 @@ fn resolve_head_ref_and_create_ref_report_when_git_command_is_missing() {
 
     with_path_override("", || {
         let head_err = resolve_head_sha().expect_err("resolve_head_sha should fail");
-        assert!(
-            head_err
-                .to_string()
-                .contains("failed to run git rev-parse for HEAD")
-        );
+        assert!(head_err.to_string().contains(GIT_REQUIRED_MESSAGE));
 
         let resolve_err = resolve_ref_sha("HEAD").expect_err("resolve_ref_sha should fail");
-        assert!(
-            resolve_err
-                .to_string()
-                .contains("failed to run git rev-parse")
-        );
+        assert!(resolve_err.to_string().contains(GIT_REQUIRED_MESSAGE));
 
         let create_err =
             create_ref("refs/worktree/covgate/base", "HEAD").expect_err("create_ref should fail");
-        assert!(
-            create_err
-                .to_string()
-                .contains("failed to run git update-ref")
-        );
+        assert!(create_err.to_string().contains(GIT_REQUIRED_MESSAGE));
     });
 }
 
@@ -427,7 +374,7 @@ fn merge_base_reports_missing_git_command() {
     with_path_override("", || {
         let err = merge_base("main", "HEAD").expect_err("missing git should fail");
         assert!(
-            err.to_string().contains("failed to run git merge-base"),
+            err.to_string().contains(GIT_REQUIRED_MESSAGE),
             "err={err:#}"
         );
     });
@@ -525,14 +472,51 @@ exit 99
 }
 
 #[test]
+fn record_base_detached_head_ancestor_check_treats_exit_zero_as_ancestor() {
+    let _lock = CWD_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
+
+    let temp = tempdir().expect("tempdir should exist");
+    let marker_path = temp.path().join("covgate-base-branch");
+    let script = format!(
+        r#"#!/bin/sh
+if [ "$1" = "rev-parse" ] && [ "$2" = "--verify" ] && [ "$3" = "HEAD^{{commit}}" ]; then
+  printf 'head-sha\n'
+  exit 0
+fi
+if [ "$1" = "symbolic-ref" ] && [ "$2" = "--quiet" ] && [ "$3" = "--short" ]; then
+  exit 1
+fi
+if [ "$1" = "rev-parse" ] && [ "$2" = "--verify" ] && [ "$3" = "--quiet" ]; then
+  printf 'recorded-sha\n'
+  exit 0
+fi
+if [ "$1" = "rev-parse" ] && [ "$2" = "--git-path" ]; then
+  printf '%s\n' "{}"
+  exit 0
+fi
+if [ "$1" = "merge-base" ] && [ "$2" = "--is-ancestor" ]; then
+  exit 0
+fi
+printf 'unexpected args: %s\n' "$*" >&2
+exit 99
+"#,
+        marker_path.display()
+    );
+
+    with_fake_git(&script, || {
+        let recorded = record_base_ref().expect("record-base should succeed");
+        assert_eq!(recorded, "recorded-sha");
+    });
+}
+
+#[test]
 fn list_untracked_files_reports_missing_git_command() {
     let _lock = CWD_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
 
     with_path_override("", || {
         let err = list_untracked_files().expect_err("missing git should fail");
         assert!(
-            err.to_string()
-                .contains("failed to run git ls-files for untracked files"),
+            err.to_string().contains(GIT_REQUIRED_MESSAGE),
             "err={err:#}"
         );
     });

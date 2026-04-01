@@ -145,7 +145,7 @@ fn run_with_git_base_requires_git_repo_for_coverage_path_normalization() {
     let err = run(git_base_config(fixture.coverage_json())).expect_err("run should fail");
     assert!(
         err.to_string()
-            .contains("coverage path normalization requires a git repository"),
+            .contains("covgate requires a git repository to run"),
         "error={err:?}"
     );
 }

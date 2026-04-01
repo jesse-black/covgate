@@ -11,7 +11,9 @@ use crate::model::{
     CoverageOpportunity, CoverageReport, FileTotals, MetricKind, OpportunityKind, SourceSpan,
 };
 
-pub(crate) fn parse_str_with_repo_root(input: &str, repo_root: &Path) -> Result<CoverageReport> {
+use super::path::relativize_absolute_path;
+
+pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<CoverageReport> {
     let export: LlvmExport = serde_json::from_str(input).context("failed to parse llvm json")?;
     let mut opportunities = Vec::new();
     let mut region_totals_by_file = BTreeMap::new();
@@ -214,19 +216,7 @@ pub(crate) fn parse_str_with_repo_root(input: &str, repo_root: &Path) -> Result<
 }
 
 fn normalize_path(value: &str, repo_root: &Path) -> PathBuf {
-    let path = lexical_normalize(Path::new(value));
-    let repo_root = lexical_normalize(repo_root);
-    if path.is_absolute() {
-        path.strip_prefix(&repo_root)
-            .map(lexical_normalize)
-            .unwrap_or(path)
-    } else {
-        path
-    }
-}
-
-fn lexical_normalize(path: impl AsRef<Path>) -> PathBuf {
-    path.as_ref().components().collect()
+    relativize_absolute_path(Path::new(value), repo_root)
 }
 
 fn normalize_function_path(value: &str, repo_root: &Path, known_file_paths: &[PathBuf]) -> PathBuf {
@@ -486,10 +476,10 @@ fn bool_at(values: &[serde_json::Value], index: usize) -> Option<bool> {
 mod tests {
     use std::path::{Path, PathBuf};
 
-    use super::{normalize_llvm_function_name, normalize_path, parse_str_with_repo_root};
+    use super::{normalize_llvm_function_name, normalize_path, parse_with_repo_root};
 
     fn parse_str(input: &str) -> anyhow::Result<crate::model::CoverageReport> {
-        parse_str_with_repo_root(input, Path::new("/workspace/covgate"))
+        parse_with_repo_root(input, Path::new("/workspace/covgate"))
     }
 
     #[test]
