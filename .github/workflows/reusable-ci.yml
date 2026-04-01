@@ -14,7 +14,7 @@ jobs:
         with:
           toolchain: stable
           components: clippy, rustfmt
-      - uses: taiki-e/install-action@cd3548cd4edc365cc6652d1d62387d6015646e92 # main
+      - uses: taiki-e/install-action@bfadeaba214680fb4ab63e710bcb2a6a17019fdc # main
         with:
           tool: cargo-llvm-cov@0.8.5
       - name: Format
@@ -35,7 +35,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@efa25f7f19611383d5b0ccf2d1c8914531636bf9 # master
         with:
           toolchain: stable
-      - uses: taiki-e/install-action@cd3548cd4edc365cc6652d1d62387d6015646e92 # main
+      - uses: taiki-e/install-action@bfadeaba214680fb4ab63e710bcb2a6a17019fdc # main
         with:
           tool: cargo-machete@0.9.1
       - name: Dependency hygiene
@@ -48,7 +48,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@efa25f7f19611383d5b0ccf2d1c8914531636bf9 # master
         with:
           toolchain: stable
-      - uses: taiki-e/install-action@cd3548cd4edc365cc6652d1d62387d6015646e92 # main
+      - uses: taiki-e/install-action@bfadeaba214680fb4ab63e710bcb2a6a17019fdc # main
         with:
           tool: cargo-deny@0.19.0
       - name: Dependency policy
