@@ -184,6 +184,25 @@ fn help_lists_record_base_as_subcommand() {
 }
 
 #[test]
+fn version_switches_report_current_binary_version() {
+    let temp = tempdir().expect("tempdir should exist");
+
+    for args in [
+        vec!["--version".to_string()],
+        vec!["-V".to_string()],
+        vec!["-v".to_string()],
+    ] {
+        let output = run_covgate_raw(temp.path(), &args);
+        assert_eq!(output.status.code(), Some(0), "args={args:?}");
+        let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+        assert!(
+            stdout.contains(env!("CARGO_PKG_VERSION")),
+            "args={args:?} stdout={stdout}"
+        );
+    }
+}
+
+#[test]
 fn check_help_describes_arguments_and_options() {
     let temp = tempdir().expect("tempdir should exist");
 

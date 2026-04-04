@@ -1,9 +1,17 @@
-use clap::{Args as ClapArgs, Parser, Subcommand};
+use clap::{ArgAction, Args as ClapArgs, Parser, Subcommand};
 use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
-#[command(name = "covgate", about = "Diff-focused coverage gate")]
+#[command(
+    name = "covgate",
+    about = "Diff-focused coverage gate",
+    version,
+    disable_version_flag = true
+)]
 pub struct Cli {
+    #[arg(short = 'v', short_alias = 'V', long = "version", action = ArgAction::Version)]
+    _version: Option<bool>,
+
     #[command(subcommand)]
     pub command: Command,
 }
