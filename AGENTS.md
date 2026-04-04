@@ -2,7 +2,7 @@
 
 ## Development Process
 ### Must Follow
-- ALWAYS run `cargo xtask validate` before declaring code changes complete unless the the change is documentation only.
+- ALWAYS run `cargo xtask validate` before declaring code changes complete unless the the change is documentation only or CI only.
 - NEVER declare work complete after `cargo xtask quick` alone.
 - NEVER run `cargo xtask quick` and `cargo xtask validate` at the same time for the same check pass.
 - ALWAYS address bug reports and review findings with TDD: first reproduce the issue in a failing test, then fix the issue and rerun the relevant tests until they pass.
