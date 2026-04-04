@@ -23,6 +23,7 @@ changelog:
         - ci
         - refactor
         - test
+        - dependencies
   exclude:
     labels:
       - skip-release-notes
