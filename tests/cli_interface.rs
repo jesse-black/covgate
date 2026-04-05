@@ -576,7 +576,7 @@ fn markdown_summary_rust_fixture() {
     assert!(markdown.contains("## Covgate"));
     assert!(markdown.contains("### Diff Coverage"));
     assert!(markdown.contains("| Result | Rule | Observed | Configured |"));
-    assert!(markdown.contains("| PASS | `fail-under-regions` | 100.00% | ≥ 90.00% |"));
+    assert!(markdown.contains("| ✅PASS | `fail-under-regions` | 100.00% | ≥ 90.00% |"));
     assert!(markdown.contains(
         "| File | Covered Changed Regions | Changed Regions | Coverage | Missed Changed Spans |"
     ));

@@ -13,7 +13,7 @@ pub fn render(result: &GateResult, _diff_description: &str) -> String {
     out.push_str("| Result | Rule | Observed | Configured |\n");
     out.push_str("| --- | --- | ---: | ---: |\n");
     for outcome in &result.rules {
-        let status = if outcome.passed { "PASS" } else { "FAIL" };
+        let status = if outcome.passed { "✅PASS" } else { "❌FAIL" };
         match &outcome.rule {
             crate::model::GateRule::Percent {
                 minimum_percent, ..
@@ -210,7 +210,7 @@ mod tests {
 
         let rendered = render(&result, "origin/main...HEAD");
         assert!(rendered.contains("| Result | Rule | Observed | Configured |"));
-        assert!(rendered.contains("| FAIL | `fail-under-regions` | 50.00% | ≥ 90.00% |"));
+        assert!(rendered.contains("| ❌FAIL | `fail-under-regions` | 50.00% | ≥ 90.00% |"));
         assert!(rendered.contains(
             "| File | Covered Changed Regions | Changed Regions | Coverage | Missed Changed Spans |"
         ));
@@ -291,6 +291,52 @@ mod tests {
             "| File | Covered Changed Lines | Changed Lines | Coverage | Missed Changed Spans |"
         ));
         assert!(rendered.contains("| File | Covered Lines | Lines | Missed Lines | Coverage |"));
+    }
+
+    #[test]
+    fn renders_rule_status_with_unicode_icons() {
+        let result = GateResult {
+            metrics: vec![crate::model::ComputedMetric {
+                metric: MetricKind::Region,
+                covered: 2,
+                total: 2,
+                percent: 100.0,
+                uncovered_changed_opportunities: Vec::new(),
+                changed_totals_by_file: BTreeMap::from([(
+                    PathBuf::from("src/lib.rs"),
+                    FileTotals {
+                        covered: 2,
+                        total: 2,
+                    },
+                )]),
+                totals_by_file: BTreeMap::new(),
+            }],
+            rules: vec![
+                RuleOutcome {
+                    rule: GateRule::Percent {
+                        metric: MetricKind::Region,
+                        minimum_percent: 90.0,
+                    },
+                    passed: true,
+                    observed_percent: 100.0,
+                    observed_uncovered_count: 0,
+                },
+                RuleOutcome {
+                    rule: GateRule::UncoveredCount {
+                        metric: MetricKind::Region,
+                        maximum_count: 0,
+                    },
+                    passed: false,
+                    observed_percent: 100.0,
+                    observed_uncovered_count: 1,
+                },
+            ],
+            passed: false,
+        };
+
+        let rendered = render(&result, "origin/main...HEAD");
+        assert!(rendered.contains("| ✅PASS | `fail-under-regions` | 100.00% | ≥ 90.00% |"));
+        assert!(rendered.contains("| ❌FAIL | `fail-uncovered-regions` | 1 | ≤ 0 |"));
     }
 
     #[test]
