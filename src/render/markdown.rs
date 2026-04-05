@@ -83,17 +83,21 @@ pub fn render(result: &GateResult, _diff_description: &str) -> String {
                 })
                 .unwrap_or_default();
             out.push_str(&format!(
-                "| `{}` | {} | {} | {:.2}% | {} |\n",
+                "| `{}` | {} | {} | {:.2}% {} | {} |\n",
                 path.display(),
                 totals.covered,
                 totals.total,
                 percent,
+                coverage_circle(percent),
                 missed
             ));
         }
         out.push_str(&format!(
-            "| **Total** | **{}** | **{}** | **{:.2}%** |  |\n",
-            metric.covered, metric.total, metric.percent
+            "| **Total** | **{}** | **{}** | **{:.2}% {}** |  |\n",
+            metric.covered,
+            metric.total,
+            metric.percent,
+            coverage_circle(metric.percent)
         ));
         out.push('\n');
     }
@@ -114,12 +118,13 @@ pub fn render(result: &GateResult, _diff_description: &str) -> String {
             };
             let missed = totals.total.saturating_sub(totals.covered);
             out.push_str(&format!(
-                "| `{}` | {} | {} | {} | {:.2}% |\n",
+                "| `{}` | {} | {} | {} | {:.2}% {} |\n",
                 path.display(),
                 totals.covered,
                 totals.total,
                 missed,
-                percent
+                percent,
+                coverage_circle(percent)
             ));
         }
         let overall_covered: usize = metric
@@ -139,8 +144,12 @@ pub fn render(result: &GateResult, _diff_description: &str) -> String {
         };
         let overall_missed = overall_total.saturating_sub(overall_covered);
         out.push_str(&format!(
-            "| **Total** | **{}** | **{}** | **{}** | **{:.2}%** |\n",
-            overall_covered, overall_total, overall_missed, overall_percent
+            "| **Total** | **{}** | **{}** | **{}** | **{:.2}% {}** |\n",
+            overall_covered,
+            overall_total,
+            overall_missed,
+            overall_percent,
+            coverage_circle(overall_percent)
         ));
         out.push('\n');
     }
@@ -153,6 +162,16 @@ fn title_case(value: &str) -> String {
     match chars.next() {
         Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
         None => String::new(),
+    }
+}
+
+fn coverage_circle(percent: f64) -> &'static str {
+    if percent < 50.0 {
+        "🔴"
+    } else if percent < 80.0 {
+        "🟡"
+    } else {
+        "🟢"
     }
 }
 
@@ -214,13 +233,13 @@ mod tests {
         assert!(rendered.contains(
             "| File | Covered Changed Regions | Changed Regions | Coverage | Missed Changed Spans |"
         ));
-        assert!(rendered.contains("| `src/lib.rs` | 1 | 2 | 50.00% |"));
-        assert!(rendered.contains("| **Total** | **1** | **2** | **50.00%** |  |"));
+        assert!(rendered.contains("| `src/lib.rs` | 1 | 2 | 50.00% 🟡 |"));
+        assert!(rendered.contains("| **Total** | **1** | **2** | **50.00% 🟡** |  |"));
         assert!(
             rendered.contains("| File | Covered Regions | Regions | Missed Regions | Coverage |")
         );
-        assert!(rendered.contains("| `src/lib.rs` | 3 | 4 | 1 | 75.00% |"));
-        assert!(rendered.contains("| **Total** | **3** | **4** | **1** | **75.00%** |"));
+        assert!(rendered.contains("| `src/lib.rs` | 3 | 4 | 1 | 75.00% 🟡 |"));
+        assert!(rendered.contains("| **Total** | **3** | **4** | **1** | **75.00% 🟡** |"));
         assert!(rendered.contains("### Overall Coverage"));
         assert!(!rendered.contains("Informational only. Does not affect the gate result in v1."));
     }
@@ -337,6 +356,75 @@ mod tests {
         let rendered = render(&result, "origin/main...HEAD");
         assert!(rendered.contains("| ✅PASS | `fail-under-regions` | 100.00% | ≥ 90.00% |"));
         assert!(rendered.contains("| ❌FAIL | `fail-uncovered-regions` | 1 | ≤ 0 |"));
+    }
+
+    #[test]
+    fn renders_coverage_with_threshold_circles() {
+        let result = GateResult {
+            metrics: vec![crate::model::ComputedMetric {
+                metric: MetricKind::Region,
+                covered: 1,
+                total: 3,
+                percent: 33.33,
+                uncovered_changed_opportunities: Vec::new(),
+                changed_totals_by_file: BTreeMap::from([
+                    (
+                        PathBuf::from("src/red.rs"),
+                        FileTotals {
+                            covered: 0,
+                            total: 3,
+                        },
+                    ),
+                    (
+                        PathBuf::from("src/yellow.rs"),
+                        FileTotals {
+                            covered: 1,
+                            total: 2,
+                        },
+                    ),
+                    (
+                        PathBuf::from("src/green.rs"),
+                        FileTotals {
+                            covered: 4,
+                            total: 4,
+                        },
+                    ),
+                ]),
+                totals_by_file: BTreeMap::from([
+                    (
+                        PathBuf::from("src/red.rs"),
+                        FileTotals {
+                            covered: 2,
+                            total: 5,
+                        },
+                    ),
+                    (
+                        PathBuf::from("src/yellow.rs"),
+                        FileTotals {
+                            covered: 3,
+                            total: 4,
+                        },
+                    ),
+                    (
+                        PathBuf::from("src/green.rs"),
+                        FileTotals {
+                            covered: 5,
+                            total: 5,
+                        },
+                    ),
+                ]),
+            }],
+            rules: vec![],
+            passed: true,
+        };
+
+        let rendered = render(&result, "origin/main...HEAD");
+        assert!(rendered.contains("| `src/red.rs` | 0 | 3 | 0.00% 🔴 |"));
+        assert!(rendered.contains("| `src/yellow.rs` | 1 | 2 | 50.00% 🟡 |"));
+        assert!(rendered.contains("| `src/green.rs` | 4 | 4 | 100.00% 🟢 |"));
+        assert!(rendered.contains("| `src/red.rs` | 2 | 5 | 3 | 40.00% 🔴 |"));
+        assert!(rendered.contains("| `src/yellow.rs` | 3 | 4 | 1 | 75.00% 🟡 |"));
+        assert!(rendered.contains("| `src/green.rs` | 5 | 5 | 0 | 100.00% 🟢 |"));
     }
 
     #[test]
