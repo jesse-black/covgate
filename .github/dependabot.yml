@@ -7,6 +7,8 @@ updates:
     labels:
       - ci
       - dependencies
+    ignore:
+      - dependency-name: "taiki-e/install-action"
     groups:
       ci-minor-patch:
         patterns:
@@ -22,25 +24,6 @@ updates:
     labels:
       - dependencies
     groups:
-      rust-development-tools:
-        patterns:
-          - "assert_cmd"
-          - "criterion"
-          - "insta"
-          - "mockall"
-          - "predicates"
-          - "pretty_assertions"
-          - "proptest"
-          - "rstest"
-          - "serial_test"
-          - "snapbox"
-          - "tempfile"
-          - "tokio-test"
-          - "trycmd"
-          - "wiremock"
-        update-types:
-          - minor
-          - patch
       rust-minor-patch:
         patterns:
           - "*"
