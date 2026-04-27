@@ -1,0 +1,8 @@
+[toolchain]
+channel = "1.95.0"
+components = [
+  "clippy",
+  "llvm-tools-preview",
+  "rust-src",
+  "rustfmt",
+]
