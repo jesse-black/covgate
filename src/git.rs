@@ -228,7 +228,7 @@ pub fn discover_base_ref() -> Result<Option<String>> {
     for candidate in STANDARD_BASE_REFS
         .iter()
         .copied()
-        .chain([RECORDED_BASE_REF].into_iter())
+        .chain([RECORDED_BASE_REF])
     {
         if resolve_ref_sha(candidate)?.is_some() {
             return Ok(Some(candidate.to_string()));
