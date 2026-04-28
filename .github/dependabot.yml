@@ -47,3 +47,10 @@ updates:
         update-types:
           - minor
           - patch
+
+  - package-ecosystem: rust-toolchain
+    directory: "/"
+    schedule:
+      interval: weekly
+    labels:
+      - dependencies
