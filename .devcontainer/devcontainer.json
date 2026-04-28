@@ -1,0 +1,36 @@
+{
+	"name": "covgate",
+	"image": "mcr.microsoft.com/devcontainers/base:trixie",
+	"features": {
+		"ghcr.io/devcontainers/features/nix:1": {
+			"multiUser": false,
+			"extraNixConfig": "experimental-features = nix-command flakes"
+		}
+	},
+	"runArgs": [
+		"--name=covgate"
+	],
+	"containerEnv": {
+		"HOME_LOCAL_NIX": "${containerWorkspaceFolder}/.devcontainer/local.nix",
+		"WORKSPACE_FOLDER": "${containerWorkspaceFolder}"
+	},
+	"remoteEnv": {
+		"PATH": "/home/vscode/.nix-profile/bin:/home/vscode/.cargo/bin:${containerEnv:PATH}"
+	},
+	"postCreateCommand": "bash .devcontainer/post-create-command.sh",
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"openai.chatgpt",
+				"redhat.vscode-yaml",
+				"ms-azuretools.vscode-containers",
+				"anthropic.claude-code",
+				"jnoortheen.nix-ide",
+				"codesmith.markdown-inline-editor-vscode",
+				"yzhang.markdown-all-in-one",
+				"rust-lang.rust-analyzer",
+				"tamasfe.even-better-toml"
+			]
+		}
+	}
+}
