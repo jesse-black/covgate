@@ -24,6 +24,7 @@ pub struct Config {
 }
 
 #[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 struct FileConfig {
     base: Option<String>,
     markdown_output: Option<PathBuf>,
@@ -32,6 +33,7 @@ struct FileConfig {
 }
 
 #[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 struct GateConfig {
     fail_under_regions: Option<f64>,
     fail_under_lines: Option<f64>,
@@ -268,7 +270,7 @@ mod tests {
     #[test]
     fn prefers_cli_over_config_defaults() {
         let file_config: FileConfig = toml::from_str(
-            "base = \"main\"\n[gates]\nfail_under_regions = 40\nfail_uncovered_regions = 5\n",
+            "base = \"main\"\n[gates]\nfail-under-regions = 40\nfail-uncovered-regions = 5\n",
         )
         .expect("config should parse");
 
@@ -309,7 +311,7 @@ mod tests {
     #[test]
     fn loads_defaults_from_repo_config() {
         let file_config: FileConfig = toml::from_str(
-            "base = \"main\"\n[gates]\nfail_under_regions = 75\nfail_uncovered_lines = 2\n",
+            "base = \"main\"\n[gates]\nfail-under-regions = 75\nfail-uncovered-lines = 2\n",
         )
         .expect("config should parse");
 
@@ -350,7 +352,7 @@ mod tests {
     #[test]
     fn loads_function_rules_from_repo_config() {
         let file_config: FileConfig = toml::from_str(
-            "base = \"main\"\n[gates]\nfail_under_functions = 100\nfail_uncovered_functions = 0\n",
+            "base = \"main\"\n[gates]\nfail-under-functions = 100\nfail-uncovered-functions = 0\n",
         )
         .expect("config should parse");
 
@@ -385,7 +387,7 @@ mod tests {
     #[test]
     fn cli_function_rules_override_repo_config_defaults() {
         let file_config: FileConfig = toml::from_str(
-            "base = \"main\"\n[gates]\nfail_under_functions = 100\nfail_uncovered_functions = 0\n",
+            "base = \"main\"\n[gates]\nfail-under-functions = 100\nfail-uncovered-functions = 0\n",
         )
         .expect("config should parse");
 
@@ -461,7 +463,7 @@ mod tests {
     #[test]
     fn parses_file_config_from_toml_text() {
         let config = parse_file_config(
-            "base = \"main\"\nmarkdown_output = \"summary.md\"\n[gates]\nfail_under_regions = 80\n",
+            "base = \"main\"\nmarkdown-output = \"summary.md\"\n[gates]\nfail-under-regions = 80\n",
         )
         .expect("config should parse");
 
