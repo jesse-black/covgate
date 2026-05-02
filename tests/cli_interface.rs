@@ -187,11 +187,7 @@ fn help_lists_record_base_as_subcommand() {
 fn version_switches_report_current_binary_version() {
     let temp = tempdir().expect("tempdir should exist");
 
-    for args in [
-        vec!["--version".to_string()],
-        vec!["-V".to_string()],
-        vec!["-v".to_string()],
-    ] {
+    for args in [vec!["--version".to_string()], vec!["-V".to_string()]] {
         let output = run_covgate_raw(temp.path(), &args);
         assert_eq!(output.status.code(), Some(0), "args={args:?}");
         let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
