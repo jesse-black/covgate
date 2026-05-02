@@ -131,21 +131,21 @@ The Codex Cloud environment settings maintenance script should include `covgate 
 
 `covgate` reads repository-local defaults from `covgate.toml` so teams can keep their configuration checked in with the code. CLI flags always override config values.
 
-You can specify a default `base` and `markdown_output` at the top level, along with minimum percentage (`fail_under_*`) and maximum uncovered count (`fail_uncovered_*`) rules under `[gates]`.
+You can specify a default `base` and `markdown-output` at the top level, along with minimum percentage (`fail-under-*`) and maximum uncovered count (`fail-uncovered-*`) rules under `[gates]`.
 
 ```toml
 # Set a default comparison base and output file
 base = "origin/main"
-markdown_output = "summary.md"
+markdown-output = "summary.md"
 
 [gates]
 # Percentage-based gates (fail if coverage percentage is less than this value)
-fail_under_lines = 90
-fail_under_regions = 85
-fail_under_branches = 80
+fail-under-lines = 90
+fail-under-regions = 85
+fail-under-branches = 80
 
 # Raw count gates (fail if the count is greater than this value)
-fail_uncovered_functions = 0
+fail-uncovered-functions = 0
 ```
 
 With `covgate.toml` checked in, local invocations become frictionless:

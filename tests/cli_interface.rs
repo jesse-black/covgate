@@ -664,7 +664,7 @@ fn uses_repo_config_defaults_for_base_and_threshold() {
     run_git(&worktree, &["commit", "-m", "feature change"]);
     fs::write(
         worktree.join("covgate.toml"),
-        "base = \"main\"\n[gates]\nfail_under_regions = 0.0\n",
+        "base = \"main\"\n[gates]\nfail-under-regions = 0.0\n",
     )
     .expect("config should be written");
     run_git(&worktree, &["add", "covgate.toml"]);
@@ -700,7 +700,7 @@ fn uses_repo_config_defaults_from_parent_directory() {
     run_git(&worktree, &["commit", "-m", "feature change"]);
     fs::write(
         worktree.join("covgate.toml"),
-        "base = \"main\"\n[gates]\nfail_under_regions = 0.0\n",
+        "base = \"main\"\n[gates]\nfail-under-regions = 0.0\n",
     )
     .expect("config should be written");
     run_git(&worktree, &["add", "covgate.toml"]);
@@ -734,7 +734,7 @@ fn mixed_cli_over_toml_precedence() {
     run_git(&worktree, &["commit", "-m", "feature change"]);
     fs::write(
         worktree.join("covgate.toml"),
-        "base = \"main\"\n[gates]\nfail_under_regions = 0.0\nfail_uncovered_regions = 10\n",
+        "base = \"main\"\n[gates]\nfail-under-regions = 0.0\nfail-uncovered-regions = 10\n",
     )
     .expect("config should be written");
     run_git(&worktree, &["add", "covgate.toml"]);
@@ -772,7 +772,7 @@ fn cli_threshold_overrides_repo_config_default() {
     run_git(&worktree, &["commit", "-m", "feature change"]);
     fs::write(
         worktree.join("covgate.toml"),
-        "base = \"main\"\n[gates]\nfail_under_regions = 0.0\n",
+        "base = \"main\"\n[gates]\nfail-under-regions = 0.0\n",
     )
     .expect("config should be written");
     run_git(&worktree, &["add", "covgate.toml"]);
