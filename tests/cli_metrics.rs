@@ -21,6 +21,7 @@ fn region_threshold_fails_when_below_threshold() {
             &worktree,
             fixture,
             &[
+                "--verbose".to_string(),
                 "--diff-file".to_string(),
                 diff_file.to_string_lossy().into_owned(),
                 "--fail-under-regions".to_string(),
@@ -60,6 +61,7 @@ fn uncovered_regions_budget_passes_when_met() {
             &worktree,
             fixture,
             &[
+                "--verbose".to_string(),
                 "--diff-file".to_string(),
                 diff_file.to_string_lossy().into_owned(),
                 "--fail-uncovered-regions".to_string(),
@@ -89,6 +91,7 @@ fn uncovered_regions_budget_fails_when_exceeded() {
             &worktree,
             fixture,
             &[
+                "--verbose".to_string(),
                 "--diff-file".to_string(),
                 diff_file.to_string_lossy().into_owned(),
                 "--fail-uncovered-regions".to_string(),
@@ -118,6 +121,7 @@ fn line_threshold_fails_when_below_threshold() {
             &worktree,
             fixture,
             &[
+                "--verbose".to_string(),
                 "--diff-file".to_string(),
                 diff_file.to_string_lossy().into_owned(),
                 "--fail-under-lines".to_string(),
@@ -143,6 +147,7 @@ fn uncovered_line_budget_fails_when_exceeded() {
             &worktree,
             fixture,
             &[
+                "--verbose".to_string(),
                 "--diff-file".to_string(),
                 diff_file.to_string_lossy().into_owned(),
                 "--fail-uncovered-lines".to_string(),
@@ -167,6 +172,7 @@ fn line_threshold_passes_for_all_pass_fixtures() {
             &worktree,
             fixture,
             &[
+                "--verbose".to_string(),
                 "--diff-file".to_string(),
                 diff_file.to_string_lossy().into_owned(),
                 "--fail-under-lines".to_string(),
@@ -191,6 +197,7 @@ fn branch_threshold_passes_for_branch_capable_fixtures() {
             &worktree,
             fixture,
             &[
+                "--verbose".to_string(),
                 "--diff-file".to_string(),
                 diff_file.to_string_lossy().into_owned(),
                 "--fail-under-branches".to_string(),
@@ -216,6 +223,7 @@ fn branch_threshold_fails_for_branch_capable_fixtures_when_below_threshold() {
             &worktree,
             fixture,
             &[
+                "--verbose".to_string(),
                 "--diff-file".to_string(),
                 diff_file.to_string_lossy().into_owned(),
                 "--fail-under-branches".to_string(),
@@ -241,6 +249,7 @@ fn uncovered_branch_budget_passes_for_branch_capable_fixtures() {
             &worktree,
             fixture,
             &[
+                "--verbose".to_string(),
                 "--diff-file".to_string(),
                 diff_file.to_string_lossy().into_owned(),
                 "--fail-uncovered-branches".to_string(),
@@ -265,6 +274,7 @@ fn uncovered_branch_budget_fails_for_branch_capable_fixtures() {
             &worktree,
             fixture,
             &[
+                "--verbose".to_string(),
                 "--diff-file".to_string(),
                 diff_file.to_string_lossy().into_owned(),
                 "--fail-uncovered-branches".to_string(),
@@ -314,6 +324,7 @@ fn region_threshold_passes_for_all_pass_fixtures() {
             &worktree,
             fixture,
             &[
+                "--verbose".to_string(),
                 "--diff-file".to_string(),
                 diff_file.to_string_lossy().into_owned(),
                 "--fail-under-regions".to_string(),
@@ -338,6 +349,7 @@ fn function_threshold_fails_when_below_threshold() {
             &worktree,
             fixture,
             &[
+                "--verbose".to_string(),
                 "--diff-file".to_string(),
                 diff_file.to_string_lossy().into_owned(),
                 "--fail-under-functions".to_string(),
@@ -373,6 +385,7 @@ fn function_threshold_passes_for_all_pass_fixtures() {
             &worktree,
             fixture,
             &[
+                "--verbose".to_string(),
                 "--diff-file".to_string(),
                 diff_file.to_string_lossy().into_owned(),
                 "--fail-under-functions".to_string(),
@@ -397,6 +410,7 @@ fn uncovered_function_budget_fails_when_exceeded() {
             &worktree,
             fixture,
             &[
+                "--verbose".to_string(),
                 "--diff-file".to_string(),
                 diff_file.to_string_lossy().into_owned(),
                 "--fail-uncovered-functions".to_string(),

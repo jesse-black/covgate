@@ -29,6 +29,7 @@ fn git_base_config(coverage_report: std::path::PathBuf) -> Config {
             minimum_percent: 90.0,
         }],
         markdown_output: None,
+        verbose: false,
     }
 }
 
@@ -51,6 +52,7 @@ fn run_with_diff_file_executes_without_untracked_warning_lookup() {
             minimum_percent: 90.0,
         }],
         markdown_output: None,
+        verbose: false,
     })
     .expect("run should succeed");
 
@@ -77,6 +79,7 @@ fn run_with_git_base_checks_untracked_files_before_loading_diff() {
             minimum_percent: 90.0,
         }],
         markdown_output: None,
+        verbose: false,
     })
     .expect("run should succeed");
 
@@ -103,6 +106,7 @@ fn run_with_git_base_quotes_paths_in_add_command_when_needed() {
             minimum_percent: 90.0,
         }],
         markdown_output: None,
+        verbose: false,
     })
     .expect("run should succeed");
 
@@ -127,6 +131,7 @@ fn run_with_git_base_skips_warning_when_no_untracked_files_exist() {
             minimum_percent: 90.0,
         }],
         markdown_output: None,
+        verbose: false,
     })
     .expect("run should succeed");
 

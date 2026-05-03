@@ -94,4 +94,4 @@ If a future request wants ReportGenerator parity, that should be introduced as a
 
 - `src/coverage/coverlet_json.rs`
 - `docs/reference/coverlet-method-to-function-normalization.md`
-- `docs/exec-plans/completed/covgate-coverlet-function-summary-investigation.md`
+- `docs/exec-plans/completed/0014-covgate-coverlet-function-summary-investigation.md`

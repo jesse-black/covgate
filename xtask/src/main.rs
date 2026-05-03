@@ -67,20 +67,38 @@ fn validate() -> Result<()> {
         .to_str()
         .context("coverage output path contained non-utf8 characters")?;
 
-    record_validation_step(
-        &mut failures,
-        "llvm-cov",
-        run(
-            "cargo",
-            &[
-                "llvm-cov",
-                "--json",
-                "--output-path",
-                coverage_json_str,
-                "--fail-under-regions=88",
-            ],
-        ),
-    );
+    let has_nextest = Command::new("cargo")
+        .arg("nextest")
+        .arg("--version")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+
+    let mut coverage_args = vec!["llvm-cov"];
+    if has_nextest {
+        coverage_args.extend(&[
+            "nextest",
+            "--status-level",
+            "none",
+            "--failure-output",
+            "immediate-final",
+            "--show-progress",
+            "none",
+        ]);
+    } else {
+        coverage_args.push("-q");
+    }
+
+    coverage_args.extend(&[
+        "--json",
+        "--output-path",
+        coverage_json_str,
+        "--fail-under-regions=88",
+    ]);
+
+    record_validation_step(&mut failures, "llvm-cov", run("cargo", &coverage_args));
 
     record_validation_step(
         &mut failures,

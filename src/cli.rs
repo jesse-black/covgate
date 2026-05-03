@@ -73,4 +73,8 @@ pub struct Args {
     /// Write a Markdown summary to this file
     #[arg(long)]
     pub markdown_output: Option<PathBuf>,
+
+    /// Print comprehensive output including 100% covered files
+    #[arg(long)]
+    pub verbose: bool,
 }

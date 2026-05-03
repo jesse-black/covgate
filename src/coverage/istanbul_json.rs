@@ -24,26 +24,31 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
     for (file_name, coverage) in report {
         let path = normalize_path(&file_name, repo_root);
 
-        let mut lines = BTreeMap::<u32, bool>::new();
+        let mut line_states = BTreeMap::<(u32, u32), bool>::new();
         for (statement_id, statement) in &coverage.statement_map {
             let hits = coverage.s.get(statement_id).copied().unwrap_or(0);
             let covered = hits > 0;
-            lines
-                .entry(statement.start.line)
+            line_states
+                .entry((statement.start.line, statement.start.column.unwrap_or(0)))
                 .and_modify(|seen| *seen = *seen || covered)
                 .or_insert(covered);
         }
 
-        if !lines.is_empty() {
-            let covered = lines.values().filter(|is_covered| **is_covered).count();
-            let total = lines.len();
-            for (line, is_covered) in lines {
+        if !line_states.is_empty() {
+            let covered = line_states
+                .values()
+                .filter(|is_covered| **is_covered)
+                .count();
+            let total = line_states.len();
+            for ((line, column), is_covered) in line_states {
                 opportunities.push(CoverageOpportunity {
                     kind: OpportunityKind::Line,
                     span: SourceSpan {
                         path: path.clone(),
                         start_line: line,
                         end_line: line,
+                        start_col: Some(column),
+                        end_col: Some(column),
                     },
                     covered: is_covered,
                 });
@@ -60,21 +65,29 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
                 .and_then(|span| span.start.line)
                 .or(branch_map.line)
                 .or(branch_map.loc.as_ref().and_then(|span| span.end.line));
+            let fallback_start_col = branch_map.loc.as_ref().and_then(|span| span.start.column);
             let fallback_end_line = branch_map
                 .loc
                 .as_ref()
                 .and_then(|span| span.end.line)
                 .or(fallback_start_line);
+            let fallback_end_col = branch_map.loc.as_ref().and_then(|span| span.end.column);
+
             for (index, location) in branch_map.locations.iter().enumerate() {
                 let start_line = location.start.line.or(fallback_start_line);
+                let start_col = location.start.column.or(fallback_start_col);
                 let end_line = location.end.line.or(fallback_end_line).or(start_line);
+                let end_col = location.end.column.or(fallback_end_col).or(start_col);
+
                 let Some(start_line) = start_line else {
                     continue;
                 };
                 let end_line = end_line.unwrap_or(start_line);
                 branch_records.push(BranchRecord {
                     start_line,
+                    start_col: start_col.unwrap_or(0),
                     end_line,
+                    end_col: end_col.unwrap_or(0),
                     covered: outcomes.get(index).copied().unwrap_or(0) > 0,
                 });
             }
@@ -93,6 +106,8 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
                         path: path.clone(),
                         start_line: record.start_line,
                         end_line: record.end_line,
+                        start_col: Some(record.start_col),
+                        end_col: Some(record.end_col),
                     },
                     covered: record.covered,
                 });
@@ -105,7 +120,9 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
             let covered = coverage.f.get(function_id).copied().unwrap_or(0) > 0;
             function_records.push(FunctionRecord {
                 start_line: function_map.loc.start.line,
+                start_col: function_map.loc.start.column.unwrap_or(0),
                 end_line: function_map.loc.end.line,
+                end_col: function_map.loc.end.column.unwrap_or(0),
                 covered,
             });
         }
@@ -123,6 +140,8 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
                         path: path.clone(),
                         start_line: function.start_line,
                         end_line: function.end_line,
+                        start_col: Some(function.start_col),
+                        end_col: Some(function.end_col),
                     },
                     covered: function.covered,
                 });
@@ -202,6 +221,8 @@ struct IstanbulSpan {
 #[derive(Debug, Deserialize)]
 struct IstanbulPosition {
     line: u32,
+    #[serde(default)]
+    column: Option<u32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -214,19 +235,25 @@ struct IstanbulOptionalSpan {
 struct IstanbulOptionalPosition {
     #[serde(default)]
     line: Option<u32>,
+    #[serde(default)]
+    column: Option<u32>,
 }
 
 #[derive(Debug)]
 struct FunctionRecord {
     start_line: u32,
+    start_col: u32,
     end_line: u32,
+    end_col: u32,
     covered: bool,
 }
 
 #[derive(Debug)]
 struct BranchRecord {
     start_line: u32,
+    start_col: u32,
     end_line: u32,
+    end_col: u32,
     covered: bool,
 }
 

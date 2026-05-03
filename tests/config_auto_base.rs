@@ -67,6 +67,7 @@ fn config_uses_recorded_base_when_base_is_omitted() {
         fail_uncovered_branches: None,
         fail_uncovered_functions: None,
         markdown_output: None,
+        verbose: false,
     })
     .expect("config should resolve");
 

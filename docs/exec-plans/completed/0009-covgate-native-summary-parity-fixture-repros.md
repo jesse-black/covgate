@@ -1,6 +1,6 @@
 # Reproduce and fix native-summary parity drift using real tool summaries, not helper-derived fixture math
 
-The canonical completed copy of this ExecPlan lives at `docs/exec-plans/completed/covgate-native-summary-parity-fixture-repros.md`. It was implemented from the in-progress copy that originally lived under `docs/exec-plans/active/`.
+The canonical completed copy of this ExecPlan lives at `docs/exec-plans/completed/0009-covgate-native-summary-parity-fixture-repros.md`. It was implemented from the in-progress copy that originally lived under `docs/exec-plans/active/`.
 
 This ExecPlan is a living document. The sections `Progress`, `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 

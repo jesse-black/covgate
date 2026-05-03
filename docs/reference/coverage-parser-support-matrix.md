@@ -30,6 +30,10 @@ For C/C++ and Swift, the big-picture parser concern is the same:
 
 At the moment, the concrete fix we have implemented is Rust-specific because that is the discrepancy we reproduced and verified.
 
+For more details on the planned but currently draft support for other LLVM languages, see:
+- [C/C++ LLVM Coverage Support](../design-docs/cpp-llvm-coverage.md)
+- [Swift LLVM Coverage Support](../design-docs/swift-llvm-coverage.md)
+
 ### Why Coverlet is different
 
 Coverlet reports coverage at .NET method granularity. `covgate` normalizes those methods into the public `functions` metric, but it does not currently need symbol demangling for that step.

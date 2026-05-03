@@ -473,7 +473,11 @@ fn automatic_base_prefers_standard_branch_ref_over_recorded_worktree_ref() {
     let output = run_covgate(
         &worktree,
         fixture,
-        &["--fail-under-regions".to_string(), "90".to_string()],
+        &[
+            "--verbose".to_string(),
+            "--fail-under-regions".to_string(),
+            "90".to_string(),
+        ],
     );
 
     assert_eq!(output.status.code(), Some(0));
@@ -508,6 +512,7 @@ fn explicit_base_overrides_recorded_worktree_ref() {
         &worktree,
         fixture,
         &[
+            "--verbose".to_string(),
             "--base".to_string(),
             "main".to_string(),
             "--fail-under-regions".to_string(),
@@ -554,6 +559,7 @@ fn markdown_summary_rust_fixture() {
         &worktree,
         fixture,
         &[
+            "--verbose".to_string(),
             "--diff-file".to_string(),
             diff_file.to_string_lossy().into_owned(),
             "--fail-under-regions".to_string(),
@@ -597,6 +603,7 @@ fn absolute_llvm_paths_match_diff_fixture() {
         &worktree,
         &coverage_json,
         &[
+            "--verbose".to_string(),
             "--diff-file".to_string(),
             diff_file.to_string_lossy().into_owned(),
             "--fail-under-regions".to_string(),
@@ -632,6 +639,7 @@ fn pr_branch_against_main_fixture() {
         &worktree,
         fixture,
         &[
+            "--verbose".to_string(),
             "--base".to_string(),
             "main".to_string(),
             "--fail-under-regions".to_string(),
@@ -670,7 +678,7 @@ fn uses_repo_config_defaults_for_base_and_threshold() {
     run_git(&worktree, &["add", "covgate.toml"]);
     run_git(&worktree, &["commit", "-m", "add covgate defaults"]);
 
-    let output = run_covgate(&worktree, fixture, &[]);
+    let output = run_covgate(&worktree, fixture, &["--verbose".to_string()]);
 
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
@@ -707,7 +715,7 @@ fn uses_repo_config_defaults_from_parent_directory() {
     run_git(&worktree, &["commit", "-m", "add covgate defaults"]);
 
     let nested_dir = worktree.join("src");
-    let output = run_covgate(&nested_dir, fixture, &[]);
+    let output = run_covgate(&nested_dir, fixture, &["--verbose".to_string()]);
 
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
@@ -743,7 +751,11 @@ fn mixed_cli_over_toml_precedence() {
     let output = run_covgate(
         &worktree,
         fixture,
-        &["--fail-uncovered-regions".to_string(), "0".to_string()],
+        &[
+            "--verbose".to_string(),
+            "--fail-uncovered-regions".to_string(),
+            "0".to_string(),
+        ],
     );
 
     assert_eq!(output.status.code(), Some(1));
@@ -781,7 +793,11 @@ fn cli_threshold_overrides_repo_config_default() {
     let output = run_covgate(
         &worktree,
         fixture,
-        &["--fail-under-regions".to_string(), "60".to_string()],
+        &[
+            "--verbose".to_string(),
+            "--fail-under-regions".to_string(),
+            "60".to_string(),
+        ],
     );
 
     assert_eq!(output.status.code(), Some(1));
@@ -821,4 +837,64 @@ fn unknown_coverage_json_shape_reports_supported_formats() {
     assert!(stderr.contains("LLVM JSON export"), "stderr={stderr}");
     assert!(stderr.contains("Coverlet native JSON"), "stderr={stderr}");
     assert!(stderr.contains("Istanbul native JSON"), "stderr={stderr}");
+}
+
+#[test]
+fn minimal_pass_output_is_token_efficient() {
+    let fixture = rust_basic_pass_fixture();
+    let temp = tempdir().expect("tempdir should exist");
+    let worktree = setup_fixture_worktree(temp.path(), fixture);
+
+    let output = run_covgate(
+        &worktree,
+        fixture,
+        &["--fail-under-regions".to_string(), "90".to_string()],
+    );
+
+    assert_eq!(output.status.code(), Some(0));
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+
+    // Should contain the summary line
+    assert!(stdout.contains("PASS  Regions:     100.00%         (3/3)  ≥ 90.00%"));
+
+    // Should NOT contain the "Diff Coverage: PASS" header (from the verbose output)
+    assert!(!stdout.contains("Diff Coverage: PASS"));
+
+    // Should NOT contain the "Changed regions:" header
+    assert!(!stdout.contains("Changed regions:"));
+
+    // Should NOT contain rulers
+    assert!(!stdout.contains("---"));
+}
+
+#[test]
+fn minimal_fail_output_is_focused() {
+    let fixture = rust_basic_fail_fixture();
+    let temp = tempdir().expect("tempdir should exist");
+    let worktree = setup_fixture_worktree(temp.path(), fixture);
+
+    let output = run_covgate(
+        &worktree,
+        fixture,
+        &["--fail-under-regions".to_string(), "100".to_string()],
+    );
+
+    assert_eq!(output.status.code(), Some(1));
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+    println!("DEBUG STDOUT:\n{stdout}");
+
+    // Should contain the summary line with FAIL
+    assert!(stdout.contains("FAIL  Regions:       0.00%         (0/3)  ≱ 100.00%"));
+
+    // Should show the failing file
+    assert!(stdout.contains("src/lib.rs"));
+
+    // Should show missed regions in that file
+    assert!(stdout.contains("2:9-12"));
+
+    // Should NOT contain the "Diff Coverage: FAIL" header
+    assert!(!stdout.contains("Diff Coverage: FAIL"));
+
+    // Should NOT contain the "Rule fail-under-regions: FAIL" line
+    assert!(!stdout.contains("Rule fail-under-regions: FAIL"));
 }

@@ -1,6 +1,6 @@
 # Covgate .NET Coverlet native fixture and parser support
 
-This completed ExecPlan lives at `docs/exec-plans/completed/covgate-dotnet-coverlet-native-fixture.md` because the scoped .NET Coverlet work is finished in this repository.
+This completed ExecPlan lives at `docs/exec-plans/completed/0004-covgate-dotnet-coverlet-native-fixture.md` because the scoped .NET Coverlet work is finished in this repository.
 
 This ExecPlan is a living document. The sections `Progress`, `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
@@ -32,7 +32,7 @@ A second product decision is included here: whether `covgate` should continue to
   Evidence: `docs/TESTING.md` requires native toolchain generation and encourages checked-in artifacts for deterministic routine test runs.
 
 - Observation: The completed LLVM fixture plan established a reusable cross-language test harness split (`cli_metrics` vs `cli_interface`) that should be reused for Coverlet onboarding instead of adding format-specific one-off tests.
-  Evidence: `docs/exec-plans/completed/covgate-cpp-swift-llvm-fixtures.md` codifies the fixture matrix and helper-module approach.
+  Evidence: `docs/exec-plans/completed/0003-covgate-cpp-swift-llvm-fixtures.md` codifies the fixture matrix and helper-module approach.
 
 - Observation: Coverlet’s native JSON schema may not map 1:1 to LLVM “regions,” so metric availability behavior must remain explicit and tested, not assumed.
   Evidence: Existing `covgate` behavior already distinguishes unavailable metrics (for example Rust LLVM branch absence in some scenarios).

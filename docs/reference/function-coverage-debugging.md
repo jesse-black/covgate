@@ -164,4 +164,4 @@ Related investigation artifacts:
 
 - `tests/llvm_real_parity.rs`
 - `tests/fixtures/llvm-real/covgate-self-full.json`
-- `docs/exec-plans/completed/covgate-llvm-summary-parity.md`
+- `docs/exec-plans/completed/0007-covgate-llvm-summary-parity.md`
