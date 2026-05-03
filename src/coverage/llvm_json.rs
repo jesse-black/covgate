@@ -111,13 +111,15 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
                 });
             }
 
-            region_totals_by_file.insert(
-                path.clone(),
-                FileTotals {
-                    covered: region_covered,
-                    total: region_total,
-                },
-            );
+            if region_total > 0 {
+                region_totals_by_file.insert(
+                    path.clone(),
+                    FileTotals {
+                        covered: region_covered,
+                        total: region_total,
+                    },
+                );
+            }
 
             let mut line_covered = 0usize;
             let mut line_total = 0usize;
@@ -789,6 +791,61 @@ mod tests {
         // Only line 1 should be covered and counted.
         assert_eq!(line_totals.covered, 1);
         assert_eq!(line_totals.total, 1);
+    }
+
+    #[test]
+    fn skips_segments_with_has_count_false_for_line_coverage() {
+        let input = r#"{
+          "data": [{
+            "files": [{
+              "filename": "src/lib.rs",
+              "segments": [
+                [1, 1, 1, true, true, false],
+                [2, 1, 0, false, true, false],
+                [3, 1, 0, true, true, false],
+                [4, 1, 0, true, true, false]
+              ],
+              "branches": []
+            }],
+            "functions": []
+          }],
+          "type": "llvm.coverage.json.export",
+          "version": "2.0.1"
+        }"#;
+
+        let report = parse_with_repo_root(input, Path::new(".")).expect("parse");
+        let lines = report
+            .totals_by_file
+            .get(&crate::model::MetricKind::Line)
+            .unwrap()
+            .get(&PathBuf::from("src/lib.rs"))
+            .unwrap();
+        // Line 1 is covered, Line 2 is skipped (hasCount false), Line 3 is uncovered.
+        // So total should be 2.
+        assert_eq!(lines.total, 2);
+    }
+
+    #[test]
+    fn skips_regions_with_backwards_range() {
+        let input = r#"{
+          "data": [{
+            "files": [{
+              "filename": "src/lib.rs",
+              "segments": [
+                [2, 1, 1, true, true, false],
+                [1, 1, 0, true, false, false]
+              ],
+              "branches": []
+            }],
+            "functions": []
+          }],
+          "type": "llvm.coverage.json.export",
+          "version": "2.0.1"
+        }"#;
+
+        let report = parse_with_repo_root(input, Path::new(".")).expect("parse");
+        // No regions should be emitted because end < start
+        assert!(!report.totals_by_file.contains_key(&crate::model::MetricKind::Region));
     }
 
     #[test]

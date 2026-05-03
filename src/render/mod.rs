@@ -8,3 +8,13 @@ pub(crate) fn title_case(value: &str) -> String {
         None => String::new(),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::title_case;
+
+    #[test]
+    fn title_case_handles_empty_string() {
+        assert_eq!(title_case(""), "");
+    }
+}

@@ -171,12 +171,11 @@ fn render_metric_summary(metric: &ComputedMetric, rule_outcome: Option<&RuleOutc
     };
 
     format!(
-        "{}  {:<11} {:>7.2}% ({}/{}){:<11}",
+        "{}  {:<11} {:>7.2}% {:>13}{:<11}",
         status,
         format!("{}:", label),
         metric.percent,
-        metric.covered,
-        metric.total,
+        format!("({}/{})", metric.covered, metric.total),
         rule_str
     )
     .trim_end()
@@ -325,7 +324,7 @@ mod tests {
         let rendered = render(&result, "origin/main...HEAD", false);
         assert!(!rendered.contains("Diff Coverage: FAIL"));
         assert!(rendered.contains("src/lib.rs (50.00% region)"));
-        assert!(rendered.contains("FAIL  Regions:      50.00% (1/2)  ≱ 90.00%"));
+        assert!(rendered.contains("FAIL  Regions:      50.00%         (1/2)  ≱ 90.00%"));
     }
 
     #[test]
@@ -494,5 +493,116 @@ mod tests {
             .find(|line| line.contains("regions:"))
             .expect("spans row should exist");
         assert!(spans_row.find("48").expect("48") < spans_row.find("102").expect("102"));
+    }
+
+    #[test]
+    fn render_metric_summary_handles_none_outcome() {
+        let metric = crate::model::ComputedMetric {
+            metric: MetricKind::Region,
+            covered: 1,
+            total: 1,
+            percent: 100.0,
+            uncovered_changed_opportunities: Vec::new(),
+            changed_totals_by_file: BTreeMap::new(),
+            totals_by_file: BTreeMap::new(),
+        };
+        assert_eq!(super::render_metric_summary(&metric, None), "");
+    }
+
+    #[test]
+    fn omits_non_gated_metrics_from_minimal_output() {
+        let result = GateResult {
+            metrics: vec![
+                crate::model::ComputedMetric {
+                    metric: MetricKind::Region,
+                    covered: 1,
+                    total: 2,
+                    percent: 50.0,
+                    uncovered_changed_opportunities: Vec::new(),
+                    changed_totals_by_file: BTreeMap::new(),
+                    totals_by_file: BTreeMap::new(),
+                },
+                crate::model::ComputedMetric {
+                    metric: MetricKind::Line,
+                    covered: 1,
+                    total: 1,
+                    percent: 100.0,
+                    uncovered_changed_opportunities: Vec::new(),
+                    changed_totals_by_file: BTreeMap::new(),
+                    totals_by_file: BTreeMap::new(),
+                },
+            ],
+            rules: vec![RuleOutcome {
+                rule: GateRule::Percent {
+                    metric: MetricKind::Region,
+                    minimum_percent: 90.0,
+                },
+                passed: false,
+                observed_percent: 50.0,
+                observed_uncovered_count: 1,
+            }],
+            passed: false,
+        };
+
+        let rendered = render(&result, "origin/main...HEAD", false);
+        assert!(rendered.contains("Regions:"));
+        assert!(!rendered.contains("Lines:"));
+    }
+
+    #[test]
+    fn aligns_comparators_vertically() {
+        let result = GateResult {
+            metrics: vec![
+                crate::model::ComputedMetric {
+                    metric: MetricKind::Region,
+                    covered: 100,
+                    total: 1000,
+                    percent: 10.0,
+                    uncovered_changed_opportunities: Vec::new(),
+                    changed_totals_by_file: BTreeMap::new(),
+                    totals_by_file: BTreeMap::new(),
+                },
+                crate::model::ComputedMetric {
+                    metric: MetricKind::Function,
+                    covered: 1,
+                    total: 1,
+                    percent: 100.0,
+                    uncovered_changed_opportunities: Vec::new(),
+                    changed_totals_by_file: BTreeMap::new(),
+                    totals_by_file: BTreeMap::new(),
+                },
+            ],
+            rules: vec![
+                RuleOutcome {
+                    rule: GateRule::Percent {
+                        metric: MetricKind::Region,
+                        minimum_percent: 90.0,
+                    },
+                    passed: false,
+                    observed_percent: 10.0,
+                    observed_uncovered_count: 900,
+                },
+                RuleOutcome {
+                    rule: GateRule::UncoveredCount {
+                        metric: MetricKind::Function,
+                        maximum_count: 0,
+                    },
+                    passed: true,
+                    observed_percent: 100.0,
+                    observed_uncovered_count: 0,
+                },
+            ],
+            passed: false,
+        };
+
+        let rendered = render(&result, "diff", false);
+        let lines: Vec<_> = rendered.lines().filter(|l| l.contains("PASS") || l.contains("FAIL")).collect();
+        assert_eq!(lines.len(), 2);
+        
+        let pos1 = lines[0].chars().position(|c| c == '≱' || c == '≥').unwrap();
+        let pos2 = lines[1].chars().position(|c| c == '≤' || c == '≰').unwrap();
+        println!("POS1: {}, POS2: {}", pos1, pos2);
+        
+        assert_eq!(pos1, pos2, "Comparators should be at the same horizontal position.\nLine 1: {}\nLine 2: {}", lines[0], lines[1]);
     }
 }

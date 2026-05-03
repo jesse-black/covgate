@@ -855,7 +855,7 @@ fn minimal_pass_output_is_token_efficient() {
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
 
     // Should contain the summary line
-    assert!(stdout.contains("PASS  Regions:     100.00% (3/3)  ≥ 90.00%"));
+    assert!(stdout.contains("PASS  Regions:     100.00%         (3/3)  ≥ 90.00%"));
 
     // Should NOT contain the "Diff Coverage: PASS" header (from the verbose output)
     assert!(!stdout.contains("Diff Coverage: PASS"));
@@ -884,7 +884,7 @@ fn minimal_fail_output_is_focused() {
     println!("DEBUG STDOUT:\n{stdout}");
 
     // Should contain the summary line with FAIL
-    assert!(stdout.contains("FAIL  Regions:       0.00% (0/3)  ≱ 100.00%"));
+    assert!(stdout.contains("FAIL  Regions:       0.00%         (0/3)  ≱ 100.00%"));
 
     // Should show the failing file
     assert!(stdout.contains("src/lib.rs"));
