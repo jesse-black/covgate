@@ -116,6 +116,7 @@ fn run_real_fixture_gate(diff_text: &str, args: &[&str]) -> std::process::Output
     let mut covgate_args = vec![
         "check".to_string(),
         coverage_json.to_string_lossy().into_owned(),
+        "--verbose".to_string(),
         "--diff-file".to_string(),
         diff_file.to_string_lossy().into_owned(),
     ];

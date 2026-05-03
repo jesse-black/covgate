@@ -37,15 +37,30 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
             let path =
                 normalize_function_path(&function.filenames[0], repo_root, &known_file_paths);
             let mut start_line: Option<u32> = None;
+            let mut start_col: Option<u32> = None;
             let mut end_line: Option<u32> = None;
+            let mut end_col: Option<u32> = None;
             let mut region_covered = false;
             for region in function.regions {
-                start_line =
-                    Some(start_line.map_or(region.line_start, |cur| cur.min(region.line_start)));
-                end_line = Some(end_line.map_or(region.line_end, |cur| cur.max(region.line_end)));
+                if start_line.is_none_or(|sl| region.line_start < sl) {
+                    start_line = Some(region.line_start);
+                    start_col = Some(region.col_start);
+                } else if start_line == Some(region.line_start) {
+                    start_col = Some(start_col.unwrap_or(region.col_start).min(region.col_start));
+                }
+
+                if end_line.is_none_or(|el| region.line_end > el) {
+                    end_line = Some(region.line_end);
+                    end_col = Some(region.col_end);
+                } else if end_line == Some(region.line_end) {
+                    end_col = Some(end_col.unwrap_or(region.col_end).max(region.col_end));
+                }
+
                 region_covered |= region.execution_count > 0;
             }
-            let (Some(start_line), Some(end_line)) = (start_line, end_line) else {
+            let (Some(start_line), Some(start_col), Some(end_line), Some(end_col)) =
+                (start_line, start_col, end_line, end_col)
+            else {
                 continue;
             };
             let entry = function_records_by_file.entry(path).or_default();
@@ -56,11 +71,15 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
                 .map(|normalized_name| FunctionKey::NormalizedName {
                     normalized_name,
                     start_line,
+                    start_col,
                     end_line,
+                    end_col,
                 })
                 .unwrap_or(FunctionKey::Span {
                     start_line,
+                    start_col,
                     end_line,
+                    end_col,
                 });
             let covered = function.count > 0 || region_covered;
             entry
@@ -85,6 +104,8 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
                         path: path.clone(),
                         start_line: region.start_line,
                         end_line: region.end_line,
+                        start_col: Some(region.start_col),
+                        end_col: Some(region.end_col),
                     },
                     covered: region.covered,
                 });
@@ -112,6 +133,8 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
                         path: path.clone(),
                         start_line: line.line_number,
                         end_line: line.line_number,
+                        start_col: None,
+                        end_col: None,
                     },
                     covered: line.covered,
                 });
@@ -141,6 +164,8 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
                         path: path.clone(),
                         start_line: branch.line_number,
                         end_line: branch.line_number,
+                        start_col: Some(branch.start_col),
+                        end_col: Some(branch.start_col),
                     },
                     covered: branch.covered,
                 });
@@ -160,16 +185,20 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
                 let mut function_covered = 0usize;
                 let function_total = function_records.len();
                 for (key, covered) in function_records {
-                    let (start_line, end_line) = match key {
+                    let (start_line, start_col, end_line, end_col) = match key {
                         FunctionKey::Span {
                             start_line,
+                            start_col,
                             end_line,
-                        } => (start_line, end_line),
+                            end_col,
+                        } => (start_line, start_col, end_line, end_col),
                         FunctionKey::NormalizedName {
                             start_line,
+                            start_col,
                             end_line,
+                            end_col,
                             ..
-                        } => (start_line, end_line),
+                        } => (start_line, start_col, end_line, end_col),
                     };
                     if covered {
                         function_covered += 1;
@@ -180,6 +209,8 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
                             path: path.clone(),
                             start_line,
                             end_line,
+                            start_col: Some(start_col),
+                            end_col: Some(end_col),
                         },
                         covered,
                     });
@@ -272,11 +303,11 @@ struct LlvmFunctionRegion {
     #[serde(deserialize_with = "de_u32_from_i64")]
     line_start: u32,
     #[serde(deserialize_with = "de_u32_from_i64")]
-    _col_start: u32,
+    col_start: u32,
     #[serde(deserialize_with = "de_u32_from_i64")]
     line_end: u32,
     #[serde(deserialize_with = "de_u32_from_i64")]
-    _col_end: u32,
+    col_end: u32,
     #[serde(default)]
     execution_count: u64,
     #[serde(default)]
@@ -291,12 +322,16 @@ struct LlvmFunctionRegion {
 enum FunctionKey {
     Span {
         start_line: u32,
+        start_col: u32,
         end_line: u32,
+        end_col: u32,
     },
     NormalizedName {
         normalized_name: String,
         start_line: u32,
+        start_col: u32,
         end_line: u32,
+        end_col: u32,
     },
 }
 
@@ -335,13 +370,16 @@ struct LineRecord {
 #[derive(Debug)]
 struct RegionRecord {
     start_line: u32,
+    start_col: u32,
     end_line: u32,
+    end_col: u32,
     covered: bool,
 }
 
 #[derive(Debug)]
 struct BranchRecord {
     line_number: u32,
+    start_col: u32,
     covered: bool,
 }
 
@@ -354,7 +392,9 @@ impl LlvmFile {
             let end = &window[1];
 
             let start_line = number_at(start, 0)?;
+            let start_col = number_at(start, 1)?;
             let end_line = number_at(end, 0)?;
+            let end_col = number_at(end, 1)?;
 
             if end_line < start_line {
                 continue;
@@ -370,7 +410,9 @@ impl LlvmFile {
 
             regions.push(RegionRecord {
                 start_line,
+                start_col,
                 end_line,
+                end_col,
                 covered: count > 0,
             });
         }
@@ -430,16 +472,19 @@ impl LlvmFile {
         let mut branches = Vec::new();
         for branch in &self.branches {
             let line_number = number_at(branch, 0)?;
+            let start_col = number_at(branch, 1)?;
 
             if branch.len() >= 6 {
                 let true_count = number_at(branch, 4)?;
                 let false_count = number_at(branch, 5)?;
                 branches.push(BranchRecord {
                     line_number,
+                    start_col,
                     covered: true_count > 0,
                 });
                 branches.push(BranchRecord {
                     line_number,
+                    start_col,
                     covered: false_count > 0,
                 });
                 continue;
@@ -452,6 +497,7 @@ impl LlvmFile {
             }
             branches.push(BranchRecord {
                 line_number,
+                start_col,
                 covered: count > 0,
             });
         }

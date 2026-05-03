@@ -1,10 +1,5 @@
-use crate::model::GateResult;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-struct SpanKey {
-    start_line: u32,
-    end_line: u32,
-}
+use crate::model::{GateResult, SpanKey};
+use crate::render::title_case;
 
 pub fn render(result: &GateResult, _diff_description: &str) -> String {
     let mut out = String::new();
@@ -52,10 +47,7 @@ pub fn render(result: &GateResult, _diff_description: &str) -> String {
             missed_by_file
                 .entry(opportunity.span.path.display().to_string())
                 .or_default()
-                .entry(SpanKey {
-                    start_line: opportunity.span.start_line,
-                    end_line: opportunity.span.end_line,
-                })
+                .entry(opportunity.span.key())
                 .and_modify(|count| *count += 1)
                 .or_insert(1);
         }
@@ -71,7 +63,7 @@ pub fn render(result: &GateResult, _diff_description: &str) -> String {
                     values
                         .iter()
                         .map(|(key, count)| {
-                            let label = format!("{}-{}", key.start_line, key.end_line);
+                            let label = key.format_span();
                             if *count > 1 {
                                 format!("`{label}({count})`")
                             } else {
@@ -157,14 +149,6 @@ pub fn render(result: &GateResult, _diff_description: &str) -> String {
     out
 }
 
-fn title_case(value: &str) -> String {
-    let mut chars = value.chars();
-    match chars.next() {
-        Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
-        None => String::new(),
-    }
-}
-
 fn coverage_circle(percent: f64) -> &'static str {
     if percent < 50.0 {
         "🔴"
@@ -197,6 +181,8 @@ mod tests {
                         path: PathBuf::from("src/lib.rs"),
                         start_line: 5,
                         end_line: 6,
+                        start_col: None,
+                        end_col: None,
                     },
                     covered: false,
                 }],
@@ -442,6 +428,8 @@ mod tests {
                             path: PathBuf::from("src/lib.rs"),
                             start_line: 5,
                             end_line: 6,
+                            start_col: None,
+                            end_col: None,
                         },
                         covered: false,
                     },
@@ -451,6 +439,8 @@ mod tests {
                             path: PathBuf::from("src/lib.rs"),
                             start_line: 5,
                             end_line: 6,
+                            start_col: None,
+                            end_col: None,
                         },
                         covered: false,
                     },
@@ -495,6 +485,8 @@ mod tests {
                             path: PathBuf::from("src/lib.rs"),
                             start_line: 102,
                             end_line: 102,
+                            start_col: None,
+                            end_col: None,
                         },
                         covered: false,
                     },
@@ -504,6 +496,8 @@ mod tests {
                             path: PathBuf::from("src/lib.rs"),
                             start_line: 48,
                             end_line: 48,
+                            start_col: None,
+                            end_col: None,
                         },
                         covered: false,
                     },
@@ -534,6 +528,6 @@ mod tests {
             .lines()
             .find(|line| line.starts_with("| `src/lib.rs` |"))
             .expect("file row should exist");
-        assert!(row.find("`48-48`").expect("48-48") < row.find("`102-102`").expect("102-102"));
+        assert!(row.find("`48`").expect("48") < row.find("`102`").expect("102"));
     }
 }

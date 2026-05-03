@@ -1,8 +1,9 @@
 use std::{collections::BTreeMap, path::PathBuf};
 
-use anyhow::{Result, bail};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Deserialize, clap::ValueEnum,
+)]
+#[serde(rename_all = "kebab-case")]
 pub enum MetricKind {
     Region,
     Line,
@@ -11,16 +12,6 @@ pub enum MetricKind {
 }
 
 impl MetricKind {
-    pub fn parse(value: &str) -> Result<Self> {
-        match value {
-            "region" => Ok(Self::Region),
-            "line" => Ok(Self::Line),
-            "branch" => Ok(Self::Branch),
-            "function" => Ok(Self::Function),
-            _ => bail!("unsupported metric kind: {value}"),
-        }
-    }
-
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Region => "region",
@@ -85,11 +76,46 @@ pub struct RuleOutcome {
     pub observed_uncovered_count: usize,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct SpanKey {
+    pub start_line: u32,
+    pub end_line: u32,
+    pub start_col: Option<u32>,
+    pub end_col: Option<u32>,
+}
+
+impl SpanKey {
+    pub fn format_span(&self) -> String {
+        match (self.start_col, self.end_col) {
+            (Some(s_col), Some(e_col)) => {
+                if self.start_line == self.end_line {
+                    if s_col == e_col {
+                        format!("{}:{}", self.start_line, s_col)
+                    } else {
+                        format!("{}:{}-{}", self.start_line, s_col, e_col)
+                    }
+                } else {
+                    format!("{}:{}-{}:{}", self.start_line, s_col, self.end_line, e_col)
+                }
+            }
+            _ => {
+                if self.start_line == self.end_line {
+                    format!("{}", self.start_line)
+                } else {
+                    format!("{}-{}", self.start_line, self.end_line)
+                }
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourceSpan {
     pub path: PathBuf,
     pub start_line: u32,
     pub end_line: u32,
+    pub start_col: Option<u32>,
+    pub end_col: Option<u32>,
 }
 
 impl SourceSpan {
@@ -97,13 +123,29 @@ impl SourceSpan {
         self.start_line <= end && start <= self.end_line
     }
 
+    pub fn key(&self) -> SpanKey {
+        SpanKey {
+            start_line: self.start_line,
+            end_line: self.end_line,
+            start_col: self.start_col,
+            end_col: self.end_col,
+        }
+    }
+
+    pub fn format_span(&self) -> String {
+        self.key().format_span()
+    }
+
     pub fn display(&self) -> String {
-        format!(
-            "{}:{}-{}",
-            self.path.display(),
-            self.start_line,
-            self.end_line
-        )
+        format!("{}:{}", self.path.display(), self.format_span())
+    }
+
+    pub fn group_by_span(spans: &[Self]) -> BTreeMap<SpanKey, usize> {
+        let mut counts = BTreeMap::new();
+        for span in spans {
+            *counts.entry(span.key()).or_default() += 1;
+        }
+        counts
     }
 }
 
@@ -170,7 +212,8 @@ mod tests {
 
     #[test]
     fn parses_function_metric_kind() {
-        let metric = MetricKind::parse("function").expect("function should parse");
+        let metric: MetricKind =
+            serde_json::from_str("\"function\"").expect("function should parse");
         assert_eq!(metric, MetricKind::Function);
         assert_eq!(metric.as_str(), "function");
         assert_eq!(metric.label(), "functions");
@@ -179,7 +222,8 @@ mod tests {
 
     #[test]
     fn rejects_unknown_metric_kind() {
-        let error = MetricKind::parse("callable").expect_err("unknown metric should fail");
-        assert!(error.to_string().contains("unsupported metric kind"));
+        let error = serde_json::from_str::<MetricKind>("\"callable\"")
+            .expect_err("unknown metric should fail");
+        assert!(error.to_string().contains("unknown variant"));
     }
 }

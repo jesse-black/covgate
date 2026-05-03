@@ -21,6 +21,7 @@ pub struct Config {
     pub diff_source: DiffSource,
     pub rules: Vec<GateRule>,
     pub markdown_output: Option<PathBuf>,
+    pub verbose: bool,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -28,6 +29,7 @@ pub struct Config {
 struct FileConfig {
     base: Option<String>,
     markdown_output: Option<PathBuf>,
+    verbose: Option<bool>,
     #[serde(default)]
     gates: GateConfig,
 }
@@ -57,11 +59,18 @@ impl TryFrom<Args> for Config {
                 .as_ref()
                 .and_then(|config| config.markdown_output.clone())
         });
+        let verbose = args.verbose
+            || file_config
+                .as_ref()
+                .and_then(|config| config.verbose)
+                .unwrap_or(false);
+
         Ok(Self {
             coverage_report: args.coverage_report,
             diff_source,
             rules,
             markdown_output,
+            verbose,
         })
     }
 }
@@ -251,6 +260,7 @@ mod tests {
                 fail_uncovered_branches: None,
                 fail_uncovered_functions: None,
                 markdown_output: None,
+                verbose: false,
             },
             None,
         )
@@ -287,6 +297,7 @@ mod tests {
             fail_uncovered_branches: None,
             fail_uncovered_functions: None,
             markdown_output: None,
+            verbose: false,
         };
 
         let diff_source =
@@ -328,6 +339,7 @@ mod tests {
             fail_uncovered_branches: None,
             fail_uncovered_functions: None,
             markdown_output: None,
+            verbose: false,
         };
 
         let diff_source =
@@ -369,6 +381,7 @@ mod tests {
             fail_uncovered_branches: None,
             fail_uncovered_functions: None,
             markdown_output: None,
+            verbose: false,
         };
 
         let rules = resolve_rules(&args, Some(&file_config)).expect("rules should resolve");
@@ -404,6 +417,7 @@ mod tests {
             fail_uncovered_branches: None,
             fail_uncovered_functions: Some(2),
             markdown_output: None,
+            verbose: false,
         };
 
         let rules = resolve_rules(&args, Some(&file_config)).expect("rules should resolve");
@@ -463,12 +477,13 @@ mod tests {
     #[test]
     fn parses_file_config_from_toml_text() {
         let config = parse_file_config(
-            "base = \"main\"\nmarkdown-output = \"summary.md\"\n[gates]\nfail-under-regions = 80\n",
+            "base = \"main\"\nmarkdown-output = \"summary.md\"\nverbose = true\n[gates]\nfail-under-regions = 80\n",
         )
         .expect("config should parse");
 
         assert_eq!(config.base.as_deref(), Some("main"));
         assert_eq!(config.markdown_output, Some(PathBuf::from("summary.md")));
+        assert_eq!(config.verbose, Some(true));
         assert_eq!(config.gates.fail_under_regions, Some(80.0));
     }
 
@@ -501,6 +516,7 @@ mod tests {
                     fail_uncovered_branches: None,
                     fail_uncovered_functions: None,
                     markdown_output: None,
+                    verbose: false,
                 },
                 Some(&config)
             )

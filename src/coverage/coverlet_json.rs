@@ -78,6 +78,8 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
                             path: path.clone(),
                             start_line: line_number,
                             end_line: line_number,
+                            start_col: None,
+                            end_col: None,
                         },
                         covered: is_covered,
                     });
@@ -99,6 +101,8 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
                             path: path.clone(),
                             start_line: branch.line,
                             end_line: branch.line,
+                            start_col: None,
+                            end_col: None,
                         },
                         covered: is_covered,
                     });
@@ -119,6 +123,8 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
                             path: path.clone(),
                             start_line: function.start_line,
                             end_line: function.end_line,
+                            start_col: None,
+                            end_col: None,
                         },
                         covered: function.covered,
                     });
