@@ -1,12 +1,12 @@
 # Covgate fail-uncovered gates
 
-This ExecPlan is complete and archived in `docs/exec-plans/completed/covgate-fail-uncovered.md` for historical traceability.
+This ExecPlan is complete and archived in `docs/exec-plans/completed/0001-covgate-fail-uncovered.md` for historical traceability.
 
 This ExecPlan is a living document. The sections `Progress`, `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Maintain this document in accordance with `docs/PLANS.md`. Re-read that file before revising this plan and keep this plan aligned with its rules.
 
-This plan builds on the current `covgate` implementation in `docs/exec-plans/active/covgate.md`, but it repeats the needed context here so a reader can execute this plan without opening any other file.
+This plan builds on the current `covgate` implementation in `docs/exec-plans/active/0002-covgate.md`, but it repeats the needed context here so a reader can execute this plan without opening any other file.
 
 ## Purpose / Big Picture
 

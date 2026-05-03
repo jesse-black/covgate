@@ -1,6 +1,6 @@
 # Close out Coverlet function-summary investigation with a documented raw-method decision
 
-Save this completed ExecPlan in `docs/exec-plans/completed/covgate-coverlet-function-summary-investigation.md`.
+Save this completed ExecPlan in `docs/exec-plans/completed/0014-covgate-coverlet-function-summary-investigation.md`.
 
 Maintain this document in accordance with `docs/PLANS.md`.
 

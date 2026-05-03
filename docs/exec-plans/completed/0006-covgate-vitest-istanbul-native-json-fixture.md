@@ -1,6 +1,6 @@
 # Covgate Istanbul native JSON support with a Vite/Vitest v8 fixture
 
-This ExecPlan is complete and archived in `docs/exec-plans/completed/covgate-vitest-istanbul-native-json-fixture.md` for historical traceability.
+This ExecPlan is complete and archived in `docs/exec-plans/completed/0006-covgate-vitest-istanbul-native-json-fixture.md` for historical traceability.
 
 This ExecPlan is a living document. The sections `Progress`, `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 

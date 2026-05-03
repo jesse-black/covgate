@@ -1,6 +1,6 @@
 # Investigate LLVM summary parity and prove `covgate` diff calculations
 
-Canonical completed location: `docs/exec-plans/completed/covgate-llvm-summary-parity.md`.
+Canonical completed location: `docs/exec-plans/completed/0007-covgate-llvm-summary-parity.md`.
 
 This ExecPlan is a living document. The sections `Progress`, `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 

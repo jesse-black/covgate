@@ -1,6 +1,6 @@
 # Add C/C++ and Swift LLVM coverage fixtures
 
-Save this in-progress ExecPlan at `docs/exec-plans/active/covgate-cpp-swift-llvm-fixtures.md` while the work is being designed or implemented in this repository.
+Save this in-progress ExecPlan at `docs/exec-plans/active/0003-covgate-cpp-swift-llvm-fixtures.md` while the work is being designed or implemented in this repository.
 
 This ExecPlan is a living document. The sections `Progress`, `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 

@@ -1,6 +1,6 @@
 # Clarify when `covgate record-base` is required and make the normal checkout workflow the default guidance
 
-Save the canonical completed ExecPlan in `docs/exec-plans/completed/covgate-clarify-record-base-guidance.md`. This work is complete; keep any future follow-up changes in a new active ExecPlan rather than moving this file back.
+Save the canonical completed ExecPlan in `docs/exec-plans/completed/0011-covgate-clarify-record-base-guidance.md`. This work is complete; keep any future follow-up changes in a new active ExecPlan rather than moving this file back.
 
 This ExecPlan is a living document. The sections `Progress`, `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
@@ -34,7 +34,7 @@ This plan makes that split obvious and adds one small guardrail in the product i
   Evidence: the `README.md` usage section has a dedicated “Autonomous Agent Workflows” heading, while the normal no-`record-base` case appears only indirectly through `--base` examples and config examples.
 
 - Observation: The existing product behavior already matches the intended narrower recommendation.
-  Evidence: `src/config.rs` error text and the completed plan in `docs/exec-plans/completed/covgate-record-base-agent-workflows.md` both describe `record-base` as a remediation when automatic base selection cannot succeed, not as a universal prerequisite.
+  Evidence: `src/config.rs` error text and the completed plan in `docs/exec-plans/completed/0008-covgate-record-base-agent-workflows.md` both describe `record-base` as a remediation when automatic base selection cannot succeed, not as a universal prerequisite.
 
 - Observation: A minimal defensive no-op fits this plan without reopening the broader command design.
   Evidence: the desired behavior is narrow and user-facing: when a normal base ref already resolves, `record-base` should report that it is unnecessary in this environment instead of recording an extra worktree-local base ref.

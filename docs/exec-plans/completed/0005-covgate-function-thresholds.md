@@ -1,12 +1,12 @@
 # Covgate function and method thresholds
 
-Save this in-progress ExecPlan at `docs/exec-plans/active/covgate-function-thresholds.md` while the work is being designed or implemented in this repository.
+Save this in-progress ExecPlan at `docs/exec-plans/active/0005-covgate-function-thresholds.md` while the work is being designed or implemented in this repository.
 
 This ExecPlan is a living document. The sections `Progress`, `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
 Maintain this document in accordance with `docs/PLANS.md`. Re-read that file before revising this plan and keep this plan aligned with its rules.
 
-This plan is intentionally separate from `docs/exec-plans/active/covgate.md` and `docs/exec-plans/active/covgate-fail-uncovered.md`. The current `covgate` plan is about the base diff gate and the uncovered-count follow-up. This plan is a draft for adding function or method-based thresholds as a first-class metric family once Istanbul and Coverlet support lands.
+This plan is intentionally separate from `docs/exec-plans/active/0002-covgate.md` and `docs/exec-plans/active/0001-covgate-fail-uncovered.md`. The current `covgate` plan is about the base diff gate and the uncovered-count follow-up. This plan is a draft for adding function or method-based thresholds as a first-class metric family once Istanbul and Coverlet support lands.
 
 ## Purpose / Big Picture
 
@@ -33,7 +33,7 @@ and `covgate` explains those function-oriented rules directly in console output 
 - [x] (2026-03-16 00:15Z) Implement shared internal callable-unit normalization for currently supported parsers (LLVM functions and Coverlet methods) into `MetricKind::Function` / `OpportunityKind::Function`, including parser edge-case deduplication and covered-state fixes discovered during dogfooding.
 - [x] (2026-03-16 00:15Z) Define the public CLI and TOML surface for function-based fail-under and fail-uncovered gates (`--fail-under-functions`, `--fail-uncovered-functions`, `fail_under_functions`, `fail_uncovered_functions`).
 - [x] (2026-03-16 00:15Z) Specify and implement diff intersection rules for changed functions: callable spans are normalized to source line ranges and selected with the same line-overlap logic used by other metrics in `compute_changed_metric`.
-- [x] (2026-03-16 01:05Z) Move Istanbul-specific validation expectations to the active Istanbul ExecPlan (`docs/exec-plans/active/covgate-vitest-istanbul-native-json-fixture.md`) and keep this plan scoped to shipped function-gating behavior in currently supported formats.
+- [x] (2026-03-16 01:05Z) Move Istanbul-specific validation expectations to the active Istanbul ExecPlan (`docs/exec-plans/active/0006-covgate-vitest-istanbul-native-json-fixture.md`) and keep this plan scoped to shipped function-gating behavior in currently supported formats.
 - [x] (2026-03-15 16:05Z) Align function-threshold integration-test expectations with `docs/TESTING.md`: metric semantics belong in `tests/cli_metrics.rs`, should execute across a compatible fixture list, and should stay separate from CLI interface-only coverage in `tests/cli_interface.rs`.
 
 ## Current evaluation after .NET Coverlet landing

@@ -1,6 +1,6 @@
 # Add crates.io package metadata and a tagged release workflow with checksums and provenance
 
-The canonical completed copy of this ExecPlan lives at `docs/exec-plans/completed/covgate-crates-io-metadata-and-release-workflow.md`. Keep any follow-up release-channel work in a new active ExecPlan rather than moving this file back.
+The canonical completed copy of this ExecPlan lives at `docs/exec-plans/completed/0010-covgate-crates-io-metadata-and-release-workflow.md`. Keep any follow-up release-channel work in a new active ExecPlan rather than moving this file back.
 
 This ExecPlan is a living document. The sections `Progress`, `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 

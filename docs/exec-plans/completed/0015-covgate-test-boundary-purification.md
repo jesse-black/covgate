@@ -1,6 +1,6 @@
 # Purify Internal Tests And Move I/O Coverage To Integration
 
-Save the canonical completed ExecPlan in `docs/exec-plans/completed/covgate-test-boundary-purification.md`.
+Save the canonical completed ExecPlan in `docs/exec-plans/completed/0015-covgate-test-boundary-purification.md`.
 
 This ExecPlan is a living document. The sections `Progress`, `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 

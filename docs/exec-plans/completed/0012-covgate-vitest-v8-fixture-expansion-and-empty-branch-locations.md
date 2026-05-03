@@ -1,6 +1,6 @@
 # Expand the Vitest v8 repro fixture until it reproduces empty branch locations, then make the Istanbul parser tolerate them
 
-The canonical completed copy of this ExecPlan lives at `docs/exec-plans/completed/covgate-vitest-v8-fixture-expansion-and-empty-branch-locations.md`. It was implemented from the in-progress copy that originally lived under `docs/exec-plans/active/`.
+The canonical completed copy of this ExecPlan lives at `docs/exec-plans/completed/0012-covgate-vitest-v8-fixture-expansion-and-empty-branch-locations.md`. It was implemented from the in-progress copy that originally lived under `docs/exec-plans/active/`.
 
 This ExecPlan is a living document. The sections `Progress`, `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` must be kept up to date as work proceeds.
 
@@ -251,4 +251,4 @@ The parser end state should be explicit:
 
 Plan revision note: created this ExecPlan to replace a closed-source Vitest v8 parse failure with an open, native-generated fixture reproduction, then use that reproduction to drive a parser fix for empty branch-location objects.
 
-Revision note: closed the plan after the dedicated `empty-branch-locations` fixture, parser regression, fixture-harness updates, and validation work all landed. The remaining Istanbul line-summary follow-up was split into `docs/exec-plans/active/covgate-istanbul-line-summary-parity.md` so this completed plan stays focused on the original empty-branch-location objective.
+Revision note: closed the plan after the dedicated `empty-branch-locations` fixture, parser regression, fixture-harness updates, and validation work all landed. The remaining Istanbul line-summary follow-up was split into `docs/exec-plans/active/0013-covgate-istanbul-line-summary-parity.md` so this completed plan stays focused on the original empty-branch-location objective.
