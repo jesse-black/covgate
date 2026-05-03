@@ -89,23 +89,15 @@ fn render_verbose(result: &GateResult, diff_description: &str) -> String {
                 ));
             }
             crate::model::GateRule::UncoveredCount { maximum_count, .. } => {
-                if outcome.passed {
-                    out.push_str(&format!(
-                        "Rule {}: {} ({} <= {})\n",
-                        outcome.rule.label(),
-                        status,
-                        outcome.observed_uncovered_count,
-                        maximum_count
-                    ));
-                } else {
-                    out.push_str(&format!(
-                        "Rule {}: {} ({} > {})\n",
-                        outcome.rule.label(),
-                        status,
-                        outcome.observed_uncovered_count,
-                        maximum_count
-                    ));
-                }
+                let comparator = if outcome.passed { "≤" } else { "≰" };
+                out.push_str(&format!(
+                    "Rule {}: {} ({} {} {})\n",
+                    outcome.rule.label(),
+                    status,
+                    outcome.observed_uncovered_count,
+                    comparator,
+                    maximum_count
+                ));
             }
         }
     }
@@ -127,8 +119,10 @@ fn render_minimal(result: &GateResult, diff_description: &str) -> String {
             .rules
             .iter()
             .find(|r| r.rule.metric() == metric.metric);
-        out.push_str(&render_metric_summary(metric, rule_outcome));
-        out.push('\n');
+        if let Some(outcome) = rule_outcome {
+            out.push_str(&render_metric_summary(metric, Some(outcome)));
+            out.push('\n');
+        }
     }
 
     out.trim_end().to_string()
@@ -156,33 +150,28 @@ fn render_failures(result: &GateResult) -> String {
 }
 
 fn render_metric_summary(metric: &ComputedMetric, rule_outcome: Option<&RuleOutcome>) -> String {
-    let status = if let Some(outcome) = rule_outcome {
-        if outcome.passed { "PASS" } else { "FAIL" }
-    } else {
-        "PASS"
+    let Some(outcome) = rule_outcome else {
+        return String::new();
     };
 
+    let status = if outcome.passed { "PASS" } else { "FAIL" };
     let label = title_case(metric.metric.label());
 
-    let rule_str = if let Some(outcome) = rule_outcome {
-        match &outcome.rule {
-            crate::model::GateRule::Percent {
-                minimum_percent, ..
-            } => {
-                let comparator = if outcome.passed { "≥" } else { "≱" };
-                format!("  {} {:.2}%", comparator, minimum_percent)
-            }
-            crate::model::GateRule::UncoveredCount { maximum_count, .. } => {
-                let comparator = if outcome.passed { "≤" } else { ">" };
-                format!("  {} {}", comparator, maximum_count)
-            }
+    let rule_str = match &outcome.rule {
+        crate::model::GateRule::Percent {
+            minimum_percent, ..
+        } => {
+            let comparator = if outcome.passed { "≥" } else { "≱" };
+            format!("  {} {:.2}%", comparator, minimum_percent)
         }
-    } else {
-        String::new()
+        crate::model::GateRule::UncoveredCount { maximum_count, .. } => {
+            let comparator = if outcome.passed { "≤" } else { "≰" };
+            format!("  {} {}", comparator, maximum_count)
+        }
     };
 
     format!(
-        "{}  {:<11} {:>7.2}% ({}/{}){}",
+        "{}  {:<11} {:>7.2}% ({}/{}){:<11}",
         status,
         format!("{}:", label),
         metric.percent,
@@ -190,6 +179,8 @@ fn render_metric_summary(metric: &ComputedMetric, rule_outcome: Option<&RuleOutc
         metric.total,
         rule_str
     )
+    .trim_end()
+    .to_string()
 }
 
 fn group_uncovered_by_file(
@@ -200,6 +191,11 @@ fn group_uncovered_by_file(
         BTreeMap<MetricKind, Vec<SourceSpan>>,
     > = BTreeMap::new();
     for metric in &result.metrics {
+        // Only include metrics that have a rule
+        if !result.rules.iter().any(|r| r.rule.metric() == metric.metric) {
+            continue;
+        }
+
         for opportunity in &metric.uncovered_changed_opportunities {
             files_with_uncovered
                 .entry(opportunity.span.path.clone())
@@ -221,6 +217,11 @@ fn render_file_failure_header(path: &std::path::Path, result: &GateResult) -> St
         MetricKind::Function,
         MetricKind::Region,
     ] {
+        // Only include in header if there is a rule for this metric
+        if !result.rules.iter().any(|r| r.rule.metric() == metric_kind) {
+            continue;
+        }
+
         if let Some(metric_data) = result.metrics.iter().find(|m| m.metric == metric_kind) {
             if let Some(file_totals) = metric_data.changed_totals_by_file.get(path) {
                 let percent = if file_totals.total == 0 {
