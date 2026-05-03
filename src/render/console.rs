@@ -41,7 +41,7 @@ fn render_verbose(result: &GateResult, diff_description: &str) -> String {
                 out.push_str(&format!(
                     "{path_display} ({percent:.2}%): uncovered changed {} spans {}\n",
                     metric.metric.as_str(),
-                    spans.missed.join(", ")
+                    spans.join(", ")
                 ));
             } else {
                 out.push_str(&format!(
@@ -191,7 +191,11 @@ fn group_uncovered_by_file(
     > = BTreeMap::new();
     for metric in &result.metrics {
         // Only include metrics that have a rule
-        if !result.rules.iter().any(|r| r.rule.metric() == metric.metric) {
+        if !result
+            .rules
+            .iter()
+            .any(|r| r.rule.metric() == metric.metric)
+        {
             continue;
         }
 
@@ -210,26 +214,21 @@ fn group_uncovered_by_file(
 fn render_file_failure_header(path: &std::path::Path, result: &GateResult) -> String {
     let mut header = format!("{}", path.display());
     let mut stats = Vec::new();
-    for metric_kind in [
-        MetricKind::Line,
-        MetricKind::Branch,
-        MetricKind::Function,
-        MetricKind::Region,
-    ] {
-        // Only include in header if there is a rule for this metric
-        if !result.rules.iter().any(|r| r.rule.metric() == metric_kind) {
+    for metric in &result.metrics {
+        if !result
+            .rules
+            .iter()
+            .any(|r| r.rule.metric() == metric.metric)
+        {
             continue;
         }
-
-        if let Some(metric_data) = result.metrics.iter().find(|m| m.metric == metric_kind) {
-            if let Some(file_totals) = metric_data.changed_totals_by_file.get(path) {
-                let percent = if file_totals.total == 0 {
-                    100.0
-                } else {
-                    (file_totals.covered as f64 / file_totals.total as f64) * 100.0
-                };
-                stats.push(format!("{:.2}% {}", percent, metric_kind.as_str()));
-            }
+        if let Some(file_totals) = metric.changed_totals_by_file.get(path) {
+            let percent = if file_totals.total == 0 {
+                100.0
+            } else {
+                (file_totals.covered as f64 / file_totals.total as f64) * 100.0
+            };
+            stats.push(format!("{:.2}% {}", percent, metric.metric.as_str()));
         }
     }
     if !stats.is_empty() {
@@ -252,11 +251,7 @@ fn group_file_spans(spans: &[SourceSpan]) -> Vec<String> {
         .collect()
 }
 
-struct FileSummary {
-    missed: Vec<String>,
-}
-
-fn group_spans(spans: &[&SourceSpan]) -> BTreeMap<String, FileSummary> {
+fn group_spans(spans: &[&SourceSpan]) -> BTreeMap<String, Vec<String>> {
     let mut grouped: BTreeMap<String, Vec<SourceSpan>> = BTreeMap::new();
     for span in spans {
         grouped
@@ -266,10 +261,7 @@ fn group_spans(spans: &[&SourceSpan]) -> BTreeMap<String, FileSummary> {
     }
     grouped
         .into_iter()
-        .map(|(path, spans)| {
-            let missed = group_file_spans(&spans);
-            (path, FileSummary { missed })
-        })
+        .map(|(path, spans)| (path, group_file_spans(&spans)))
         .collect()
 }
 
@@ -596,13 +588,18 @@ mod tests {
         };
 
         let rendered = render(&result, "diff", false);
-        let lines: Vec<_> = rendered.lines().filter(|l| l.contains("PASS") || l.contains("FAIL")).collect();
+        let lines: Vec<_> = rendered
+            .lines()
+            .filter(|l| l.contains("PASS") || l.contains("FAIL"))
+            .collect();
         assert_eq!(lines.len(), 2);
-        
+
         let pos1 = lines[0].chars().position(|c| c == '≱' || c == '≥').unwrap();
         let pos2 = lines[1].chars().position(|c| c == '≤' || c == '≰').unwrap();
-        println!("POS1: {}, POS2: {}", pos1, pos2);
-        
-        assert_eq!(pos1, pos2, "Comparators should be at the same horizontal position.\nLine 1: {}\nLine 2: {}", lines[0], lines[1]);
+        assert_eq!(
+            pos1, pos2,
+            "Comparators should be at the same horizontal position.\nLine 1: {}\nLine 2: {}",
+            lines[0], lines[1]
+        );
     }
 }

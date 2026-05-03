@@ -845,7 +845,11 @@ mod tests {
 
         let report = parse_with_repo_root(input, Path::new(".")).expect("parse");
         // No regions should be emitted because end < start
-        assert!(!report.totals_by_file.contains_key(&crate::model::MetricKind::Region));
+        assert!(
+            !report
+                .totals_by_file
+                .contains_key(&crate::model::MetricKind::Region)
+        );
     }
 
     #[test]
