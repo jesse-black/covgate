@@ -52,7 +52,7 @@ You do not own:
 
 Use the planner when the task is to create, rewrite, reopen, or rescope the plan itself.
 
-Do not use the planner to continue implementation from an existing plan; use `generator-execplan` for that. Do not use the planner to perform completion review or close-out validation; use `evaluator-execplan` for that.
+Do not use the planner to continue implementation from an existing plan; use `generator-execplan` for that. Do not use the planner to perform completion review or validation; use `evaluator-execplan` for that.
 
 When requirements or success criteria change in a way that affects what "done" means, hand the plan back to the planner and revise the ExecPlan file before more implementation continues.
 

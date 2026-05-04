@@ -656,4 +656,57 @@ mod tests {
         };
         assert!(!is_llvm_function_named(&span_key));
     }
+
+    #[test]
+    fn verifies_named_function_totals() {
+        let json = r#"{
+            "data": [
+                {
+                    "files": [
+                        {
+                            "filename": "src/lib.rs",
+                            "segments": [[1,1,1,true,true,false], [2,1,0,true,true,false]],
+                            "branches": []
+                        }
+                    ],
+                    "functions": [
+                        {
+                            "name": "_RNvNtCs6ZlX2b1lC0o_7covgate7metrics22compute_changed_metric",
+                            "filenames": ["src/lib.rs"],
+                            "count": 1,
+                            "regions": [[1,1,2,1,1,0,0,0]]
+                        },
+                        {
+                            "name": "_RNCNvNtCs6ZlX2b1lC0o_7covgate7metrics22compute_changed_metric0B5_",
+                            "filenames": ["src/lib.rs"],
+                            "count": 1,
+                            "regions": [[1,1,2,1,1,0,0,0]]
+                        }
+                    ]
+                }
+            ],
+            "type": "llvm.core.json.export",
+            "version": "2.0.1"
+        }"#;
+
+        let repo_root = Path::new("/");
+        let report = super::parse_with_repo_root(json, repo_root).unwrap();
+
+        let path = PathBuf::from("src/lib.rs");
+        let function_totals = report
+            .totals_by_file
+            .get(&crate::model::MetricKind::Function)
+            .and_then(|t| t.get(&path))
+            .unwrap();
+        assert_eq!(function_totals.total, 2);
+        assert_eq!(function_totals.covered, 2);
+
+        let named_function_totals = report
+            .totals_by_file
+            .get(&crate::model::MetricKind::NamedFunction)
+            .and_then(|t| t.get(&path))
+            .unwrap();
+        assert_eq!(named_function_totals.total, 1);
+        assert_eq!(named_function_totals.covered, 1);
+    }
 }

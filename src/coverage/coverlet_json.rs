@@ -265,4 +265,44 @@ mod tests {
             "System.Void Demo.MathOps::<Add>b__0_0()"
         ));
     }
+
+    #[test]
+    fn verifies_named_function_totals() {
+        let json = r#"{
+            "Demo.Tests.dll": {
+                "C:\\src\\MathOps.cs": {
+                    "Demo.MathOps": {
+                        "System.Int32 Demo.MathOps::Add(System.Int32)": {
+                            "Lines": { "1": 1 },
+                            "Branches": []
+                        },
+                        "System.Void Demo.MathOps::<Add>b__0_0()": {
+                            "Lines": { "2": 1 },
+                            "Branches": []
+                        }
+                    }
+                }
+            }
+        }"#;
+
+        let repo_root = Path::new("C:/");
+        let report = super::parse_with_repo_root(json, repo_root).unwrap();
+
+        let path = PathBuf::from("src/MathOps.cs");
+        let function_totals = report
+            .totals_by_file
+            .get(&crate::model::MetricKind::Function)
+            .and_then(|t| t.get(&path))
+            .unwrap();
+        assert_eq!(function_totals.total, 2);
+        assert_eq!(function_totals.covered, 2);
+
+        let named_function_totals = report
+            .totals_by_file
+            .get(&crate::model::MetricKind::NamedFunction)
+            .and_then(|t| t.get(&path))
+            .unwrap();
+        assert_eq!(named_function_totals.total, 1);
+        assert_eq!(named_function_totals.covered, 1);
+    }
 }

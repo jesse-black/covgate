@@ -464,3 +464,28 @@ fn uncovered_named_function_budget_fails_when_exceeded() {
         assert!(stdout.contains("Rule fail-uncovered-named-functions: FAIL"));
     }
 }
+
+#[test]
+fn named_function_threshold_passes_for_all_pass_fixtures() {
+    for fixture in function_capable_pass_fixtures() {
+        let temp = tempdir().expect("tempdir should exist");
+        let worktree = setup_fixture_worktree(temp.path(), fixture);
+        let diff_file = write_worktree_diff(temp.path(), &worktree);
+
+        let output = run_covgate(
+            &worktree,
+            fixture,
+            &[
+                "--verbose".to_string(),
+                "--diff-file".to_string(),
+                diff_file.to_string_lossy().into_owned(),
+                "--fail-under-named-functions".to_string(),
+                "100".to_string(),
+            ],
+        );
+
+        assert_eq!(output.status.code(), Some(0), "fixture={}", fixture.id());
+        let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+        assert!(stdout.contains("Rule fail-under-named-functions: PASS"));
+    }
+}

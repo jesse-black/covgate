@@ -1,5 +1,6 @@
 ---
 description: "ExecPlan for adding the named-functions metric, which filters function coverage to exclude closures, anonymous functions, and compiler-generated callables; read when implementing or continuing this feature."
+status: "reviewing"
 ---
 
 # Named function metric
@@ -58,9 +59,9 @@ description: "ExecPlan for adding the named-functions metric, which filters func
 - Hyphenated metrics (like `named-function`) require `title_case` to be aware of word boundaries to render correctly (e.g., "Named Function" instead of "Named-function"). Updated `src/render/mod.rs` to handle this.
 - Unit tests for private classification logic in parsers required explicit imports in the `tests` submodules.
 
-
 ## Review
 
-- [ ] (Minor) Istanbul and LLVM inline tests cover classification logic only, not named-function totals. The plan steps say "verifying closure-named symbols are excluded from named-function totals" (LLVM) and "assert only `compute` contributes to named totals" (Istanbul). The inline tests call `is_llvm_function_named` and `is_istanbul_function_named` directly with constructed keys/values — they do not exercise the totals accumulation path in the parser (i.e., they do not assert `report.totals_by_file.get(&MetricKind::NamedFunction)` is populated correctly for a sample JSON input). Classification is correct, but a single parse-level totals assertion per parser would give tighter feedback than waiting for CLI integration tests to catch accumulation bugs.
-
-- [ ] (Minor): No pass-scenario tests for named function gates. `function_threshold_passes_for_all_pass_fixtures` exists for the `functions` metric but no equivalent `named_function_threshold_passes_for_all_pass_fixtures` was added. The plan only requires mirroring the two fail tests, so this is plan-consistent; TESTING.md's minimum of "at least one end-to-end CLI test case" is satisfied by the fail tests. Noted for parity with the existing function test suite.
+- [x] (Minor) Istanbul and LLVM inline tests cover classification logic only, not named-function totals. Added parse-level totals assertions for LLVM, Istanbul, and Coverlet.
+- [x] (Minor): No pass-scenario tests for named function gates. Added `named_function_threshold_passes_for_all_pass_fixtures` to `tests/cli_metrics.rs`.
+- [x] (Major): Verified integration with Plan #17. Dotnet basic-fail fixture now provides real function-gate coverage failures, and `tests/cli_metrics.rs` uses uniform assertions. Extracted public inline tests are correctly placed in `tests/`.
+- [x] (Validation): `cargo xtask validate` passed with 210 tests.
