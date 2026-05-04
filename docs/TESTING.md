@@ -22,18 +22,18 @@ Four principles, ordered by how often they bite at review. The process sections 
 
 Use `#[cfg(test)]` inline when the test must reach private items — private functions, private helpers, or internal types that are not exposed through the public API. The inline module is a sibling to the production code and can access private items directly; this is the primary reason the feature exists. If a test calls a private function, it belongs inline, and only there.
 
-Use `tests/*.rs` when the test exercises only `pub` or `pub(crate)` items. Tests in `tests/` compile as a separate crate and cannot see private items, which makes the boundary explicit and prevents the test from depending on internals.
+Use `tests/*.rs` when the test exercises only the public crate API. Tests in `tests/` compile as a separate crate and cannot see private or `pub(crate)` items, which makes the boundary explicit and prevents the test from depending on internals.
 
-The deciding question is: **does this test call a private function?** If yes, inline. If no, `tests/`.
+The deciding question is: **does this test call a private or `pub(crate)` item?** If yes, inline. If no, `tests/`.
 
-Inline test modules that do not call any private function are wrong placement, regardless of how they got there. A large `#[cfg(test)]` block at the bottom of a parser module that only calls `pub(crate) parse_with_repo_root` is not earning its place inline — it is making the production code harder to read without gaining anything from the access.
+Inline test modules that do not call any private function are wrong placement, regardless of how they got there. A large `#[cfg(test)]` block at the bottom of a parser module that only exercises behavior reachable through the public API (like `coverage::parse_with_repo_root`) is not earning its place inline — it is making the production code harder to read without gaining anything from the access.
 
 Correct uses of inline tests in this codebase:
 - `src/coverage/llvm_json.rs` — tests for private `normalize_path` and `normalize_llvm_function_name` must be inline.
 - `src/coverage/coverlet_json.rs` — tests for private `normalize_path` must be inline.
 
-Incorrect uses (tests that only call `pub`/`pub(crate)` items but live inline anyway):
-- `src/coverage/istanbul_json.rs` — all tests call `pub(crate) parse_with_repo_root`; they belong in `tests/coverage_parse.rs`.
+Incorrect uses (tests that exercise only public APIs but live inline anyway):
+- `src/coverage/istanbul_json.rs` — all tests exercise parser behavior reachable through the public coverage API; they belong in `tests/coverage_parse.rs`.
 - `src/gate.rs` — all tests call `pub fn evaluate`; they belong in `tests/`.
 
 When a file has a mix — some tests calling private functions, some calling only public ones — keep only the private-access tests inline. Extract the rest.

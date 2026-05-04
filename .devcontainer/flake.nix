@@ -55,7 +55,6 @@
               ninja
               clang
               llvmPackages.llvm
-              dotnet-sdk_10
               nodejs_24
               dotnet-sdk_10
 
