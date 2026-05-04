@@ -27,35 +27,40 @@ description: "ExecPlan for adding the named-functions metric, which filters func
 - None
 
 ## Steps
-- [ ] `src/model.rs`: add `NamedFunction` to `MetricKind`; add match arms in `as_str()` (`"named-function"`), `label()` (`"named-functions"`), `to_opportunity_kind()` (`OpportunityKind::Function`); add `is_named_function: Option<bool>` to `CoverageOpportunity`; update all construction sites in parsers to set `is_named_function: None` for non-function opportunities.
-- [ ] `src/coverage/llvm_json.rs`: add `is_llvm_function_named(key: &FunctionKey) -> bool` (returns false for `Span` variant; for `NormalizedName` returns true unless any `::` segment is `{…}`); set `is_named_function: Some(is_named)` on emitted function opportunities; accumulate `named_function_totals_by_file` alongside `function_totals_by_file`; insert under `MetricKind::NamedFunction`.
-- [ ] `src/coverage/istanbul_json.rs`: add `name: Option<String>` to `IstanbulFunctionMap`; add `is_istanbul_function_named(name: Option<&str>) -> bool` (false for None, `""`, `"<anonymous>"`, or string starting with `"(anonymous"` and ending with `")"`); add `is_named: bool` to private `FunctionRecord`; set `is_named_function`; accumulate named totals.
-- [ ] `src/coverage/coverlet_json.rs`: change innermost `methods.values()` to `methods.iter()` to capture key; add `is_coverlet_method_named(key: &str) -> bool` (extracts segment between `"::"` and first `"("`; named if that segment contains neither `<` nor `>`); add `is_named: bool` to private `FunctionRecord`; set `is_named_function`; accumulate named totals.
-- [ ] `src/metrics.rs`: in `compute_changed_metric`, add `let named_only = matches!(metric, MetricKind::NamedFunction);` and skip opportunities where `named_only && !opportunity.is_named_function.unwrap_or(false)`.
-- [ ] `src/cli.rs`: add `fail_under_named_functions: Option<f64>` and `fail_uncovered_named_functions: Option<usize>` to `Args`, following the existing function-arg pattern.
-- [ ] `src/config.rs`: add `fail_under_named_functions: Option<f64>` and `fail_uncovered_named_functions: Option<usize>` to `GateConfig`; add `push_percent_rule` and `push_uncovered_rule` calls with `MetricKind::NamedFunction` in `resolve_rules()`.
-- [ ] `src/coverage/llvm_json.rs` tests: add unit test verifying closure-named symbols are excluded from named-function totals and plain functions are included; inline JSON using symbols from existing `demangles_real_repro_rust_symbol_set_into_eight_identities` test; keep inline as it tests private classification logic.
-- [ ] `src/coverage/istanbul_json.rs` tests: add unit test with `fnMap` entries named `"(anonymous_0)"`, `""`, `"<anonymous>"`, and `"compute"`; assert only `"compute"` contributes to named totals; keep inline as it tests private classification logic.
-- [ ] `src/coverage/coverlet_json.rs` tests: add unit test with method keys `"System.Void Demo.MathOps::<Add>b__0_0()"` and `"System.Int32 Demo.MathOps::Add(System.Int32)"`, assert only `Add` is named; keep inline as it tests private classification logic.
-- [ ] `tests/cli_metrics.rs`: add integration tests for `--fail-under-named-functions` and `--fail-uncovered-named-functions` mirroring `function_threshold_fails_when_below_threshold` and `uncovered_function_budget_fails_when_exceeded`; use the same compatible fixture lists (`function_capable_fail_fixtures`, `function_capable_pass_fixtures`); assert uniformly (no language-specific conditionals), leveraging the fixed dotnet fixture from #17.
+- [x] `src/model.rs`: add `NamedFunction` to `MetricKind`; add match arms in `as_str()` (`"named-function"`), `label()` (`"named-functions"`), `to_opportunity_kind()` (`OpportunityKind::Function`); add `is_named_function: Option<bool>` to `CoverageOpportunity`; update all construction sites in parsers to set `is_named_function: None` for non-function opportunities.
+- [x] `src/coverage/llvm_json.rs`: add `is_llvm_function_named(key: &FunctionKey) -> bool` (returns false for `Span` variant; for `NormalizedName` returns true unless any `::` segment is `{…}`); set `is_named_function: Some(is_named)` on emitted function opportunities; accumulate `named_function_totals_by_file` alongside `function_totals_by_file`; insert under `MetricKind::NamedFunction`.
+- [x] `src/coverage/istanbul_json.rs`: add `name: Option<String>` to `IstanbulFunctionMap`; add `is_istanbul_function_named(name: Option<&str>) -> bool` (false for None, `""`, `"<anonymous>"`, or string starting with `"(anonymous"` and ending with `")"`); add `is_named: bool` to private `FunctionRecord`; set `is_named_function`; accumulate named totals.
+- [x] `src/coverage/coverlet_json.rs`: change innermost `methods.values()` to `methods.iter()` to capture key; add `is_coverlet_method_named(key: &str) -> bool` (extracts segment between `"::"` and first `"("`; named if that segment contains neither `<` nor `>`); add `is_named: bool` to private `FunctionRecord`; set `is_named_function`; accumulate named totals.
+- [x] `src/metrics.rs`: in `compute_changed_metric`, add `let named_only = matches!(metric, MetricKind::NamedFunction);` and skip opportunities where `named_only && !opportunity.is_named_function.unwrap_or(false)`.
+- [x] `src/cli.rs`: add `fail_under_named_functions: Option<f64>` and `fail_uncovered_named_functions: Option<usize>` to `Args`, following the existing function-arg pattern.
+- [x] `src/config.rs`: add `fail_under_named_functions: Option<f64>` and `fail_uncovered_named_functions: Option<usize>` to `GateConfig`; add `push_percent_rule` and `push_uncovered_rule` calls with `MetricKind::NamedFunction` in `resolve_rules()`.
+- [x] `src/coverage/llvm_json.rs` tests: add unit test verifying closure-named symbols are excluded from named-function totals and plain functions are included; inline JSON using symbols from existing `demangles_real_repro_rust_symbol_set_into_eight_identities` test; keep inline as it tests private classification logic.
+- [x] `src/coverage/istanbul_json.rs` tests: add unit test with `fnMap` entries named `"(anonymous_0)"`, `""`, `"<anonymous>"`, and `"compute"`; assert only `"compute"` contributes to named totals; keep inline as it tests private classification logic.
+- [x] `src/coverage/coverlet_json.rs` tests: add unit test with method keys `"System.Void Demo.MathOps::<Add>b__0_0()"` and `"System.Int32 Demo.MathOps::Add(System.Int32)"`, assert only `Add` is named; keep inline as it tests private classification logic.
+- [x] `tests/cli_metrics.rs`: add integration tests for `--fail-under-named-functions` and `--fail-uncovered-named-functions` mirroring `function_threshold_fails_when_below_threshold` and `uncovered_function_budget_fails_when_exceeded`; use the same compatible fixture lists (`function_capable_fail_fixtures`, `function_capable_pass_fixtures`); assert uniformly (no language-specific conditionals), leveraging the fixed dotnet fixture from #17.
 
 ## Validation
-- `cargo xtask quick` — fast check during iteration
-- `cargo check` — use non-exhaustive match errors to verify all MetricKind sites are covered
-- `cargo test model`
-- `cargo test llvm_json`
-- `cargo test istanbul`
-- `cargo test coverlet`
-- `cargo test metrics`
-- `cargo test config`
-- `cargo test cli_metrics`
-- `cargo test`
-- `cargo clippy --all-targets --all-features -- -D warnings`
-- `cargo fmt --check`
-- `cargo xtask validate` — final pre-completion check
+- [x] `cargo xtask quick` — fast check during iteration
+- [x] `cargo check` — use non-exhaustive match errors to verify all MetricKind sites are covered
+- [x] `cargo test model`
+- [x] `cargo test llvm_json`
+- [x] `cargo test istanbul`
+- [x] `cargo test coverlet`
+- [x] `cargo test metrics`
+- [x] `cargo test config`
+- [x] `cargo test cli_metrics`
+- [x] `cargo test`
+- [x] `cargo clippy --all-targets --all-features -- -D warnings`
+- [x] `cargo fmt --check`
+- [x] `cargo xtask validate` — final pre-completion check
 
 ## Discoveries
-- None yet
+- Hyphenated metrics (like `named-function`) require `title_case` to be aware of word boundaries to render correctly (e.g., "Named Function" instead of "Named-function"). Updated `src/render/mod.rs` to handle this.
+- Unit tests for private classification logic in parsers required explicit imports in the `tests` submodules.
+
 
 ## Review
-- [ ] None yet
+
+- [ ] (Minor) Istanbul and LLVM inline tests cover classification logic only, not named-function totals. The plan steps say "verifying closure-named symbols are excluded from named-function totals" (LLVM) and "assert only `compute` contributes to named totals" (Istanbul). The inline tests call `is_llvm_function_named` and `is_istanbul_function_named` directly with constructed keys/values — they do not exercise the totals accumulation path in the parser (i.e., they do not assert `report.totals_by_file.get(&MetricKind::NamedFunction)` is populated correctly for a sample JSON input). Classification is correct, but a single parse-level totals assertion per parser would give tighter feedback than waiting for CLI integration tests to catch accumulation bugs.
+
+- [ ] (Minor): No pass-scenario tests for named function gates. `function_threshold_passes_for_all_pass_fixtures` exists for the `functions` metric but no equivalent `named_function_threshold_passes_for_all_pass_fixtures` was added. The plan only requires mirroring the two fail tests, so this is plan-consistent; TESTING.md's minimum of "at least one end-to-end CLI test case" is satisfied by the fail tests. Noted for parity with the existing function test suite.

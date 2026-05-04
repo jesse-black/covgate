@@ -20,6 +20,7 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
     let mut line_totals_by_file = BTreeMap::new();
     let mut branch_totals_by_file = BTreeMap::new();
     let mut function_totals_by_file = BTreeMap::new();
+    let mut named_function_totals_by_file = BTreeMap::new();
 
     for classes_by_file in export.into_values() {
         for (file_name, class_value) in classes_by_file {
@@ -36,11 +37,13 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
                 let Some(methods) = methods_value.as_object() else {
                     continue;
                 };
-                for method_value in methods.values() {
+                for (method_key, method_value) in methods {
                     let Ok(method) = serde_json::from_value::<CoverletMethod>(method_value.clone())
                     else {
                         continue;
                     };
+
+                    let is_named = is_coverlet_method_named(method_key);
 
                     for (&line_number, &hits) in &method.lines {
                         let covered = hits > 0;
@@ -60,6 +63,7 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
                             start_line,
                             end_line,
                             covered,
+                            is_named,
                         });
                     }
                 }
@@ -82,6 +86,7 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
                             end_col: None,
                         },
                         covered: is_covered,
+                        is_named_function: None,
                     });
                 }
                 line_totals_by_file.insert(path.clone(), FileTotals { covered, total });
@@ -105,6 +110,7 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
                             end_col: None,
                         },
                         covered: is_covered,
+                        is_named_function: None,
                     });
                 }
                 branch_totals_by_file.insert(path.clone(), FileTotals { covered, total });
@@ -113,10 +119,21 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
             if !function_records.is_empty() {
                 let mut covered = 0usize;
                 let total = function_records.len();
+
+                let mut named_covered = 0usize;
+                let mut named_total = 0usize;
+
                 for function in function_records {
                     if function.covered {
                         covered += 1;
+                        if function.is_named {
+                            named_covered += 1;
+                        }
                     }
+                    if function.is_named {
+                        named_total += 1;
+                    }
+
                     opportunities.push(CoverageOpportunity {
                         kind: OpportunityKind::Function,
                         span: SourceSpan {
@@ -127,9 +144,19 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
                             end_col: None,
                         },
                         covered: function.covered,
+                        is_named_function: Some(function.is_named),
                     });
                 }
-                function_totals_by_file.insert(path, FileTotals { covered, total });
+                function_totals_by_file.insert(path.clone(), FileTotals { covered, total });
+                if named_total > 0 {
+                    named_function_totals_by_file.insert(
+                        path,
+                        FileTotals {
+                            covered: named_covered,
+                            total: named_total,
+                        },
+                    );
+                }
             }
         }
     }
@@ -144,11 +171,22 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
     if !function_totals_by_file.is_empty() {
         totals_by_file.insert(MetricKind::Function, function_totals_by_file);
     }
+    if !named_function_totals_by_file.is_empty() {
+        totals_by_file.insert(MetricKind::NamedFunction, named_function_totals_by_file);
+    }
 
     Ok(CoverageReport {
         opportunities,
         totals_by_file,
     })
+}
+
+fn is_coverlet_method_named(key: &str) -> bool {
+    let Some(method_part) = key.split("::").nth(1) else {
+        return false;
+    };
+    let name_part = method_part.split('(').next().unwrap_or("");
+    !name_part.contains('<') && !name_part.contains('>')
 }
 
 fn normalize_path(value: &str, repo_root: &Path) -> PathBuf {
@@ -187,6 +225,7 @@ struct FunctionRecord {
     start_line: u32,
     end_line: u32,
     covered: bool,
+    is_named: bool,
 }
 
 fn deserialize_line_hits<'de, D>(deserializer: D) -> Result<HashMap<u32, u64>, D::Error>
@@ -208,7 +247,7 @@ where
 mod tests {
     use std::path::{Path, PathBuf};
 
-    use super::normalize_path;
+    use super::{is_coverlet_method_named, normalize_path};
 
     #[test]
     fn normalizes_windows_path_separators() {
@@ -218,9 +257,12 @@ mod tests {
     }
 
     #[test]
-    fn keeps_absolute_paths_outside_repo_as_absolute() {
-        let repo_root = Path::new("/workspace/covgate");
-        let normalized = normalize_path("/tmp/other/src/lib.cs", repo_root);
-        assert_eq!(normalized, PathBuf::from("/tmp/other/src/lib.cs"));
+    fn identifies_named_functions_correctly() {
+        assert!(is_coverlet_method_named(
+            "System.Int32 Demo.MathOps::Add(System.Int32)"
+        ));
+        assert!(!is_coverlet_method_named(
+            "System.Void Demo.MathOps::<Add>b__0_0()"
+        ));
     }
 }

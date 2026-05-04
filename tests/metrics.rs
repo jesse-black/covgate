@@ -20,6 +20,7 @@ fn computes_changed_region_metric() {
                     end_col: None,
                 },
                 covered: true,
+                is_named_function: None,
             },
             CoverageOpportunity {
                 kind: OpportunityKind::Region,
@@ -31,6 +32,7 @@ fn computes_changed_region_metric() {
                     end_col: None,
                 },
                 covered: false,
+                is_named_function: None,
             },
         ],
         totals_by_file: BTreeMap::from([(

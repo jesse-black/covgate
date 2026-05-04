@@ -20,6 +20,7 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
     let mut line_totals_by_file = BTreeMap::new();
     let mut branch_totals_by_file = BTreeMap::new();
     let mut function_totals_by_file = BTreeMap::new();
+    let mut named_function_totals_by_file = BTreeMap::new();
 
     for (file_name, coverage) in report {
         let path = normalize_path(&file_name, repo_root);
@@ -51,6 +52,7 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
                         end_col: Some(column),
                     },
                     covered: is_covered,
+                    is_named_function: None,
                 });
             }
             line_totals_by_file.insert(path.clone(), FileTotals { covered, total });
@@ -110,6 +112,7 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
                         end_col: Some(record.end_col),
                     },
                     covered: record.covered,
+                    is_named_function: None,
                 });
             }
             branch_totals_by_file.insert(path.clone(), FileTotals { covered, total });
@@ -118,12 +121,14 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
         let mut function_records = Vec::new();
         for (function_id, function_map) in &coverage.fn_map {
             let covered = coverage.f.get(function_id).copied().unwrap_or(0) > 0;
+            let is_named = is_istanbul_function_named(function_map.name.as_deref());
             function_records.push(FunctionRecord {
                 start_line: function_map.loc.start.line,
                 start_col: function_map.loc.start.column.unwrap_or(0),
                 end_line: function_map.loc.end.line,
                 end_col: function_map.loc.end.column.unwrap_or(0),
                 covered,
+                is_named,
             });
         }
 
@@ -133,6 +138,16 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
                 .filter(|function| function.covered)
                 .count();
             let total = function_records.len();
+
+            let named_covered = function_records
+                .iter()
+                .filter(|function| function.is_named && function.covered)
+                .count();
+            let named_total = function_records
+                .iter()
+                .filter(|function| function.is_named)
+                .count();
+
             for function in function_records {
                 opportunities.push(CoverageOpportunity {
                     kind: OpportunityKind::Function,
@@ -144,9 +159,19 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
                         end_col: Some(function.end_col),
                     },
                     covered: function.covered,
+                    is_named_function: Some(function.is_named),
                 });
             }
-            function_totals_by_file.insert(path, FileTotals { covered, total });
+            function_totals_by_file.insert(path.clone(), FileTotals { covered, total });
+            if named_total > 0 {
+                named_function_totals_by_file.insert(
+                    path,
+                    FileTotals {
+                        covered: named_covered,
+                        total: named_total,
+                    },
+                );
+            }
         }
     }
 
@@ -160,11 +185,43 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
     if !function_totals_by_file.is_empty() {
         totals_by_file.insert(MetricKind::Function, function_totals_by_file);
     }
+    if !named_function_totals_by_file.is_empty() {
+        totals_by_file.insert(MetricKind::NamedFunction, named_function_totals_by_file);
+    }
 
     Ok(CoverageReport {
         opportunities,
         totals_by_file,
     })
+}
+
+fn is_istanbul_function_named(name: Option<&str>) -> bool {
+    let Some(name) = name else {
+        return false;
+    };
+    if name.is_empty() || name == "<anonymous>" {
+        return false;
+    }
+    if name.starts_with("(anonymous") && name.ends_with(')') {
+        return false;
+    }
+    true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_istanbul_function_named;
+
+    #[test]
+    fn identifies_named_functions_correctly() {
+        assert!(!is_istanbul_function_named(None));
+        assert!(!is_istanbul_function_named(Some("")));
+        assert!(!is_istanbul_function_named(Some("<anonymous>")));
+        assert!(!is_istanbul_function_named(Some("(anonymous_0)")));
+        assert!(!is_istanbul_function_named(Some("(anonymous_123)")));
+        assert!(is_istanbul_function_named(Some("compute")));
+        assert!(is_istanbul_function_named(Some("fetchData")));
+    }
 }
 
 fn normalize_path(value: &str, repo_root: &Path) -> PathBuf {
@@ -200,6 +257,7 @@ struct IstanbulFileCoverage {
 
 #[derive(Debug, Deserialize)]
 struct IstanbulFunctionMap {
+    name: Option<String>,
     loc: IstanbulSpan,
 }
 
@@ -246,6 +304,7 @@ struct FunctionRecord {
     end_line: u32,
     end_col: u32,
     covered: bool,
+    is_named: bool,
 }
 
 #[derive(Debug)]

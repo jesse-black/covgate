@@ -9,6 +9,7 @@ pub enum MetricKind {
     Line,
     Branch,
     Function,
+    NamedFunction,
 }
 
 impl MetricKind {
@@ -18,6 +19,7 @@ impl MetricKind {
             Self::Line => "line",
             Self::Branch => "branch",
             Self::Function => "function",
+            Self::NamedFunction => "named-function",
         }
     }
 
@@ -27,6 +29,7 @@ impl MetricKind {
             Self::Line => "lines",
             Self::Branch => "branches",
             Self::Function => "functions",
+            Self::NamedFunction => "named-functions",
         }
     }
 
@@ -36,6 +39,7 @@ impl MetricKind {
             Self::Line => OpportunityKind::Line,
             Self::Branch => OpportunityKind::BranchOutcome,
             Self::Function => OpportunityKind::Function,
+            Self::NamedFunction => OpportunityKind::Function,
         }
     }
 }
@@ -162,6 +166,7 @@ pub struct CoverageOpportunity {
     pub kind: OpportunityKind,
     pub span: SourceSpan,
     pub covered: bool,
+    pub is_named_function: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

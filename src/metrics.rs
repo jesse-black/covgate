@@ -24,8 +24,13 @@ pub fn compute_changed_metric(
     let mut changed_totals_by_file: BTreeMap<PathBuf, FileTotals> = BTreeMap::new();
 
     let target_kind = metric.to_opportunity_kind();
+    let named_only = matches!(metric, MetricKind::NamedFunction);
+
     for opportunity in &report.opportunities {
         if opportunity.kind != target_kind {
+            continue;
+        }
+        if named_only && !opportunity.is_named_function.unwrap_or(false) {
             continue;
         }
         let changed = diff.iter().any(|file| {

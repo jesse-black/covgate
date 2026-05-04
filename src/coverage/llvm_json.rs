@@ -20,6 +20,7 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
     let mut line_totals_by_file = BTreeMap::new();
     let mut branch_totals_by_file = BTreeMap::new();
     let mut function_totals_by_file = BTreeMap::new();
+    let mut named_function_totals_by_file = BTreeMap::new();
 
     for data in export.data {
         let known_file_paths: Vec<PathBuf> = data
@@ -108,6 +109,7 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
                         end_col: Some(region.end_col),
                     },
                     covered: region.covered,
+                    is_named_function: None,
                 });
             }
 
@@ -139,6 +141,7 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
                         end_col: None,
                     },
                     covered: line.covered,
+                    is_named_function: None,
                 });
             }
 
@@ -170,6 +173,7 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
                         end_col: Some(branch.start_col),
                     },
                     covered: branch.covered,
+                    is_named_function: None,
                 });
             }
 
@@ -186,25 +190,36 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
             if let Some(function_records) = function_records_by_file.remove(&path) {
                 let mut function_covered = 0usize;
                 let function_total = function_records.len();
+                let mut named_function_covered = 0usize;
+                let mut named_function_total = 0usize;
+
                 for (key, covered) in function_records {
-                    let (start_line, start_col, end_line, end_col) = match key {
+                    let (start_line, start_col, end_line, end_col) = match &key {
                         FunctionKey::Span {
                             start_line,
                             start_col,
                             end_line,
                             end_col,
-                        } => (start_line, start_col, end_line, end_col),
+                        } => (*start_line, *start_col, *end_line, *end_col),
                         FunctionKey::NormalizedName {
                             start_line,
                             start_col,
                             end_line,
                             end_col,
                             ..
-                        } => (start_line, start_col, end_line, end_col),
+                        } => (*start_line, *start_col, *end_line, *end_col),
                     };
+                    let is_named = is_llvm_function_named(&key);
                     if covered {
                         function_covered += 1;
+                        if is_named {
+                            named_function_covered += 1;
+                        }
                     }
+                    if is_named {
+                        named_function_total += 1;
+                    }
+
                     opportunities.push(CoverageOpportunity {
                         kind: OpportunityKind::Function,
                         span: SourceSpan {
@@ -215,15 +230,25 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
                             end_col: Some(end_col),
                         },
                         covered,
+                        is_named_function: Some(is_named),
                     });
                 }
                 function_totals_by_file.insert(
-                    path,
+                    path.clone(),
                     FileTotals {
                         covered: function_covered,
                         total: function_total,
                     },
                 );
+                if named_function_total > 0 {
+                    named_function_totals_by_file.insert(
+                        path,
+                        FileTotals {
+                            covered: named_function_covered,
+                            total: named_function_total,
+                        },
+                    );
+                }
             }
         }
     }
@@ -241,11 +266,25 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
     if !function_totals_by_file.is_empty() {
         totals_by_file.insert(MetricKind::Function, function_totals_by_file);
     }
+    if !named_function_totals_by_file.is_empty() {
+        totals_by_file.insert(MetricKind::NamedFunction, named_function_totals_by_file);
+    }
 
     Ok(CoverageReport {
         opportunities,
         totals_by_file,
     })
+}
+
+fn is_llvm_function_named(key: &FunctionKey) -> bool {
+    match key {
+        FunctionKey::Span { .. } => false,
+        FunctionKey::NormalizedName {
+            normalized_name, ..
+        } => !normalized_name
+            .split("::")
+            .any(|segment| segment.starts_with('{') && segment.ends_with('}')),
+    }
 }
 
 fn normalize_path(value: &str, repo_root: &Path) -> PathBuf {
@@ -524,7 +563,9 @@ fn bool_at(values: &[serde_json::Value], index: usize) -> Option<bool> {
 mod tests {
     use std::path::{Path, PathBuf};
 
-    use super::{normalize_llvm_function_name, normalize_path};
+    use super::{
+        FunctionKey, is_llvm_function_named, normalize_llvm_function_name, normalize_path,
+    };
 
     #[test]
     fn normalizes_absolute_paths_to_repo_relative() {
@@ -584,5 +625,35 @@ mod tests {
         ]);
 
         assert_eq!(normalized, expected);
+    }
+
+    #[test]
+    fn identifies_named_functions_correctly() {
+        let raw_names = [
+            "_RNvNtCs6ZlX2b1lC0o_7covgate7metrics22compute_changed_metric", // covgate::metrics::compute_changed_metric
+            "_RNCNvNtCs6ZlX2b1lC0o_7covgate7metrics22compute_changed_metric0B5_", // covgate::metrics::compute_changed_metric::{closure#0}
+        ];
+
+        let keys: Vec<_> = raw_names
+            .into_iter()
+            .map(|name| FunctionKey::NormalizedName {
+                normalized_name: normalize_llvm_function_name(name),
+                start_line: 1,
+                start_col: 1,
+                end_line: 1,
+                end_col: 1,
+            })
+            .collect();
+
+        assert!(is_llvm_function_named(&keys[0]));
+        assert!(!is_llvm_function_named(&keys[1]));
+
+        let span_key = FunctionKey::Span {
+            start_line: 1,
+            start_col: 1,
+            end_line: 1,
+            end_col: 1,
+        };
+        assert!(!is_llvm_function_named(&span_key));
     }
 }

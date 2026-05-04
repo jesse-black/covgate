@@ -51,6 +51,7 @@ fn fails_above_uncovered_count_threshold() {
                         end_col: None,
                     },
                     covered: false,
+                    is_named_function: None,
                 },
                 covgate::model::CoverageOpportunity {
                     kind: covgate::model::OpportunityKind::Region,
@@ -62,6 +63,7 @@ fn fails_above_uncovered_count_threshold() {
                         end_col: None,
                     },
                     covered: false,
+                    is_named_function: None,
                 },
             ],
             changed_totals_by_file: BTreeMap::new(),
@@ -96,6 +98,7 @@ fn multiple_rules_fail_if_any_fails() {
                     end_col: None,
                 },
                 covered: false,
+                is_named_function: None,
             }],
             changed_totals_by_file: BTreeMap::new(),
             totals_by_file: BTreeMap::new(),

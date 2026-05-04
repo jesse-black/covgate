@@ -23,6 +23,7 @@ fn renders_console_summary_minimal() {
                     end_col: None,
                 },
                 covered: false,
+                is_named_function: None,
             }],
             changed_totals_by_file: BTreeMap::from([(
                 PathBuf::from("src/lib.rs"),
@@ -69,6 +70,7 @@ fn renders_console_summary_verbose() {
                     end_col: None,
                 },
                 covered: false,
+                is_named_function: None,
             }],
             changed_totals_by_file: BTreeMap::from([(
                 PathBuf::from("src/lib.rs"),
@@ -116,6 +118,7 @@ fn groups_duplicate_spans_with_counts() {
                         end_col: None,
                     },
                     covered: false,
+                    is_named_function: None,
                 },
                 CoverageOpportunity {
                     kind: OpportunityKind::Region,
@@ -127,6 +130,7 @@ fn groups_duplicate_spans_with_counts() {
                         end_col: None,
                     },
                     covered: false,
+                    is_named_function: None,
                 },
             ],
             changed_totals_by_file: BTreeMap::from([(
@@ -173,6 +177,7 @@ fn sorts_spans_numerically() {
                         end_col: None,
                     },
                     covered: false,
+                    is_named_function: None,
                 },
                 CoverageOpportunity {
                     kind: OpportunityKind::Region,
@@ -184,6 +189,7 @@ fn sorts_spans_numerically() {
                         end_col: None,
                     },
                     covered: false,
+                    is_named_function: None,
                 },
             ],
             changed_totals_by_file: BTreeMap::from([(
