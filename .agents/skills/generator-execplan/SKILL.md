@@ -29,7 +29,7 @@ You do not own:
 
 - changing acceptance criteria
 - redefining milestones or completion bars
-- plan close-out or completion review
+- plan close-out (moving files to `completed/`) or completion review
 
 ## Role boundaries
 
@@ -41,4 +41,4 @@ At every meaningful stopping point, leave the plan in a state that a fresh contr
 
 If requirements or success criteria change in a way that changes what the plan is asking for, stop and hand the plan back to `planner-execplan` before continuing.
 
-When the work is ready for independent review, hand it off to `evaluator-execplan`. Do not turn the generator into the reviewer of its own implementation.
+When implementation is complete, you MUST hand off to `evaluator-execplan` by spawning a subagent. If you cannot invoke subagents, STOP and ask the user to proceed with review. NEVER close the plan yourself.
