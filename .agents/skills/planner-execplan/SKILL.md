@@ -12,8 +12,11 @@ Use this skill when the task is to shape the plan itself rather than to implemen
 MUST READ before drafting or substantially revising any ExecPlan:
 
 - `docs/PLANS.md`
+- `docs/CODESTYLE.md`
+- `docs/TESTING.md`
 
 `PLANS.md` defines the required ExecPlan structure, lifecycle, and maintenance rules.
+Use the principles in `CODESTYLE.md` and `TESTING.md` to shape the plan's scope, acceptance criteria, sequencing, and validation. Do not write a plan that narrows away work required by those documents.
 
 Then read the current ExecPlan, if one already exists, plus the nearby design docs and code context needed to make the plan self-contained.
 
