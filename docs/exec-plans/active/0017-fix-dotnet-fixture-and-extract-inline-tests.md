@@ -58,7 +58,7 @@ description: "Fix the dotnet basic-fail fixture so function gates fail for real,
 - [x] In `tests/fixtures/dotnet/basic-fail/overlay/src/CovgateDemo/MathOps.cs`, add a public static method `Subtract(int a, int b)` that is never called by the test suite and appears in the changed diff
 - [x] Run `cargo xtask regen-fixture-coverage dotnet/basic-fail` to regenerate `coverage.json` with two functions, one covered (`Add`) and one uncovered (`Subtract`)
 - [x] Verify the regenerated `coverage.json` contains `Subtract` with all line hits equal to `0`
-- [ ] Decide whether regenerated `tests/fixtures/dotnet/basic-fail/native-summary.json` belongs in the fixture; either check it in or adjust regeneration so the documented command does not leave an untracked generated file
+- [x] Decide whether regenerated `tests/fixtures/dotnet/basic-fail/native-summary.json` belongs in the fixture; either check it in or adjust regeneration so the documented command does not leave an untracked generated file
 - [x] Remove the four `if fixture.language == "dotnet" { 0 } else { 1 }` blocks from `tests/cli_metrics.rs`; replace each with `assert_eq!(output.status.code(), Some(1), ...)` and unconditional FAIL assertions
 
 ### Part 2 — Extract coverage parser inline tests
@@ -67,12 +67,12 @@ description: "Fix the dotnet basic-fail fixture so function gates fail for real,
 - [x] Update imports in the moved tests: replace `use super::parse_with_repo_root` with `use covgate::coverage`; call `coverage::load_from_path` or `coverage::parse_with_repo_root` as appropriate following the pattern already in `tests/coverage_parse.rs`
 - [x] Delete the entire `#[cfg(test)]` block from `src/coverage/istanbul_json.rs`
 - [x] Confirm `src/coverage/istanbul_json.rs` compiles and inline tests are gone
-- [ ] Move these `src/coverage/coverlet_json.rs` tests into `tests/coverage_parse.rs` because they only call parser behavior through `parse_with_repo_root`: `parses_coverlet_lines_and_branches`, `computes_function_spans_from_method_lines`, `merges_duplicate_lines_across_methods`, `skips_non_object_class_or_method_entries`, `invalid_line_key_method_is_ignored`, `skips_function_metric_when_method_has_no_lines`
-- [ ] Leave only these `src/coverage/coverlet_json.rs` tests inline: `normalizes_windows_path_separators`, `keeps_absolute_paths_outside_repo_as_absolute`
-- [ ] Move these `src/coverage/llvm_json.rs` tests into `tests/coverage_parse.rs` because they only call parser behavior through `parse_with_repo_root` or `parse_str`: `parses_basic_llvm_export`, `parses_branch_metrics_when_branches_are_present`, `parses_llvm_branch_tuples_using_true_false_counts`, `parses_legacy_branch_entries_and_skips_has_count_false`, `rejects_invalid_json`, `region_totals_ignore_non_entry_and_gap_segments`, `segment_boundary_does_not_overcount_lines`, `skips_segments_with_has_count_false_for_line_coverage`, `skips_regions_with_backwards_range`, `skips_function_entries_without_filenames_or_regions`, `rejects_negative_function_region_fields`, `marks_function_covered_when_regions_have_execution_count`, `merges_duplicate_function_spans_as_covered_if_any_variant_is_covered`, `keeps_rust_functions_with_different_crate_hashes_as_one_name_based_record`, `prefers_longest_suffix_for_function_file_mapping`
-- [ ] Leave only these `src/coverage/llvm_json.rs` tests inline: `normalizes_absolute_paths_to_repo_relative`, `demangles_rust_llvm_function_names_for_identity`, `leaves_non_rust_function_names_unchanged`, `demangles_real_repro_rust_symbol_set_into_eight_identities`
-- [ ] Move `src/coverage/mod.rs::{parse_with_repo_root_rejects_invalid_json,parse_with_repo_root_rejects_unknown_format}` into `tests/coverage_parse.rs` because they call the public `covgate::coverage::parse_with_repo_root`
-- [ ] Leave the remaining `src/coverage/mod.rs` format-detection tests inline because they call private `detect_format` and inspect private `CoverageFormat`
+- [x] Move these `src/coverage/coverlet_json.rs` tests into `tests/coverage_parse.rs` because they only call parser behavior through `parse_with_repo_root`: `parses_coverlet_lines_and_branches`, `computes_function_spans_from_method_lines`, `merges_duplicate_lines_across_methods`, `skips_non_object_class_or_method_entries`, `invalid_line_key_method_is_ignored`, `skips_function_metric_when_method_has_no_lines`
+- [x] Leave only these `src/coverage/coverlet_json.rs` tests inline: `normalizes_windows_path_separators`, `keeps_absolute_paths_outside_repo_as_absolute`
+- [x] Move these `src/coverage/llvm_json.rs` tests into `tests/coverage_parse.rs` because they only call parser behavior through `parse_with_repo_root` or `parse_str` (inlined): `parses_basic_llvm_export`, `parses_branch_metrics_when_branches_are_present`, `parses_llvm_branch_tuples_using_true_false_counts`, `parses_legacy_branch_entries_and_skips_has_count_false`, `rejects_invalid_json`, `region_totals_ignore_non_entry_and_gap_segments`, `segment_boundary_does_not_overcount_lines`, `skips_segments_with_has_count_false_for_line_coverage`, `skips_regions_with_backwards_range`, `skips_function_entries_without_filenames_or_regions`, `rejects_negative_function_region_fields`, `marks_function_covered_when_regions_have_execution_count`, `merges_duplicate_function_spans_as_covered_if_any_variant_is_covered`, `keeps_rust_functions_with_different_crate_hashes_as_one_name_based_record`, `prefers_longest_suffix_for_function_file_mapping`
+- [x] Leave only these `src/coverage/llvm_json.rs` tests inline: `normalizes_absolute_paths_to_repo_relative`, `demangles_rust_llvm_function_names_for_identity`, `leaves_non_rust_function_names_unchanged`, `demangles_real_repro_rust_symbol_set_into_eight_identities`
+- [x] Move `src/coverage/mod.rs::{parse_with_repo_root_rejects_invalid_json,parse_with_repo_root_rejects_unknown_format}` into `tests/coverage_parse.rs` because they call the public `covgate::coverage::parse_with_repo_root`
+- [x] Leave the remaining `src/coverage/mod.rs` format-detection tests inline because they call private `detect_format` and inspect private `CoverageFormat`
 
 ### Part 3 — Extract non-coverage public inline tests
 
@@ -81,25 +81,26 @@ description: "Fix the dotnet basic-fail fixture so function gates fail for real,
 - [x] Update imports: `use covgate::gate::evaluate` (or however `evaluate` is re-exported); `use covgate::model::{ComputedMetric, GateRule, MetricKind}`
 - [x] Delete the `#[cfg(test)]` block from `src/gate.rs`
 - [x] Confirm `src/gate.rs` compiles and the test file runs
-- [ ] Create `tests/diff_parse.rs`; move `src/diff.rs::{parses_added_hunks,ignores_deleted_only_hunks,ignores_deleted_file_headers_before_tracked_files}` because they call public `parse_unified_diff`
-- [ ] Create `tests/metrics.rs`; move `src/metrics.rs::{computes_changed_region_metric,metric_with_only_zero_totals_is_treated_as_unavailable,changed_branch_metric_counts_multiline_vitest_branch_outcomes,changed_line_metric_keeps_uncovered_fixture_seed_call_visible}` because they call public `compute_changed_metric`
-- [ ] Create `tests/model.rs`; move `src/model.rs::{parses_function_metric_kind,formats_spans_with_and_without_columns,groups_spans_and_counts_occurrences}` because they exercise public model types and methods
-- [ ] Create `tests/render_markdown.rs`; move `src/render/markdown.rs::{renders_markdown_tables,renders_all_nonzero_metrics_in_markdown_summary,renders_rule_status_with_unicode_icons,renders_coverage_with_threshold_circles,groups_duplicate_spans_with_counts,sorts_spans_numerically}` because they call public `covgate::render::markdown::render`
-- [ ] Create `tests/render_console.rs`; move `src/render/console.rs::{renders_console_summary_minimal,renders_console_summary_verbose,groups_duplicate_spans_with_counts,sorts_spans_numerically,omits_non_gated_metrics_from_minimal_output,aligns_comparators_vertically}` because they call public `covgate::render::console::render`
-- [ ] Leave `src/render/console.rs::render_metric_summary_handles_none_outcome` inline because it calls private `render_metric_summary`
-- [ ] Do not move `src/config.rs`, `src/git.rs`, or `src/render/mod.rs` inline tests in this plan; each test named in Scope uses private or crate-internal-only helpers
+- [x] Create `tests/diff_parse.rs`; move `src/diff.rs::{parses_added_hunks,ignores_deleted_only_hunks,ignores_deleted_file_headers_before_tracked_files}` because they call public `parse_unified_diff`
+- [x] Create `tests/metrics.rs`; move `src/metrics.rs::{computes_changed_region_metric,metric_with_only_zero_totals_is_treated_as_unavailable,changed_branch_metric_counts_multiline_vitest_branch_outcomes,changed_line_metric_keeps_uncovered_fixture_seed_call_visible}` because they call public `compute_changed_metric`
+- [x] Create `tests/model.rs`; move `src/model.rs::{parses_function_metric_kind,formats_spans_with_and_without_columns,groups_spans_and_counts_occurrences}` because they exercise public model types and methods
+- [x] Create `tests/render_markdown.rs`; move `src/render/markdown.rs::{renders_markdown_tables,renders_all_nonzero_metrics_in_markdown_summary,renders_rule_status_with_unicode_icons,renders_coverage_with_threshold_circles,groups_duplicate_spans_with_counts,sorts_spans_numerically}` because they call public `covgate::render::markdown::render`
+- [x] Create `tests/render_console.rs`; move `src/render/console.rs::{renders_console_summary_minimal,renders_console_summary_verbose,groups_duplicate_spans_with_counts,sorts_spans_numerically,omits_non_gated_metrics_from_minimal_output,aligns_comparators_vertically}` because they call public `covgate::render::console::render`
+- [x] Leave `src/render/console.rs::render_metric_summary_handles_none_outcome` inline because it calls private `render_metric_summary`
+- [x] Do not move `src/config.rs`, `src/git.rs`, or `src/render/mod.rs` inline tests in this plan; each test named in Scope uses private or crate-internal-only helpers
 
 ### Part 4 — Validate
 
 - [x] `cargo test --test cli_metrics` — all function-threshold tests pass with uniform assertions
 - [x] `cargo test --test coverage_parse` — all istanbul tests pass in their new location
 - [x] `cargo test --test gate` — all gate tests pass in their new location
-- [ ] `cargo test --test diff_parse`
-- [ ] `cargo test --test metrics`
-- [ ] `cargo test --test model`
-- [ ] `cargo test --test render_markdown`
-- [ ] `cargo test --test render_console`
-- [ ] `cargo xtask validate` — full suite passes after the expanded extraction scope is implemented
+- [x] `cargo test --test diff_parse`
+- [x] `cargo test --test metrics`
+- [x] `cargo test --test model`
+- [x] `cargo test --test render_markdown`
+- [x] `cargo test --test render_console`
+- [x] `cargo xtask validate` — full suite passes after the expanded extraction scope is implemented
+
 
 ## Validation
 - `cargo test --test cli_metrics` — no dotnet special-cases; function-threshold matrix passes for all fixtures

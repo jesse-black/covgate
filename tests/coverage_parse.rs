@@ -596,3 +596,865 @@ fn does_not_strip_repo_root_text_prefix_when_not_path_boundary() {
             .contains_key(&PathBuf::from("-old/src/math.js"))
     );
 }
+
+#[test]
+fn parses_coverlet_lines_and_branches() {
+    use covgate::coverage::parse_with_repo_root;
+    use covgate::model::MetricKind;
+    use std::path::{Path, PathBuf};
+
+    let input = r#"
+    {
+      "Demo.dll": {
+        "/workspace/covgate/src/lib.cs": {
+          "Demo.MathOps": {
+            "System.Int32 Demo.MathOps::Add(System.Int32,System.Int32)": {
+              "Lines": {
+                "3": 1,
+                "4": 0
+              },
+              "Branches": [
+                {"Line": 4, "Hits": 1},
+                {"Line": 4, "Hits": 0}
+              ]
+            }
+          }
+        }
+      }
+    }
+    "#;
+
+    let report = parse_with_repo_root(input, Path::new("/workspace/covgate"))
+        .expect("coverlet json should parse");
+
+    let line_totals = report
+        .totals_by_file
+        .get(&MetricKind::Line)
+        .expect("line totals should exist")
+        .get(&PathBuf::from("src/lib.cs"))
+        .expect("file totals should exist");
+    assert_eq!(line_totals.covered, 1);
+    assert_eq!(line_totals.total, 2);
+
+    let branch_totals = report
+        .totals_by_file
+        .get(&MetricKind::Branch)
+        .expect("branch totals should exist")
+        .get(&PathBuf::from("src/lib.cs"))
+        .expect("file totals should exist");
+    assert_eq!(branch_totals.covered, 1);
+    assert_eq!(branch_totals.total, 2);
+
+    let function_totals = report
+        .totals_by_file
+        .get(&MetricKind::Function)
+        .expect("function totals should exist")
+        .get(&PathBuf::from("src/lib.cs"))
+        .expect("file totals should exist");
+    assert_eq!(function_totals.covered, 1);
+    assert_eq!(function_totals.total, 1);
+}
+
+#[test]
+fn computes_function_spans_from_method_lines() {
+    use covgate::coverage::parse_with_repo_root;
+    use covgate::model::OpportunityKind;
+    use std::path::Path;
+
+    let input = r#"
+    {
+      "Demo.dll": {
+        "src/lib.cs": {
+          "Demo.MathOps": {
+            "Covered": {"Lines": {"10": 1, "11": 0, "15": 2}, "Branches": []},
+            "Uncovered": {"Lines": {"20": 0, "21": 0}, "Branches": []}
+          }
+        }
+      }
+    }
+    "#;
+
+    let report = parse_with_repo_root(input, Path::new("/workspace/covgate"))
+        .expect("coverlet json should parse");
+
+    let function_ops: Vec<_> = report
+        .opportunities
+        .iter()
+        .filter(|op| op.kind == OpportunityKind::Function)
+        .collect();
+    assert_eq!(function_ops.len(), 2);
+    assert!(
+        function_ops
+            .iter()
+            .any(|op| { op.span.start_line == 10 && op.span.end_line == 15 && op.covered })
+    );
+    assert!(
+        function_ops
+            .iter()
+            .any(|op| { op.span.start_line == 20 && op.span.end_line == 21 && !op.covered })
+    );
+}
+
+#[test]
+fn merges_duplicate_lines_across_methods() {
+    use covgate::coverage::parse_with_repo_root;
+    use covgate::model::MetricKind;
+    use std::path::{Path, PathBuf};
+
+    let input = r#"
+    {
+      "Demo.dll": {
+        "src/lib.cs": {
+          "Demo.MathOps": {
+            "M1": {"Lines": {"10": 0, "11": 1}, "Branches": []},
+            "M2": {"Lines": {"10": 2}, "Branches": []}
+          }
+        }
+      }
+    }
+    "#;
+
+    let report = parse_with_repo_root(input, Path::new("/workspace/covgate"))
+        .expect("coverlet json should parse");
+
+    let line_totals = report
+        .totals_by_file
+        .get(&MetricKind::Line)
+        .expect("line totals should exist")
+        .get(&PathBuf::from("src/lib.cs"))
+        .expect("file totals should exist");
+    assert_eq!(line_totals.total, 2);
+    assert_eq!(line_totals.covered, 2);
+}
+
+#[test]
+fn skips_non_object_class_or_method_entries() {
+    use covgate::coverage::parse_with_repo_root;
+    use covgate::model::OpportunityKind;
+    use std::path::Path;
+
+    let input = r#"
+    {
+      "Demo.dll": {
+        "src/lib.cs": {
+          "IgnoredClass": 5,
+          "Demo.MathOps": {
+            "IgnoredMethod": 3,
+            "RealMethod": {"Lines": {"5": 1}, "Branches": []}
+          }
+        }
+      }
+    }
+    "#;
+
+    let report = parse_with_repo_root(input, Path::new("/workspace/covgate"))
+        .expect("coverlet json should parse");
+    let lines: Vec<_> = report
+        .opportunities
+        .iter()
+        .filter(|op| op.kind == OpportunityKind::Line)
+        .collect();
+    assert_eq!(lines.len(), 1);
+}
+
+#[test]
+fn invalid_line_key_method_is_ignored() {
+    use covgate::coverage::parse_with_repo_root;
+    use covgate::model::MetricKind;
+    use std::path::{Path, PathBuf};
+
+    let input = r#"
+    {
+      "Demo.dll": {
+        "src/lib.cs": {
+          "Demo.MathOps": {
+            "BadMethod": {"Lines": {"not-a-line": 1}, "Branches": []},
+            "GoodMethod": {"Lines": {"7": 1}, "Branches": []}
+          }
+        }
+      }
+    }
+    "#;
+
+    let report = parse_with_repo_root(input, Path::new("/workspace/covgate"))
+        .expect("coverlet json should parse");
+    let line_totals = report
+        .totals_by_file
+        .get(&MetricKind::Line)
+        .expect("line totals should exist")
+        .get(&PathBuf::from("src/lib.cs"))
+        .expect("file totals should exist");
+    assert_eq!(line_totals.total, 1);
+    assert_eq!(line_totals.covered, 1);
+}
+
+#[test]
+fn skips_function_metric_when_method_has_no_lines() {
+    use covgate::coverage::parse_with_repo_root;
+    use covgate::model::MetricKind;
+    use std::path::Path;
+
+    let input = r#"
+    {
+      "Demo.dll": {
+        "src/lib.cs": {
+          "Demo.MathOps": {
+            "NoLines": {"Lines": {}, "Branches": []}
+          }
+        }
+      }
+    }
+    "#;
+
+    let report = parse_with_repo_root(input, Path::new("/workspace/covgate"))
+        .expect("coverlet json should parse");
+
+    assert!(!report.totals_by_file.contains_key(&MetricKind::Function));
+}
+
+#[test]
+fn parses_basic_llvm_export() {
+    use covgate::coverage::parse_with_repo_root;
+    use std::path::{Path, PathBuf};
+
+    let input = r#"
+    {
+      "data": [
+        {
+          "functions": [
+            {
+              "count": 1,
+              "filenames": ["src/lib.rs"],
+              "regions": [[1,1,2,1,1,0,0,0]]
+            },
+            {
+              "count": 0,
+              "filenames": ["src/lib.rs"],
+              "regions": [[3,1,4,1,0,0,0,0]]
+            }
+          ],
+          "files": [
+            {
+              "filename": "src/lib.rs",
+              "segments": [
+                [1, 1, 1, true, true, false],
+                [1, 2, 0, false, false, false],
+                [2, 1, 1, true, true, false],
+                [2, 2, 0, false, false, false],
+                [3, 1, 0, true, true, false],
+                [3, 2, 0, false, false, false],
+                [4, 1, 0, true, true, false],
+                [4, 2, 0, false, false, false]
+              ]
+            }
+          ]
+        }
+      ]
+    }
+    "#;
+
+    let report = parse_with_repo_root(input, Path::new("/workspace/covgate"))
+        .expect("llvm export should parse");
+    assert_eq!(report.opportunities.len(), 10); // 4 regions + 4 lines + 2 functions
+
+    let region_totals = report
+        .totals_by_file
+        .get(&covgate::model::MetricKind::Region)
+        .expect("region metric totals should exist")
+        .get(&PathBuf::from("src/lib.rs"))
+        .expect("file totals should exist");
+    assert_eq!(region_totals.covered, 2);
+    assert_eq!(region_totals.total, 4);
+
+    let line_totals = report
+        .totals_by_file
+        .get(&covgate::model::MetricKind::Line)
+        .expect("line metric totals should exist")
+        .get(&PathBuf::from("src/lib.rs"))
+        .expect("file totals should exist");
+    assert_eq!(line_totals.covered, 2);
+    assert_eq!(line_totals.total, 4);
+
+    let function_totals = report
+        .totals_by_file
+        .get(&covgate::model::MetricKind::Function)
+        .expect("function metric totals should exist")
+        .get(&PathBuf::from("src/lib.rs"))
+        .expect("file totals should exist");
+    assert_eq!(function_totals.covered, 1);
+    assert_eq!(function_totals.total, 2);
+}
+
+#[test]
+fn parses_branch_metrics_when_branches_are_present() {
+    use covgate::coverage::parse_with_repo_root;
+    use std::path::{Path, PathBuf};
+
+    let input = r#"
+    {
+      "data": [
+        {
+          "files": [
+            {
+              "filename": "src/lib.rs",
+              "segments": [
+                [1, 1, 1, true, false, false],
+                [2, 1, 0, false, false, false]
+              ],
+              "branches": [
+                [1, 1, 1, true],
+                [1, 5, 0, true]
+              ]
+            }
+          ]
+        }
+      ]
+    }
+    "#;
+
+    let report = parse_with_repo_root(input, Path::new("/workspace/covgate"))
+        .expect("llvm export should parse");
+
+    let branch_totals = report
+        .totals_by_file
+        .get(&covgate::model::MetricKind::Branch)
+        .expect("branch totals should be present");
+    let file_totals = branch_totals
+        .get(&PathBuf::from("src/lib.rs"))
+        .expect("branch file totals should be present");
+    assert_eq!(file_totals.covered, 1);
+    assert_eq!(file_totals.total, 2);
+
+    let branch_opportunities: Vec<_> = report
+        .opportunities
+        .iter()
+        .filter(|op| op.kind == covgate::model::OpportunityKind::BranchOutcome)
+        .collect();
+    assert_eq!(branch_opportunities.len(), 2);
+}
+
+#[test]
+fn parses_llvm_branch_tuples_using_true_false_counts() {
+    use covgate::coverage::parse_with_repo_root;
+    use std::path::{Path, PathBuf};
+
+    let input = r#"
+    {
+      "data": [
+        {
+          "files": [
+            {
+              "filename": "src/lib.rs",
+              "segments": [
+                [1, 1, 1, true, false, false],
+                [2, 1, 0, false, false, false]
+              ],
+              "branches": [
+                [2, 5, 2, 10, 1, 0, 0, 0, 4]
+              ]
+            }
+          ]
+        }
+      ]
+    }
+    "#;
+
+    let report = parse_with_repo_root(input, Path::new("/workspace/covgate"))
+        .expect("llvm export should parse");
+
+    let branch_totals = report
+        .totals_by_file
+        .get(&covgate::model::MetricKind::Branch)
+        .expect("branch totals should be present");
+    let file_totals = branch_totals
+        .get(&PathBuf::from("src/lib.rs"))
+        .expect("branch file totals should be present");
+    assert_eq!(file_totals.covered, 1);
+    assert_eq!(file_totals.total, 2);
+}
+
+#[test]
+fn parses_legacy_branch_entries_and_skips_has_count_false() {
+    use covgate::coverage::parse_with_repo_root;
+    use std::path::{Path, PathBuf};
+
+    let input = r#"
+    {
+      "data": [
+        {
+          "files": [
+            {
+              "filename": "src/lib.rs",
+              "segments": [
+                [1, 1, 1, true, false, false],
+                [2, 1, 0, false, false, false]
+              ],
+              "branches": [
+                [2, 1, 0, false],
+                [3, 1, 1, true]
+              ]
+            }
+          ]
+        }
+      ]
+    }
+    "#;
+
+    let report = parse_with_repo_root(input, Path::new("/workspace/covgate"))
+        .expect("llvm export should parse");
+
+    let branch_totals = report
+        .totals_by_file
+        .get(&covgate::model::MetricKind::Branch)
+        .expect("branch totals should be present");
+    let file_totals = branch_totals
+        .get(&PathBuf::from("src/lib.rs"))
+        .expect("branch file totals should be present");
+
+    // The first legacy entry is skipped because has_count=false.
+    assert_eq!(file_totals.covered, 1);
+    assert_eq!(file_totals.total, 1);
+}
+
+#[test]
+fn llvm_parse_rejects_invalid_json() {
+    use covgate::coverage::parse_with_repo_root;
+    use std::path::Path;
+    assert!(parse_with_repo_root("{", Path::new("/workspace/covgate")).is_err());
+}
+
+#[test]
+fn region_totals_ignore_non_entry_and_gap_segments() {
+    use covgate::coverage::parse_with_repo_root;
+    use std::path::{Path, PathBuf};
+
+    let input = r#"
+    {
+      "data": [
+        {
+          "files": [
+            {
+              "filename": "src/lib.rs",
+              "segments": [
+                [1, 1, 1, true, true, false],
+                [2, 1, 1, true, false, false],
+                [3, 1, 1, true, true, true],
+                [4, 1, 1, true, true, false],
+                [5, 1, 0, false, false, false]
+              ]
+            }
+          ]
+        }
+      ]
+    }
+    "#;
+
+    let report = parse_with_repo_root(input, Path::new("/workspace/covgate"))
+        .expect("llvm export should parse");
+    let totals = report
+        .totals_by_file
+        .get(&covgate::model::MetricKind::Region)
+        .expect("region totals should exist")
+        .get(&PathBuf::from("src/lib.rs"))
+        .expect("file totals should exist");
+
+    assert_eq!(totals.covered, 2);
+    assert_eq!(totals.total, 2);
+}
+
+#[test]
+fn segment_boundary_does_not_overcount_lines() {
+    use covgate::coverage::parse_with_repo_root;
+    use std::path::{Path, PathBuf};
+
+    let input = r#"
+    {
+      "data": [
+        {
+          "files": [
+            {
+              "filename": "src/lib.rs",
+              "segments": [
+                [1, 1, 1, true, false, false],
+                [2, 1, 0, false, false, false]
+              ]
+            }
+          ]
+        }
+      ]
+    }
+    "#;
+
+    let report = parse_with_repo_root(input, Path::new("/workspace/covgate"))
+        .expect("llvm export should parse");
+    let line_totals = report
+        .totals_by_file
+        .get(&covgate::model::MetricKind::Line)
+        .expect("line metric totals should exist")
+        .get(&PathBuf::from("src/lib.rs"))
+        .expect("file totals should exist");
+
+    // Only line 1 should be covered and counted.
+    assert_eq!(line_totals.covered, 1);
+    assert_eq!(line_totals.total, 1);
+}
+
+#[test]
+fn skips_segments_with_has_count_false_for_line_coverage() {
+    use covgate::coverage::parse_with_repo_root;
+    use std::path::{Path, PathBuf};
+
+    let input = r#"{
+      "data": [{
+        "files": [{
+          "filename": "src/lib.rs",
+          "segments": [
+            [1, 1, 1, true, true, false],
+            [2, 1, 0, false, true, false],
+            [3, 1, 0, true, true, false],
+            [4, 1, 0, true, true, false]
+          ],
+          "branches": []
+        }],
+        "functions": []
+      }],
+      "type": "llvm.coverage.json.export",
+      "version": "2.0.1"
+    }"#;
+
+    let report = parse_with_repo_root(input, Path::new(".")).expect("parse");
+    let lines = report
+        .totals_by_file
+        .get(&covgate::model::MetricKind::Line)
+        .unwrap()
+        .get(&PathBuf::from("src/lib.rs"))
+        .unwrap();
+    // Line 1 is covered, Line 2 is skipped (hasCount false), Line 3 is uncovered.
+    // So total should be 2.
+    assert_eq!(lines.total, 2);
+}
+
+#[test]
+fn skips_regions_with_backwards_range() {
+    use covgate::coverage::parse_with_repo_root;
+    use std::path::Path;
+
+    let input = r#"{
+      "data": [{
+        "files": [{
+          "filename": "src/lib.rs",
+          "segments": [
+            [2, 1, 1, true, true, false],
+            [1, 1, 0, true, false, false]
+          ],
+          "branches": []
+        }],
+        "functions": []
+      }],
+      "type": "llvm.coverage.json.export",
+      "version": "2.0.1"
+    }"#;
+
+    let report = parse_with_repo_root(input, Path::new(".")).expect("parse");
+    // No regions should be emitted because end < start
+    assert!(
+        !report
+            .totals_by_file
+            .contains_key(&covgate::model::MetricKind::Region)
+    );
+}
+
+#[test]
+fn skips_function_entries_without_filenames_or_regions() {
+    use covgate::coverage::parse_with_repo_root;
+    use std::path::Path;
+
+    let input = r#"
+    {
+      "data": [
+        {
+          "functions": [
+            {
+              "count": 1,
+              "filenames": [],
+              "regions": [[1,1,2,1,1,0,0,0]]
+            },
+            {
+              "count": 1,
+              "filenames": ["src/lib.rs"],
+              "regions": []
+            }
+          ],
+          "files": [
+            {
+              "filename": "src/lib.rs",
+              "segments": [
+                [1, 1, 1, true, false, false],
+                [2, 1, 0, false, false, false]
+              ]
+            }
+          ]
+        }
+      ]
+    }
+    "#;
+
+    let report = parse_with_repo_root(input, Path::new("/workspace/covgate"))
+        .expect("llvm export should parse");
+    assert!(
+        !report
+            .totals_by_file
+            .contains_key(&covgate::model::MetricKind::Function)
+    );
+}
+
+#[test]
+fn rejects_negative_function_region_fields() {
+    use covgate::coverage::parse_with_repo_root;
+    use std::path::Path;
+
+    let input = r#"
+    {
+      "data": [
+        {
+          "functions": [
+            {
+              "count": 1,
+              "filenames": ["src/lib.rs"],
+              "regions": [[-1,1,2,1,1,0,0,0]]
+            }
+          ],
+          "files": [
+            {
+              "filename": "src/lib.rs",
+              "segments": [
+                [1, 1, 1, true, false, false],
+                [2, 1, 0, false, false, false]
+              ]
+            }
+          ]
+        }
+      ]
+    }
+    "#;
+
+    let error = parse_with_repo_root(input, Path::new("/workspace/covgate"))
+        .expect_err("negative line should fail parsing");
+    assert!(error.to_string().contains("failed to parse llvm json"));
+}
+
+#[test]
+fn marks_function_covered_when_regions_have_execution_count() {
+    use covgate::coverage::parse_with_repo_root;
+    use std::path::{Path, PathBuf};
+
+    let input = r#"
+    {
+      "data": [
+        {
+          "functions": [
+            {
+              "count": 0,
+              "filenames": ["src/lib.rs"],
+              "regions": [[10,1,12,1,3,0,0,0]]
+            }
+          ],
+          "files": [
+            {
+              "filename": "src/lib.rs",
+              "segments": [
+                [10, 1, 1, true, false, false],
+                [12, 1, 0, false, false, false]
+              ]
+            }
+          ]
+        }
+      ]
+    }
+    "#;
+
+    let report = parse_with_repo_root(input, Path::new("/workspace/covgate"))
+        .expect("llvm export should parse");
+    let totals = report
+        .totals_by_file
+        .get(&covgate::model::MetricKind::Function)
+        .expect("function totals should exist")
+        .get(&PathBuf::from("src/lib.rs"))
+        .expect("file totals should exist");
+
+    assert_eq!(totals.covered, 1);
+    assert_eq!(totals.total, 1);
+}
+
+#[test]
+fn merges_duplicate_function_spans_as_covered_if_any_variant_is_covered() {
+    use covgate::coverage::parse_with_repo_root;
+    use std::path::{Path, PathBuf};
+
+    let input = r#"
+    {
+      "data": [
+        {
+          "functions": [
+            {
+              "count": 0,
+              "filenames": ["src/lib.rs"],
+              "regions": [[20,1,25,1,0,0,0,0]]
+            },
+            {
+              "count": 1,
+              "filenames": ["src/lib.rs"],
+              "regions": [[20,1,25,1,1,0,0,0]]
+            }
+          ],
+          "files": [
+            {
+              "filename": "src/lib.rs",
+              "segments": [
+                [20, 1, 1, true, false, false],
+                [25, 1, 0, false, false, false]
+              ]
+            }
+          ]
+        }
+      ]
+    }
+    "#;
+
+    let report = parse_with_repo_root(input, Path::new("/workspace/covgate"))
+        .expect("llvm export should parse");
+    let totals = report
+        .totals_by_file
+        .get(&covgate::model::MetricKind::Function)
+        .expect("function totals should exist")
+        .get(&PathBuf::from("src/lib.rs"))
+        .expect("file totals should exist");
+
+    assert_eq!(totals.covered, 1);
+    assert_eq!(totals.total, 1);
+}
+
+#[test]
+fn keeps_rust_functions_with_different_crate_hashes_as_one_name_based_record() {
+    use covgate::coverage::parse_with_repo_root;
+    use std::path::{Path, PathBuf};
+
+    let input = r#"
+    {
+      "data": [
+        {
+          "functions": [
+            {
+              "count": 1,
+              "name": "_RNvNtCsAAAA_7covgate7metrics22compute_changed_metric",
+              "filenames": ["src/lib.rs"],
+              "regions": [[20,1,25,1,1,0,0,0]]
+            },
+            {
+              "count": 1,
+              "name": "_RNvNtCsBBBB_7covgate7metrics22compute_changed_metric",
+              "filenames": ["src/lib.rs"],
+              "regions": [[20,1,25,1,1,0,0,0]]
+            }
+          ],
+          "files": [
+            {
+              "filename": "src/lib.rs",
+              "segments": [
+                [20, 1, 1, true, false, false],
+                [25, 1, 0, false, false, false]
+              ]
+            }
+          ]
+        }
+      ]
+    }
+    "#;
+
+    let report = parse_with_repo_root(input, Path::new("/workspace/covgate"))
+        .expect("llvm export should parse");
+    let totals = report
+        .totals_by_file
+        .get(&covgate::model::MetricKind::Function)
+        .expect("function totals should exist")
+        .get(&PathBuf::from("src/lib.rs"))
+        .expect("file totals should exist");
+
+    assert_eq!(totals.covered, 1);
+    assert_eq!(totals.total, 1);
+
+    let function_opportunities: Vec<_> = report
+        .opportunities
+        .iter()
+        .filter(|op| op.kind == covgate::model::OpportunityKind::Function)
+        .collect();
+    assert_eq!(function_opportunities.len(), 1);
+    assert_eq!(function_opportunities[0].span.start_line, 20);
+    assert_eq!(function_opportunities[0].span.end_line, 25);
+}
+
+#[test]
+fn prefers_longest_suffix_for_function_file_mapping() {
+    use covgate::coverage::parse_with_repo_root;
+    use std::path::{Path, PathBuf};
+
+    let input = r#"
+    {
+      "data": [
+        {
+          "functions": [
+            {
+              "count": 0,
+              "filenames": ["/tmp/build/pkg/src/lib.rs"],
+              "regions": [[10,1,10,5,0,0,0,0]]
+            }
+          ],
+          "files": [
+            {
+              "filename": "src/lib.rs",
+              "segments": [[1,1,1,true,false,false],[2,1,0,false,false,false]]
+            },
+            {
+              "filename": "pkg/src/lib.rs",
+              "segments": [[1,1,1,true,false,false],[2,1,0,false,false,false]]
+            }
+          ]
+        }
+      ]
+    }
+    "#;
+
+    let report = parse_with_repo_root(input, Path::new("/workspace/covgate"))
+        .expect("llvm export should parse");
+    let function_totals = report
+        .totals_by_file
+        .get(&covgate::model::MetricKind::Function)
+        .expect("function totals should exist");
+
+    assert!(
+        !function_totals.contains_key(&PathBuf::from("src/lib.rs")),
+        "function should not map to less specific suffix"
+    );
+    let mapped = function_totals
+        .get(&PathBuf::from("pkg/src/lib.rs"))
+        .expect("function should map to longest matching suffix");
+    assert_eq!(mapped.covered, 0);
+    assert_eq!(mapped.total, 1);
+}
+
+#[test]
+fn parse_with_repo_root_rejects_invalid_json() {
+    use covgate::coverage::parse_with_repo_root;
+    use std::path::Path;
+    let err = parse_with_repo_root("{", Path::new(".")).expect_err("parse should fail");
+    assert!(err.to_string().contains("failed to parse coverage json"));
+}
+
+#[test]
+fn parse_with_repo_root_rejects_unknown_format() {
+    use covgate::coverage::parse_with_repo_root;
+    use std::path::Path;
+    let err =
+        parse_with_repo_root(r#"{"foo":"bar"}"#, Path::new(".")).expect_err("parse should fail");
+    assert!(err.to_string().contains("unsupported coverage format"));
+}
