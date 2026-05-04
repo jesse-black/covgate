@@ -19,8 +19,9 @@ description: "ExecPlan for adding the named-functions metric, which filters func
 - `src/metrics.rs` — `compute_changed_metric`; needs secondary filter for NamedFunction
 - `src/cli.rs` — Args struct; add two new fields
 - `src/config.rs` — GateConfig struct and `resolve_rules()`; add two fields and two push calls
-- `tests/cli_metrics.rs` — integration tests for gate rules
+- `tests/cli_metrics.rs` — integration tests for gate rules; must assert uniformly across fixture sets per `TESTING.md`
 - `docs/design-docs/named-function-metric.md` — design reference
+- `docs/TESTING.md` — canonical testing process and placement rules (inline for private access, `tests/` for public API)
 
 ## Open Questions
 - None
@@ -33,12 +34,13 @@ description: "ExecPlan for adding the named-functions metric, which filters func
 - [ ] `src/metrics.rs`: in `compute_changed_metric`, add `let named_only = matches!(metric, MetricKind::NamedFunction);` and skip opportunities where `named_only && !opportunity.is_named_function.unwrap_or(false)`.
 - [ ] `src/cli.rs`: add `fail_under_named_functions: Option<f64>` and `fail_uncovered_named_functions: Option<usize>` to `Args`, following the existing function-arg pattern.
 - [ ] `src/config.rs`: add `fail_under_named_functions: Option<f64>` and `fail_uncovered_named_functions: Option<usize>` to `GateConfig`; add `push_percent_rule` and `push_uncovered_rule` calls with `MetricKind::NamedFunction` in `resolve_rules()`.
-- [ ] `src/coverage/llvm_json.rs` tests: add unit test verifying closure-named symbols are excluded from named-function totals and plain functions are included; inline JSON using symbols from existing `demangles_real_repro_rust_symbol_set_into_eight_identities` test.
-- [ ] `src/coverage/istanbul_json.rs` tests: add unit test with `fnMap` entries named `"(anonymous_0)"`, `""`, `"<anonymous>"`, and `"compute"`; assert only `"compute"` contributes to named totals.
-- [ ] `src/coverage/coverlet_json.rs` tests: add unit test with method keys `"System.Void Demo.MathOps::<Add>b__0_0()"` and `"System.Int32 Demo.MathOps::Add(System.Int32)"`, assert only `Add` is named.
-- [ ] `tests/cli_metrics.rs`: add integration tests for `--fail-under-named-functions` and `--fail-uncovered-named-functions` mirroring `function_threshold_fails_when_below_threshold` and `uncovered_function_budget_fails_when_exceeded`; use the same compatible fixture lists (`function_capable_fail_fixtures`, `function_capable_pass_fixtures`).
+- [ ] `src/coverage/llvm_json.rs` tests: add unit test verifying closure-named symbols are excluded from named-function totals and plain functions are included; inline JSON using symbols from existing `demangles_real_repro_rust_symbol_set_into_eight_identities` test; keep inline as it tests private classification logic.
+- [ ] `src/coverage/istanbul_json.rs` tests: add unit test with `fnMap` entries named `"(anonymous_0)"`, `""`, `"<anonymous>"`, and `"compute"`; assert only `"compute"` contributes to named totals; keep inline as it tests private classification logic.
+- [ ] `src/coverage/coverlet_json.rs` tests: add unit test with method keys `"System.Void Demo.MathOps::<Add>b__0_0()"` and `"System.Int32 Demo.MathOps::Add(System.Int32)"`, assert only `Add` is named; keep inline as it tests private classification logic.
+- [ ] `tests/cli_metrics.rs`: add integration tests for `--fail-under-named-functions` and `--fail-uncovered-named-functions` mirroring `function_threshold_fails_when_below_threshold` and `uncovered_function_budget_fails_when_exceeded`; use the same compatible fixture lists (`function_capable_fail_fixtures`, `function_capable_pass_fixtures`); assert uniformly (no language-specific conditionals), leveraging the fixed dotnet fixture from #17.
 
 ## Validation
+- `cargo xtask quick` — fast check during iteration
 - `cargo check` — use non-exhaustive match errors to verify all MetricKind sites are covered
 - `cargo test model`
 - `cargo test llvm_json`
@@ -50,6 +52,7 @@ description: "ExecPlan for adding the named-functions metric, which filters func
 - `cargo test`
 - `cargo clippy --all-targets --all-features -- -D warnings`
 - `cargo fmt --check`
+- `cargo xtask validate` — final pre-completion check
 
 ## Discoveries
 - None yet

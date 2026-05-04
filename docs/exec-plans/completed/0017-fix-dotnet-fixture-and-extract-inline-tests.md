@@ -123,3 +123,13 @@ description: "Fix the dotnet basic-fail fixture so function gates fail for real,
 - [x] Resolved prior finding: `src/coverage/coverlet_json.rs` and `src/coverage/llvm_json.rs` now keep only private-helper tests inline; parser-behavior tests moved to `tests/coverage_parse.rs`.
 - [x] Finding: The new `docs/TESTING.md` placement rule incorrectly says tests that exercise `pub(crate)` items belong in `tests/*.rs`, and the examples call out `pub(crate) parse_with_repo_root` as integration-test-friendly. Evidence: `docs/TESTING.md:25` says `tests/*.rs` should be used for `pub` or `pub(crate)` items, while integration tests compile as a separate crate and cannot access `pub(crate)` APIs; `docs/TESTING.md:29` and `docs/TESTING.md:35-36` repeat the same `pub(crate)` framing. This should be corrected to public crate APIs only, or to say `pub(crate)` tests move only when the same behavior is reachable through a public API.
 - [x] Validation: `cargo xtask validate` passed on 2026-05-04 after rerunning outside the sandbox; the sandboxed attempt failed only because `cargo-deny` could not acquire `/home/vscode/.cargo/advisory-dbs/db.lock` on a read-only path.
+
+## Final Evaluator Review (2026-05-04)
+- [x] **Dotnet Fixture:** Confirmed `Subtract` is in the overlay and `coverage.json` reports 0 hits. `native-summary.json` is tracked.
+- [x] **CLI Metrics:** Confirmed `tests/cli_metrics.rs` no longer contains dotnet-specific conditionals.
+- [x] **Test Extraction:** Verified that `src/coverage/istanbul_json.rs`, `src/gate.rs`, `src/diff.rs`, `src/metrics.rs`, `src/model.rs`, `src/render/markdown.rs`, and most of `src/render/console.rs` have their `#[cfg(test)]` blocks removed or reduced to private-only tests.
+- [x] **Integration Tests:** Verified new test files in `tests/` (`gate.rs`, `diff_parse.rs`, `metrics.rs`, `model.rs`, `render_markdown.rs`, `render_console.rs`) correctly use public APIs.
+- [x] **TESTING.md:** Verified the placement rules were sharpened to clarify the `pub(crate)` vs `pub` distinction for integration tests.
+- [x] **Validation:** `cargo xtask validate` passed with 201 tests.
+
+The implementation is complete, idiomatic, and satisfies all acceptance criteria.
