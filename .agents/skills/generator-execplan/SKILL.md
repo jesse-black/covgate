@@ -41,4 +41,4 @@ At every meaningful stopping point, leave the plan in a state that a fresh contr
 
 If requirements or success criteria change in a way that changes what the plan is asking for, stop and hand the plan back to `planner-execplan` before continuing.
 
-When implementation is complete, you MUST hand off to `evaluator-execplan` by spawning a subagent. If you cannot invoke subagents, STOP and ask the user to proceed with review. NEVER close the plan yourself.
+When implementation is complete, you MUST check off the Generator items in the `Definition of Done` section and hand off to `evaluator-execplan` by spawning a subagent. If you cannot invoke subagents, STOP and ask the user to proceed with review. NEVER close the plan yourself.

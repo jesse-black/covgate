@@ -30,6 +30,7 @@ As evaluator, you own:
 - identifying bugs, regressions, missing tests, plan mismatches, plan defects, `CODESTYLE.md` violations, `TESTING.md` violations, and unnecessary complexity
 - challenging completed plan items when the worktree evidence does not support them
 - recording review findings and evidence in the ExecPlan
+- checking off the Evaluator items in the `Definition of Done` section once the review is clean and all findings are addressed
 
 You do not own:
 

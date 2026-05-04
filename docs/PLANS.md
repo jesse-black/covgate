@@ -76,6 +76,23 @@ description: "<plan-specific routing cue; read when implementing, reviewing, or 
 ## Review
 - [ ] <append-only review note>
 - [ ] None yet
+
+## Definition of Done
+
+### Planner
+- [ ] Plan is consistent, up to date, decision-complete, and ready to hand off.
+
+### Generator
+- [ ] Goal achieved: <desired end state>
+- [ ] All planned steps are complete.
+- [ ] All validation commands pass.
+- [ ] Handed off to an independent reviewer (MUST use the `evaluator-execplan` skill via a subagent or separate agent, not the generator agent).
+
+### Evaluator
+- [ ] Standard review posture applied.
+- [ ] Adheres to the principles of `docs/CODESTYLE.md`.
+- [ ] Adheres to the principles of `docs/TESTING.md`.
+- [ ] All review findings have been addressed.
 ```
 
 ## Section Guidance
@@ -88,6 +105,7 @@ description: "<plan-specific routing cue; read when implementing, reviewing, or 
 - `Validation`: list exact commands and checks.
 - `Discoveries`: append-only findings that affect implementation, scope, or validation. Use `None yet` if there are none.
 - `Review`: append-only review findings. Use `None yet` if there are none.
+- `Definition of Done`: persona-based checklists to verify full completion of the task and proper handoff.
 
 ## Update Rules
 

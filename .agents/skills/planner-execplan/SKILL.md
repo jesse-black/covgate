@@ -26,7 +26,7 @@ The planner's final deliverable is a repository-local ExecPlan Markdown file, no
 
 When creating a new ExecPlan, write it to the repo's active ExecPlan location before ending the planner phase. If the repo follows the standard layout, use `docs/exec-plans/active/<descriptive-name>.md`.
 
-Do not hand off to `generator-execplan` until the ExecPlan file exists in the working tree and contains the decision-complete plan.
+Do not hand off to `generator-execplan` until the ExecPlan file exists in the working tree, contains the decision-complete plan, and you have checked off the Planner items in the `Definition of Done` section.
 
 In your planner response, explicitly name the ExecPlan path you created or updated so the next phase can pick up the right artifact.
 
