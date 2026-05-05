@@ -32,11 +32,13 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
         let mut function_records_by_file: BTreeMap<PathBuf, BTreeMap<FunctionKey, bool>> =
             BTreeMap::new();
         for function in data.functions {
-            if function.filenames.is_empty() {
+            let Some(path) = function
+                .filenames
+                .first()
+                .map(|f| normalize_function_path(f, repo_root, &known_file_paths))
+            else {
                 continue;
-            }
-            let path =
-                normalize_function_path(&function.filenames[0], repo_root, &known_file_paths);
+            };
             let mut start_line: Option<u32> = None;
             let mut start_col: Option<u32> = None;
             let mut end_line: Option<u32> = None;
@@ -429,8 +431,9 @@ impl LlvmFile {
         let mut regions = Vec::new();
 
         for window in self.segments.windows(2) {
-            let start = &window[0];
-            let end = &window[1];
+            let [start, end] = window else {
+                continue;
+            };
 
             let start_line = number_at(start, 0)?;
             let start_col = number_at(start, 1)?;
@@ -465,8 +468,9 @@ impl LlvmFile {
         let mut line_states: std::collections::BTreeMap<u32, bool> =
             std::collections::BTreeMap::new();
         for window in self.segments.windows(2) {
-            let start = &window[0];
-            let end = &window[1];
+            let [start, end] = window else {
+                continue;
+            };
 
             let start_line = number_at(start, 0)?;
             let end_line = number_at(end, 0)?;

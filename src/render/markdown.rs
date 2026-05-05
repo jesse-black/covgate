@@ -1,6 +1,7 @@
 use crate::model::{GateResult, SpanKey};
 use crate::render::title_case;
 
+#[must_use]
 pub fn render(result: &GateResult, _diff_description: &str) -> String {
     let mut out = String::new();
     out.push_str("## Covgate\n\n");

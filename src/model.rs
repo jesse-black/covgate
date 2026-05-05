@@ -13,6 +13,7 @@ pub enum MetricKind {
 }
 
 impl MetricKind {
+    #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Region => "region",
@@ -23,6 +24,7 @@ impl MetricKind {
         }
     }
 
+    #[must_use]
     pub fn label(self) -> &'static str {
         match self {
             Self::Region => "regions",
@@ -33,6 +35,7 @@ impl MetricKind {
         }
     }
 
+    #[must_use]
     pub fn to_opportunity_kind(self) -> OpportunityKind {
         match self {
             Self::Region => OpportunityKind::Region,
@@ -57,6 +60,7 @@ pub enum GateRule {
 }
 
 impl GateRule {
+    #[must_use]
     pub fn metric(&self) -> MetricKind {
         match self {
             Self::Percent { metric, .. } => *metric,
@@ -64,6 +68,7 @@ impl GateRule {
         }
     }
 
+    #[must_use]
     pub fn label(&self) -> String {
         match self {
             Self::Percent { metric, .. } => format!("fail-under-{}", metric.label()),
@@ -89,6 +94,7 @@ pub struct SpanKey {
 }
 
 impl SpanKey {
+    #[must_use]
     pub fn format_span(&self) -> String {
         match (self.start_col, self.end_col) {
             (Some(s_col), Some(e_col)) => {
@@ -123,10 +129,12 @@ pub struct SourceSpan {
 }
 
 impl SourceSpan {
+    #[must_use]
     pub fn overlaps_line_range(&self, start: u32, end: u32) -> bool {
         self.start_line <= end && start <= self.end_line
     }
 
+    #[must_use]
     pub fn key(&self) -> SpanKey {
         SpanKey {
             start_line: self.start_line,
@@ -136,14 +144,17 @@ impl SourceSpan {
         }
     }
 
+    #[must_use]
     pub fn format_span(&self) -> String {
         self.key().format_span()
     }
 
+    #[must_use]
     pub fn display(&self) -> String {
         format!("{}:{}", self.path.display(), self.format_span())
     }
 
+    #[must_use]
     pub fn group_by_span(spans: &[Self]) -> BTreeMap<SpanKey, usize> {
         let mut counts = BTreeMap::new();
         for span in spans {

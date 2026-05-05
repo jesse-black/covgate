@@ -1,3 +1,4 @@
+#![allow(clippy::indexing_slicing)]
 mod support;
 
 use std::{collections::BTreeMap, fs, path::PathBuf};

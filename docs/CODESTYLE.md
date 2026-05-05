@@ -30,6 +30,14 @@ When a finding does not cleanly cite one of these, the philosophy is the lever, 
 
 Worked examples grouped by topic. Each rule tags the principle(s) it expresses. Rules are illustrative — when a rule's example pattern no longer appears in the codebase, the rule has done its job and can be deleted. The philosophy stays.
 
+### Defensive Rust: Putting the compiler in charge
+
+*Principles 1, 3, 5.*
+
+- ALWAYS shadow mutable initialization variables to become immutable (`let data = data;`) once the initialization phase is complete. This "temporary mutability" prevents accidental modification in the function's main body.
+- ALWAYS use exhaustive destructuring for structs in critical logic (e.g., `PartialEq` or `Hash` implementations). Avoid `..` even if not redundant to ensure the compiler forces a decision when new fields are added to the struct.
+- ALWAYS use the "Seal" pattern or private fields to enforce constructor usage if a struct has internal invariants (like "field X must not be empty"). If a struct is public but its construction should be validated, make the fields private or add a `_private: ()` field to prevent external literal construction.
+
 ### Lean on libraries before writing custom logic
 
 *Principles 1, 2.*

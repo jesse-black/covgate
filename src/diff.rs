@@ -14,6 +14,7 @@ pub enum DiffSource {
 }
 
 impl DiffSource {
+    #[must_use]
     pub fn describe(&self) -> String {
         match self {
             Self::GitBase(base) => format!("{base}...HEAD, staged and unstaged changes"),

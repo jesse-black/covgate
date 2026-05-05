@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use crate::model::{ComputedMetric, GateResult, MetricKind, RuleOutcome, SourceSpan};
 use crate::render::title_case;
 
+#[must_use]
 pub fn render(result: &GateResult, diff_description: &str, verbose: bool) -> String {
     if verbose {
         render_verbose(result, diff_description)
