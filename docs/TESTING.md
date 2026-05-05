@@ -10,7 +10,7 @@ Four principles, ordered by how often they bite at review. The process sections 
 
 2. **Matrix tests assert uniformly.** A test that iterates over a fixture set must reach the same assertion branch for every member. Any conditional inside the loop that branches on fixture identity — language, scenario name, or any other property — is evidence that the fixture set is wrong, not that the test needs a special case. Differentiation belongs in the fixture set definition, not in the test body.
 
-3. **Gaps are explicit, not papered over.** When a parser or fixture does not yet support a capability, the correct response is to exclude that fixture from the relevant test set and leave a `// TODO` at the exclusion site explaining what is missing and what the fix requires. A test that appears to exercise a capability while silently accepting a wrong outcome is worse than no test at all — it creates false confidence and hides the debt.
+3. **Gaps are surfaced, not papered over.** When a parser or fixture does not yet support a capability, the correct response is to stop and ask questions to clarify the gap in the plan and how to address it. A test that appears to exercise a capability while silently accepting a wrong outcome is worse than no test at all — it creates false confidence and hides the debt.
 
 4. **Fixtures are grounded in real toolchain output.** Fixture coverage JSON must come from native toolchains via `cargo xtask regen-fixture-coverage`. A fixture that was hand-edited to make a test pass no longer represents a real-world scenario; it represents the author's assumption about what the toolchain would produce, which may be wrong in exactly the ways that matter.
 
@@ -56,7 +56,7 @@ This pattern emerged when a dotnet fixture was added to `function_capable_fail_f
 
 The correct fix at the time would have been one of:
 - Update the fixture to contain an uncovered function before including it in the set.
-- Exclude the fixture from the set with a `// TODO` and a description of what parser work would enable inclusion.
+- Exclude the fixture from the set and record the parser work needed for inclusion in an issue, exec plan, or `docs/TODO.md`.
 - Create a separate `function_threshold_not_supported_fixtures()` set for the "metric unavailable" scenario and test that path explicitly.
 
 If you find yourself writing `if fixture.language == …` inside a test loop, stop. The fixture set is wrong; fix the set, not the assertion.
