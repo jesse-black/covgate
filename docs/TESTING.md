@@ -10,7 +10,7 @@ Four principles, ordered by how often they bite at review. The process sections 
 
 2. **Matrix tests assert uniformly.** A test that iterates over a fixture set must reach the same assertion branch for every member. Any conditional inside the loop that branches on fixture identity — language, scenario name, or any other property — is evidence that the fixture set is wrong, not that the test needs a special case. Differentiation belongs in the fixture set definition, not in the test body.
 
-3. **Gaps are explicit, not papered over.** When a parser or fixture does not yet support a capability, the correct response is to exclude that fixture from the relevant test set and leave a `// TODO` at the exclusion site explaining what is missing and what the fix requires. A test that appears to exercise a capability while silently accepting a wrong outcome is worse than no test at all — it creates false confidence and hides the debt.
+3. **Gaps are surfaced, not papered over.** When a parser or fixture does not yet support a capability, the correct response is to stop and ask questions to clarify the gap in the plan and how to address it. A test that appears to exercise a capability while silently accepting a wrong outcome is worse than no test at all — it creates false confidence and hides the debt.
 
 4. **Fixtures are grounded in real toolchain output.** Fixture coverage JSON must come from native toolchains via `cargo xtask regen-fixture-coverage`. A fixture that was hand-edited to make a test pass no longer represents a real-world scenario; it represents the author's assumption about what the toolchain would produce, which may be wrong in exactly the ways that matter.
 
@@ -56,16 +56,16 @@ This pattern emerged when a dotnet fixture was added to `function_capable_fail_f
 
 The correct fix at the time would have been one of:
 - Update the fixture to contain an uncovered function before including it in the set.
-- Exclude the fixture from the set with a `// TODO` and a description of what parser work would enable inclusion.
+- Exclude the fixture from the set and record the parser work needed for inclusion in an issue, exec plan, or `docs/TODO.md`.
 - Create a separate `function_threshold_not_supported_fixtures()` set for the "metric unavailable" scenario and test that path explicitly.
 
 If you find yourself writing `if fixture.language == …` inside a test loop, stop. The fixture set is wrong; fix the set, not the assertion.
 
 ## Core Process
 
-Use `cargo xtask quick` as the default inner-loop command while developing. It runs format checks, Clippy, and the full Rust test suite without the slower coverage and dependency-audit steps.
+Use focused checks as the default inner-loop while developing. Prefer the narrowest command that exercises the changed behavior: a specific `cargo test` target or test name for behavior, `cargo fmt` for formatting edits, and `cargo clippy` for lint-policy or Rust-shape edits. The broader Clippy flags live in `cargo xtask validate`.
 
-Run `cargo xtask validate` from the repository root before considering work complete. It performs all format checks, linting, test execution, coverage validation, dependency checks, and self-coverage analysis.
+Run `cargo xtask validate` from the repository root before considering Rust behavior changes complete. It performs all format checks, linting, test execution, coverage validation, dependency checks, and self-coverage analysis. Documentation-only, CI-only, metadata-only, and lint/config-only changes may close with focused checks instead when those checks cover the touched surface.
 
 ## Live-Scenario Testing Philosophy
 
@@ -107,6 +107,6 @@ When a bug report or review finding arrives, always follow TDD:
 
 1. Add a failing test that reproduces the reported behavior.
 2. Implement the fix.
-3. Re-run the targeted test and relevant broader suites until they pass. During active iteration, prefer the narrowest command that exercises the changed area, use `cargo xtask quick` as the normal inner-loop check, and run `cargo xtask validate` before shipping.
+3. Re-run the targeted test and relevant broader suites until they pass. During active iteration, prefer the narrowest command that exercises the changed area. Run `cargo xtask validate` before shipping Rust behavior changes.
 
 Do not ship a bug fix without the reproducer test.

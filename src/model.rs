@@ -12,7 +12,14 @@ pub enum MetricKind {
     NamedFunction,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Verbosity {
+    Normal,
+    Verbose,
+}
+
 impl MetricKind {
+    #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Region => "region",
@@ -23,6 +30,7 @@ impl MetricKind {
         }
     }
 
+    #[must_use]
     pub fn label(self) -> &'static str {
         match self {
             Self::Region => "regions",
@@ -33,6 +41,7 @@ impl MetricKind {
         }
     }
 
+    #[must_use]
     pub fn to_opportunity_kind(self) -> OpportunityKind {
         match self {
             Self::Region => OpportunityKind::Region,
@@ -57,22 +66,37 @@ pub enum GateRule {
 }
 
 impl GateRule {
+    #[must_use]
     pub fn metric(&self) -> MetricKind {
         match self {
-            Self::Percent { metric, .. } => *metric,
-            Self::UncoveredCount { metric, .. } => *metric,
+            Self::Percent {
+                metric,
+                minimum_percent: _,
+            } => *metric,
+            Self::UncoveredCount {
+                metric,
+                maximum_count: _,
+            } => *metric,
         }
     }
 
+    #[must_use]
     pub fn label(&self) -> String {
         match self {
-            Self::Percent { metric, .. } => format!("fail-under-{}", metric.label()),
-            Self::UncoveredCount { metric, .. } => format!("fail-uncovered-{}", metric.label()),
+            Self::Percent {
+                metric,
+                minimum_percent: _,
+            } => format!("fail-under-{}", metric.label()),
+            Self::UncoveredCount {
+                metric,
+                maximum_count: _,
+            } => format!("fail-uncovered-{}", metric.label()),
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[must_use]
 pub struct RuleOutcome {
     pub rule: GateRule,
     pub passed: bool,
@@ -89,6 +113,7 @@ pub struct SpanKey {
 }
 
 impl SpanKey {
+    #[must_use]
     pub fn format_span(&self) -> String {
         match (self.start_col, self.end_col) {
             (Some(s_col), Some(e_col)) => {
@@ -123,10 +148,12 @@ pub struct SourceSpan {
 }
 
 impl SourceSpan {
+    #[must_use]
     pub fn overlaps_line_range(&self, start: u32, end: u32) -> bool {
         self.start_line <= end && start <= self.end_line
     }
 
+    #[must_use]
     pub fn key(&self) -> SpanKey {
         SpanKey {
             start_line: self.start_line,
@@ -136,14 +163,17 @@ impl SourceSpan {
         }
     }
 
+    #[must_use]
     pub fn format_span(&self) -> String {
         self.key().format_span()
     }
 
+    #[must_use]
     pub fn display(&self) -> String {
         format!("{}:{}", self.path.display(), self.format_span())
     }
 
+    #[must_use]
     pub fn group_by_span(spans: &[Self]) -> BTreeMap<SpanKey, usize> {
         let mut counts = BTreeMap::new();
         for span in spans {
@@ -194,6 +224,7 @@ pub struct LineRange {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[must_use]
 pub struct ComputedMetric {
     pub metric: MetricKind,
     pub covered: usize,
@@ -205,6 +236,7 @@ pub struct ComputedMetric {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[must_use]
 pub struct GateResult {
     pub metrics: Vec<ComputedMetric>,
     pub rules: Vec<RuleOutcome>,

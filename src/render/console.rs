@@ -1,13 +1,13 @@
 use std::collections::BTreeMap;
 
-use crate::model::{ComputedMetric, GateResult, MetricKind, RuleOutcome, SourceSpan};
+use crate::model::{ComputedMetric, GateResult, MetricKind, RuleOutcome, SourceSpan, Verbosity};
 use crate::render::title_case;
 
-pub fn render(result: &GateResult, diff_description: &str, verbose: bool) -> String {
-    if verbose {
-        render_verbose(result, diff_description)
-    } else {
-        render_minimal(result, diff_description)
+#[must_use]
+pub fn render(result: &GateResult, diff_description: &str, verbosity: Verbosity) -> String {
+    match verbosity {
+        Verbosity::Verbose => render_verbose(result, diff_description),
+        Verbosity::Normal => render_minimal(result, diff_description),
     }
 }
 
@@ -76,7 +76,8 @@ fn render_verbose(result: &GateResult, diff_description: &str) -> String {
         let status = if outcome.passed { "PASS" } else { "FAIL" };
         match &outcome.rule {
             crate::model::GateRule::Percent {
-                minimum_percent, ..
+                metric: _,
+                minimum_percent,
             } => {
                 let comparator = if outcome.passed { "≥" } else { "≱" };
                 out.push_str(&format!(
@@ -88,7 +89,10 @@ fn render_verbose(result: &GateResult, diff_description: &str) -> String {
                     minimum_percent
                 ));
             }
-            crate::model::GateRule::UncoveredCount { maximum_count, .. } => {
+            crate::model::GateRule::UncoveredCount {
+                metric: _,
+                maximum_count,
+            } => {
                 let comparator = if outcome.passed { "≤" } else { "≰" };
                 out.push_str(&format!(
                     "Rule {}: {} ({} {} {})\n",
@@ -159,12 +163,16 @@ fn render_metric_summary(metric: &ComputedMetric, rule_outcome: Option<&RuleOutc
 
     let rule_str = match &outcome.rule {
         crate::model::GateRule::Percent {
-            minimum_percent, ..
+            metric: _,
+            minimum_percent,
         } => {
             let comparator = if outcome.passed { "≥" } else { "≱" };
             format!("  {} {:.2}%", comparator, minimum_percent)
         }
-        crate::model::GateRule::UncoveredCount { maximum_count, .. } => {
+        crate::model::GateRule::UncoveredCount {
+            metric: _,
+            maximum_count,
+        } => {
             let comparator = if outcome.passed { "≤" } else { "≰" };
             format!("  {} {}", comparator, maximum_count)
         }

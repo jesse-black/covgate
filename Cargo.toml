@@ -2,7 +2,7 @@
 name = "covgate"
 version = "0.1.4"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.94"
 license = "Apache-2.0"
 description = "Diff-focused coverage gates for local CI, pull requests, and autonomous coding agents."
 readme = "README.md"
@@ -30,6 +30,22 @@ toml = "1.1"
 
 [dev-dependencies]
 tempfile = "3.15"
+
+[lints]
+workspace = true
+
+[workspace.lints.rust]
+warnings = "deny"
+
+[workspace.lints.clippy]
+indexing_slicing = "deny"
+fallible_impl_from = "deny"
+wildcard_enum_match_arm = "deny"
+fn_params_excessive_bools = "deny"
+must_use_candidate = "deny"
+dbg_macro = "deny"
+todo = "deny"
+unimplemented = "deny"
 
 [workspace]
 members = [".", "xtask"]

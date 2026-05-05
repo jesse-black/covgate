@@ -212,7 +212,10 @@ pub fn assert_fixture_has_no_branch_coverage(fixture: Fixture) {
                     || contains_non_empty_branches(nested)
             }),
             serde_json::Value::Array(values) => values.iter().any(contains_non_empty_branches),
-            _ => false,
+            serde_json::Value::Null
+            | serde_json::Value::Bool(_)
+            | serde_json::Value::Number(_)
+            | serde_json::Value::String(_) => false,
         }
     }
 

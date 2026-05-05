@@ -32,11 +32,13 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
         let mut function_records_by_file: BTreeMap<PathBuf, BTreeMap<FunctionKey, bool>> =
             BTreeMap::new();
         for function in data.functions {
-            if function.filenames.is_empty() {
+            let Some(path) = function
+                .filenames
+                .first()
+                .map(|f| normalize_function_path(f, repo_root, &known_file_paths))
+            else {
                 continue;
-            }
-            let path =
-                normalize_function_path(&function.filenames[0], repo_root, &known_file_paths);
+            };
             let mut start_line: Option<u32> = None;
             let mut start_col: Option<u32> = None;
             let mut end_line: Option<u32> = None;
@@ -202,11 +204,11 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
                             end_col,
                         } => (*start_line, *start_col, *end_line, *end_col),
                         FunctionKey::NormalizedName {
+                            normalized_name: _,
                             start_line,
                             start_col,
                             end_line,
                             end_col,
-                            ..
                         } => (*start_line, *start_col, *end_line, *end_col),
                     };
                     let is_named = is_llvm_function_named(&key);
@@ -253,6 +255,13 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
         }
     }
 
+    let opportunities = opportunities;
+    let region_totals_by_file = region_totals_by_file;
+    let line_totals_by_file = line_totals_by_file;
+    let branch_totals_by_file = branch_totals_by_file;
+    let function_totals_by_file = function_totals_by_file;
+    let named_function_totals_by_file = named_function_totals_by_file;
+
     let mut totals_by_file = BTreeMap::new();
     if !region_totals_by_file.is_empty() {
         totals_by_file.insert(MetricKind::Region, region_totals_by_file);
@@ -278,9 +287,18 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
 
 fn is_llvm_function_named(key: &FunctionKey) -> bool {
     match key {
-        FunctionKey::Span { .. } => false,
+        FunctionKey::Span {
+            start_line: _,
+            start_col: _,
+            end_line: _,
+            end_col: _,
+        } => false,
         FunctionKey::NormalizedName {
-            normalized_name, ..
+            normalized_name,
+            start_line: _,
+            start_col: _,
+            end_line: _,
+            end_col: _,
         } => !normalized_name
             .split("::")
             .any(|segment| segment.starts_with('{') && segment.ends_with('}')),
@@ -428,10 +446,7 @@ impl LlvmFile {
     fn segments_to_regions(&self) -> Result<Vec<RegionRecord>> {
         let mut regions = Vec::new();
 
-        for window in self.segments.windows(2) {
-            let start = &window[0];
-            let end = &window[1];
-
+        for [start, end] in self.segments.array_windows::<2>() {
             let start_line = number_at(start, 0)?;
             let start_col = number_at(start, 1)?;
             let end_line = number_at(end, 0)?;
@@ -464,10 +479,7 @@ impl LlvmFile {
     fn parse_lines(&self) -> Result<Vec<LineRecord>> {
         let mut line_states: std::collections::BTreeMap<u32, bool> =
             std::collections::BTreeMap::new();
-        for window in self.segments.windows(2) {
-            let start = &window[0];
-            let end = &window[1];
-
+        for [start, end] in self.segments.array_windows::<2>() {
             let start_line = number_at(start, 0)?;
             let end_line = number_at(end, 0)?;
             let end_col = number_at(end, 1)?;

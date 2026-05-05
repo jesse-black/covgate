@@ -77,7 +77,7 @@ fn contains_coverlet_markers(value: &Value) -> bool {
                 || contains_coverlet_markers(nested)
         }),
         Value::Array(values) => values.iter().any(contains_coverlet_markers),
-        _ => false,
+        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => false,
     }
 }
 
