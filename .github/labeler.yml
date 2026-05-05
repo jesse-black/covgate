@@ -1,0 +1,23 @@
+enhancement:
+  - head-branch: ['^feat/', '^feature/']
+
+bug:
+  - head-branch: ['^fix/', '^bugfix/', '^hotfix/']
+
+docs:
+  - head-branch: ['^docs/']
+
+chore:
+  - head-branch: ['^chore/']
+
+ci:
+  - head-branch: ['^ci/']
+
+refactor:
+  - head-branch: ['^refactor/']
+
+test:
+  - head-branch: ['^test/']
+
+dependencies:
+  - head-branch: ['^deps/', '^dependabot/']
