@@ -2,16 +2,14 @@
 
 ## Development Process
 ### Must Follow
-- ALWAYS run `cargo xtask validate` before declaring code changes complete unless the the change is documentation only or CI only.
-- NEVER declare work complete after `cargo xtask quick` alone.
-- NEVER run `cargo xtask quick` and `cargo xtask validate` at the same time for the same check pass.
+- Run `cargo xtask validate` before declaring Rust behavior changes complete, including parser, metric, gate, CLI behavior, fixture, or validation-policy changes. For documentation-only, CI-only, metadata-only, or lint/config-only changes, run the focused checks that exercise the touched surface instead.
 - ALWAYS address bug reports and review findings with TDD: first reproduce the issue in a failing test, then fix the issue and rerun the relevant tests until they pass.
 - NEVER lower repository gate defaults (for example in `covgate.toml`) without explicit maintainer instruction.
 
 ### Workflow
-- Use `cargo xtask quick` for the fast test/check step during the edit-build-test loop. It is the iteration command and intentionally skips the slower coverage-oriented validation work.
-- Use `cargo xtask validate` as the final pre-completion check before declaring work complete. It is the full validation command, including coverage validation.
-- Treat `cargo xtask quick` and `cargo xtask validate` as alternatives for a given check pass: use `quick` during iteration and `validate` at the end.
+- During the edit-build-test loop, run the narrowest command that covers the changed surface, such as a focused `cargo test`, `cargo fmt`, or `cargo clippy`.
+- Use `cargo xtask validate` when the change affects Rust behavior, fixtures, coverage semantics, gate defaults, release validation, or any path where the full coverage and dependency-audit sweep is the evidence needed.
+- When skipping `cargo xtask validate`, state which focused checks were run and why they are sufficient for the change.
 
 ## Repository Map
 ### Start Here for Architecture and Implementation

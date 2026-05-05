@@ -35,11 +35,9 @@ Worked examples grouped by topic. Each rule tags the principle(s) it expresses. 
 *Principles 1, 3, 5.*
 
 - ALWAYS shadow mutable initialization variables to become immutable (`let data = data;`) once the initialization phase is complete. This "temporary mutability" prevents accidental modification in the function's main body.
-- ALWAYS use exhaustive destructuring for structs in critical logic (e.g., `PartialEq`, `Hash` implementations, or core business logic). Avoid `..` even if not redundant to ensure the compiler forces a decision when new fields are added to the struct. Use descriptive names for ignored fields (e.g., `has_fuel: _`) instead of a silent `..` or multiple unnamed `_`.
+- ALWAYS use exhaustive destructuring for structs in critical logic (e.g., `PartialEq`, `Hash` implementations, or core business logic). Avoid `..` even if not redundant to ensure the compiler forces a decision when new fields are added to the struct. Use descriptive names for ignored fields (e.g., `has_fuel: _`) instead of a silent `..` or multiple unnamed `_`. Do not enable `clippy::unneeded_field_pattern`; that lint recommends `..` in the same places this rule intentionally wants exhaustive destructuring.
 - ALWAYS use the "Seal" pattern or private fields to enforce constructor usage if a struct has internal invariants (like "field X must not be empty"). If a struct is public but its construction should be validated, make the fields private or add a `_private: ()` field to prevent external literal construction.
-- ALWAYS use enums or parameter structs instead of boolean parameters. Boolean flags at call sites are "stringly-typed" values in disguise; enums like `Verbosity::Verbose` are self-documenting.
 - ALWAYS prefer explicit struct initialization over `..Default::default()`. This ensures that when new fields are added, the compiler forces you to consider what their value should be at every call site.
-- ALWAYS mark important return values and types with `#[must_use]` (e.g., configuration objects, guard types, or builders) to prevent callers from accidentally ignoring them.
 
 ### Lean on libraries before writing custom logic
 
