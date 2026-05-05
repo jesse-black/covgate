@@ -2,7 +2,7 @@
 name = "covgate"
 version = "0.1.4"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.95"
 license = "Apache-2.0"
 description = "Diff-focused coverage gates for local CI, pull requests, and autonomous coding agents."
 readme = "README.md"

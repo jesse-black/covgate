@@ -430,11 +430,7 @@ impl LlvmFile {
     fn segments_to_regions(&self) -> Result<Vec<RegionRecord>> {
         let mut regions = Vec::new();
 
-        for window in self.segments.windows(2) {
-            let [start, end] = window else {
-                continue;
-            };
-
+        for [start, end] in self.segments.array_windows::<2>() {
             let start_line = number_at(start, 0)?;
             let start_col = number_at(start, 1)?;
             let end_line = number_at(end, 0)?;
@@ -467,11 +463,7 @@ impl LlvmFile {
     fn parse_lines(&self) -> Result<Vec<LineRecord>> {
         let mut line_states: std::collections::BTreeMap<u32, bool> =
             std::collections::BTreeMap::new();
-        for window in self.segments.windows(2) {
-            let [start, end] = window else {
-                continue;
-            };
-
+        for [start, end] in self.segments.array_windows::<2>() {
             let start_line = number_at(start, 0)?;
             let end_line = number_at(end, 0)?;
             let end_col = number_at(end, 1)?;
