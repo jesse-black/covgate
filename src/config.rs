@@ -41,10 +41,12 @@ struct GateConfig {
     fail_under_lines: Option<f64>,
     fail_under_branches: Option<f64>,
     fail_under_functions: Option<f64>,
+    fail_under_named_functions: Option<f64>,
     fail_uncovered_regions: Option<usize>,
     fail_uncovered_lines: Option<usize>,
     fail_uncovered_branches: Option<usize>,
     fail_uncovered_functions: Option<usize>,
+    fail_uncovered_named_functions: Option<usize>,
 }
 
 impl TryFrom<Args> for Config {
@@ -180,6 +182,12 @@ fn resolve_rules(args: &Args, file_config: Option<&FileConfig>) -> Result<Vec<Ga
         args.fail_under_functions,
         file_config.and_then(|c| c.gates.fail_under_functions),
     );
+    push_percent_rule(
+        &mut configured,
+        MetricKind::NamedFunction,
+        args.fail_under_named_functions,
+        file_config.and_then(|c| c.gates.fail_under_named_functions),
+    );
     push_uncovered_rule(
         &mut configured,
         MetricKind::Branch,
@@ -191,6 +199,12 @@ fn resolve_rules(args: &Args, file_config: Option<&FileConfig>) -> Result<Vec<Ga
         MetricKind::Function,
         args.fail_uncovered_functions,
         file_config.and_then(|c| c.gates.fail_uncovered_functions),
+    );
+    push_uncovered_rule(
+        &mut configured,
+        MetricKind::NamedFunction,
+        args.fail_uncovered_named_functions,
+        file_config.and_then(|c| c.gates.fail_uncovered_named_functions),
     );
 
     if configured.is_empty() {
@@ -255,10 +269,12 @@ mod tests {
                 fail_under_lines: None,
                 fail_under_branches: None,
                 fail_under_functions: None,
+                fail_under_named_functions: None,
                 fail_uncovered_regions: Some(1),
                 fail_uncovered_lines: None,
                 fail_uncovered_branches: None,
                 fail_uncovered_functions: None,
+                fail_uncovered_named_functions: None,
                 markdown_output: None,
                 verbose: false,
             },
@@ -292,10 +308,12 @@ mod tests {
             fail_under_lines: None,
             fail_under_branches: None,
             fail_under_functions: None,
+            fail_under_named_functions: None,
             fail_uncovered_regions: None, // Will fallback to TOML
             fail_uncovered_lines: None,
             fail_uncovered_branches: None,
             fail_uncovered_functions: None,
+            fail_uncovered_named_functions: None,
             markdown_output: None,
             verbose: false,
         };
@@ -334,10 +352,12 @@ mod tests {
             fail_under_lines: None,
             fail_under_branches: None,
             fail_under_functions: None,
+            fail_under_named_functions: None,
             fail_uncovered_regions: None,
             fail_uncovered_lines: None,
             fail_uncovered_branches: None,
             fail_uncovered_functions: None,
+            fail_uncovered_named_functions: None,
             markdown_output: None,
             verbose: false,
         };
@@ -376,10 +396,12 @@ mod tests {
             fail_under_lines: None,
             fail_under_branches: None,
             fail_under_functions: None,
+            fail_under_named_functions: None,
             fail_uncovered_regions: None,
             fail_uncovered_lines: None,
             fail_uncovered_branches: None,
             fail_uncovered_functions: None,
+            fail_uncovered_named_functions: None,
             markdown_output: None,
             verbose: false,
         };
@@ -412,10 +434,12 @@ mod tests {
             fail_under_lines: None,
             fail_under_branches: None,
             fail_under_functions: Some(80.0),
+            fail_under_named_functions: None,
             fail_uncovered_regions: None,
             fail_uncovered_lines: None,
             fail_uncovered_branches: None,
             fail_uncovered_functions: Some(2),
+            fail_uncovered_named_functions: None,
             markdown_output: None,
             verbose: false,
         };
@@ -511,10 +535,12 @@ mod tests {
                     fail_under_lines: None,
                     fail_under_branches: None,
                     fail_under_functions: None,
+                    fail_under_named_functions: None,
                     fail_uncovered_regions: None,
                     fail_uncovered_lines: None,
                     fail_uncovered_branches: None,
                     fail_uncovered_functions: None,
+                    fail_uncovered_named_functions: None,
                     markdown_output: None,
                     verbose: false,
                 },

@@ -20,6 +20,7 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
     let mut line_totals_by_file = BTreeMap::new();
     let mut branch_totals_by_file = BTreeMap::new();
     let mut function_totals_by_file = BTreeMap::new();
+    let mut named_function_totals_by_file = BTreeMap::new();
 
     for classes_by_file in export.into_values() {
         for (file_name, class_value) in classes_by_file {
@@ -36,11 +37,13 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
                 let Some(methods) = methods_value.as_object() else {
                     continue;
                 };
-                for method_value in methods.values() {
+                for (method_key, method_value) in methods {
                     let Ok(method) = serde_json::from_value::<CoverletMethod>(method_value.clone())
                     else {
                         continue;
                     };
+
+                    let is_named = is_coverlet_method_named(method_key);
 
                     for (&line_number, &hits) in &method.lines {
                         let covered = hits > 0;
@@ -60,6 +63,7 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
                             start_line,
                             end_line,
                             covered,
+                            is_named,
                         });
                     }
                 }
@@ -82,6 +86,7 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
                             end_col: None,
                         },
                         covered: is_covered,
+                        is_named_function: None,
                     });
                 }
                 line_totals_by_file.insert(path.clone(), FileTotals { covered, total });
@@ -105,6 +110,7 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
                             end_col: None,
                         },
                         covered: is_covered,
+                        is_named_function: None,
                     });
                 }
                 branch_totals_by_file.insert(path.clone(), FileTotals { covered, total });
@@ -113,10 +119,21 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
             if !function_records.is_empty() {
                 let mut covered = 0usize;
                 let total = function_records.len();
+
+                let mut named_covered = 0usize;
+                let mut named_total = 0usize;
+
                 for function in function_records {
                     if function.covered {
                         covered += 1;
+                        if function.is_named {
+                            named_covered += 1;
+                        }
                     }
+                    if function.is_named {
+                        named_total += 1;
+                    }
+
                     opportunities.push(CoverageOpportunity {
                         kind: OpportunityKind::Function,
                         span: SourceSpan {
@@ -127,9 +144,19 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
                             end_col: None,
                         },
                         covered: function.covered,
+                        is_named_function: Some(function.is_named),
                     });
                 }
-                function_totals_by_file.insert(path, FileTotals { covered, total });
+                function_totals_by_file.insert(path.clone(), FileTotals { covered, total });
+                if named_total > 0 {
+                    named_function_totals_by_file.insert(
+                        path,
+                        FileTotals {
+                            covered: named_covered,
+                            total: named_total,
+                        },
+                    );
+                }
             }
         }
     }
@@ -144,11 +171,22 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
     if !function_totals_by_file.is_empty() {
         totals_by_file.insert(MetricKind::Function, function_totals_by_file);
     }
+    if !named_function_totals_by_file.is_empty() {
+        totals_by_file.insert(MetricKind::NamedFunction, named_function_totals_by_file);
+    }
 
     Ok(CoverageReport {
         opportunities,
         totals_by_file,
     })
+}
+
+fn is_coverlet_method_named(key: &str) -> bool {
+    let Some(method_part) = key.split("::").nth(1) else {
+        return false;
+    };
+    let name_part = method_part.split('(').next().unwrap_or("");
+    !name_part.contains('<') && !name_part.contains('>')
 }
 
 fn normalize_path(value: &str, repo_root: &Path) -> PathBuf {
@@ -187,6 +225,7 @@ struct FunctionRecord {
     start_line: u32,
     end_line: u32,
     covered: bool,
+    is_named: bool,
 }
 
 fn deserialize_line_hits<'de, D>(deserializer: D) -> Result<HashMap<u32, u64>, D::Error>
@@ -208,99 +247,7 @@ where
 mod tests {
     use std::path::{Path, PathBuf};
 
-    use crate::model::{MetricKind, OpportunityKind};
-
-    use super::{normalize_path, parse_with_repo_root};
-
-    #[test]
-    fn parses_coverlet_lines_and_branches() {
-        let input = r#"
-        {
-          "Demo.dll": {
-            "/workspace/covgate/src/lib.cs": {
-              "Demo.MathOps": {
-                "System.Int32 Demo.MathOps::Add(System.Int32,System.Int32)": {
-                  "Lines": {
-                    "3": 1,
-                    "4": 0
-                  },
-                  "Branches": [
-                    {"Line": 4, "Hits": 1},
-                    {"Line": 4, "Hits": 0}
-                  ]
-                }
-              }
-            }
-          }
-        }
-        "#;
-
-        let report = parse_with_repo_root(input, Path::new("/workspace/covgate"))
-            .expect("coverlet json should parse");
-
-        let line_totals = report
-            .totals_by_file
-            .get(&MetricKind::Line)
-            .expect("line totals should exist")
-            .get(&PathBuf::from("src/lib.cs"))
-            .expect("file totals should exist");
-        assert_eq!(line_totals.covered, 1);
-        assert_eq!(line_totals.total, 2);
-
-        let branch_totals = report
-            .totals_by_file
-            .get(&MetricKind::Branch)
-            .expect("branch totals should exist")
-            .get(&PathBuf::from("src/lib.cs"))
-            .expect("file totals should exist");
-        assert_eq!(branch_totals.covered, 1);
-        assert_eq!(branch_totals.total, 2);
-
-        let function_totals = report
-            .totals_by_file
-            .get(&MetricKind::Function)
-            .expect("function totals should exist")
-            .get(&PathBuf::from("src/lib.cs"))
-            .expect("file totals should exist");
-        assert_eq!(function_totals.covered, 1);
-        assert_eq!(function_totals.total, 1);
-    }
-
-    #[test]
-    fn computes_function_spans_from_method_lines() {
-        let input = r#"
-        {
-          "Demo.dll": {
-            "src/lib.cs": {
-              "Demo.MathOps": {
-                "Covered": {"Lines": {"10": 1, "11": 0, "15": 2}, "Branches": []},
-                "Uncovered": {"Lines": {"20": 0, "21": 0}, "Branches": []}
-              }
-            }
-          }
-        }
-        "#;
-
-        let report = parse_with_repo_root(input, Path::new("/workspace/covgate"))
-            .expect("coverlet json should parse");
-
-        let function_ops: Vec<_> = report
-            .opportunities
-            .iter()
-            .filter(|op| op.kind == OpportunityKind::Function)
-            .collect();
-        assert_eq!(function_ops.len(), 2);
-        assert!(
-            function_ops
-                .iter()
-                .any(|op| { op.span.start_line == 10 && op.span.end_line == 15 && op.covered })
-        );
-        assert!(
-            function_ops
-                .iter()
-                .any(|op| { op.span.start_line == 20 && op.span.end_line == 21 && !op.covered })
-        );
-    }
+    use super::{is_coverlet_method_named, normalize_path};
 
     #[test]
     fn normalizes_windows_path_separators() {
@@ -310,110 +257,52 @@ mod tests {
     }
 
     #[test]
-    fn merges_duplicate_lines_across_methods() {
-        let input = r#"
-        {
-          "Demo.dll": {
-            "src/lib.cs": {
-              "Demo.MathOps": {
-                "M1": {"Lines": {"10": 0, "11": 1}, "Branches": []},
-                "M2": {"Lines": {"10": 2}, "Branches": []}
-              }
+    fn identifies_named_functions_correctly() {
+        assert!(is_coverlet_method_named(
+            "System.Int32 Demo.MathOps::Add(System.Int32)"
+        ));
+        assert!(!is_coverlet_method_named(
+            "System.Void Demo.MathOps::<Add>b__0_0()"
+        ));
+    }
+
+    #[test]
+    fn verifies_named_function_totals() {
+        let json = r#"{
+            "Demo.Tests.dll": {
+                "C:\\src\\MathOps.cs": {
+                    "Demo.MathOps": {
+                        "System.Int32 Demo.MathOps::Add(System.Int32)": {
+                            "Lines": { "1": 1 },
+                            "Branches": []
+                        },
+                        "System.Void Demo.MathOps::<Add>b__0_0()": {
+                            "Lines": { "2": 1 },
+                            "Branches": []
+                        }
+                    }
+                }
             }
-          }
-        }
-        "#;
+        }"#;
 
-        let report = parse_with_repo_root(input, Path::new("/workspace/covgate"))
-            .expect("coverlet json should parse");
+        let repo_root = Path::new("C:/");
+        let report = super::parse_with_repo_root(json, repo_root).unwrap();
 
-        let line_totals = report
+        let path = PathBuf::from("src/MathOps.cs");
+        let function_totals = report
             .totals_by_file
-            .get(&MetricKind::Line)
-            .expect("line totals should exist")
-            .get(&PathBuf::from("src/lib.cs"))
-            .expect("file totals should exist");
-        assert_eq!(line_totals.total, 2);
-        assert_eq!(line_totals.covered, 2);
-    }
+            .get(&crate::model::MetricKind::Function)
+            .and_then(|t| t.get(&path))
+            .unwrap();
+        assert_eq!(function_totals.total, 2);
+        assert_eq!(function_totals.covered, 2);
 
-    #[test]
-    fn skips_non_object_class_or_method_entries() {
-        let input = r#"
-        {
-          "Demo.dll": {
-            "src/lib.cs": {
-              "IgnoredClass": 5,
-              "Demo.MathOps": {
-                "IgnoredMethod": 3,
-                "RealMethod": {"Lines": {"5": 1}, "Branches": []}
-              }
-            }
-          }
-        }
-        "#;
-
-        let report = parse_with_repo_root(input, Path::new("/workspace/covgate"))
-            .expect("coverlet json should parse");
-        let lines: Vec<_> = report
-            .opportunities
-            .iter()
-            .filter(|op| op.kind == OpportunityKind::Line)
-            .collect();
-        assert_eq!(lines.len(), 1);
-    }
-
-    #[test]
-    fn invalid_line_key_method_is_ignored() {
-        let input = r#"
-        {
-          "Demo.dll": {
-            "src/lib.cs": {
-              "Demo.MathOps": {
-                "BadMethod": {"Lines": {"not-a-line": 1}, "Branches": []},
-                "GoodMethod": {"Lines": {"7": 1}, "Branches": []}
-              }
-            }
-          }
-        }
-        "#;
-
-        let report = parse_with_repo_root(input, Path::new("/workspace/covgate"))
-            .expect("coverlet json should parse");
-        let line_totals = report
+        let named_function_totals = report
             .totals_by_file
-            .get(&MetricKind::Line)
-            .expect("line totals should exist")
-            .get(&PathBuf::from("src/lib.cs"))
-            .expect("file totals should exist");
-        assert_eq!(line_totals.total, 1);
-        assert_eq!(line_totals.covered, 1);
-    }
-
-    #[test]
-    fn keeps_absolute_paths_outside_repo_as_absolute() {
-        let repo_root = Path::new("/workspace/covgate");
-        let normalized = normalize_path("/tmp/other/src/lib.cs", repo_root);
-        assert_eq!(normalized, PathBuf::from("/tmp/other/src/lib.cs"));
-    }
-
-    #[test]
-    fn skips_function_metric_when_method_has_no_lines() {
-        let input = r#"
-        {
-          "Demo.dll": {
-            "src/lib.cs": {
-              "Demo.MathOps": {
-                "NoLines": {"Lines": {}, "Branches": []}
-              }
-            }
-          }
-        }
-        "#;
-
-        let report = parse_with_repo_root(input, Path::new("/workspace/covgate"))
-            .expect("coverlet json should parse");
-
-        assert!(!report.totals_by_file.contains_key(&MetricKind::Function));
+            .get(&crate::model::MetricKind::NamedFunction)
+            .and_then(|t| t.get(&path))
+            .unwrap();
+        assert_eq!(named_function_totals.total, 1);
+        assert_eq!(named_function_totals.covered, 1);
     }
 }

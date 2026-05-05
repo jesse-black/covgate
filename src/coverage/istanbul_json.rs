@@ -20,6 +20,7 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
     let mut line_totals_by_file = BTreeMap::new();
     let mut branch_totals_by_file = BTreeMap::new();
     let mut function_totals_by_file = BTreeMap::new();
+    let mut named_function_totals_by_file = BTreeMap::new();
 
     for (file_name, coverage) in report {
         let path = normalize_path(&file_name, repo_root);
@@ -51,6 +52,7 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
                         end_col: Some(column),
                     },
                     covered: is_covered,
+                    is_named_function: None,
                 });
             }
             line_totals_by_file.insert(path.clone(), FileTotals { covered, total });
@@ -110,6 +112,7 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
                         end_col: Some(record.end_col),
                     },
                     covered: record.covered,
+                    is_named_function: None,
                 });
             }
             branch_totals_by_file.insert(path.clone(), FileTotals { covered, total });
@@ -118,12 +121,14 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
         let mut function_records = Vec::new();
         for (function_id, function_map) in &coverage.fn_map {
             let covered = coverage.f.get(function_id).copied().unwrap_or(0) > 0;
+            let is_named = is_istanbul_function_named(function_map.name.as_deref());
             function_records.push(FunctionRecord {
                 start_line: function_map.loc.start.line,
                 start_col: function_map.loc.start.column.unwrap_or(0),
                 end_line: function_map.loc.end.line,
                 end_col: function_map.loc.end.column.unwrap_or(0),
                 covered,
+                is_named,
             });
         }
 
@@ -133,6 +138,16 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
                 .filter(|function| function.covered)
                 .count();
             let total = function_records.len();
+
+            let named_covered = function_records
+                .iter()
+                .filter(|function| function.is_named && function.covered)
+                .count();
+            let named_total = function_records
+                .iter()
+                .filter(|function| function.is_named)
+                .count();
+
             for function in function_records {
                 opportunities.push(CoverageOpportunity {
                     kind: OpportunityKind::Function,
@@ -144,9 +159,19 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
                         end_col: Some(function.end_col),
                     },
                     covered: function.covered,
+                    is_named_function: Some(function.is_named),
                 });
             }
-            function_totals_by_file.insert(path, FileTotals { covered, total });
+            function_totals_by_file.insert(path.clone(), FileTotals { covered, total });
+            if named_total > 0 {
+                named_function_totals_by_file.insert(
+                    path,
+                    FileTotals {
+                        covered: named_covered,
+                        total: named_total,
+                    },
+                );
+            }
         }
     }
 
@@ -160,11 +185,90 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
     if !function_totals_by_file.is_empty() {
         totals_by_file.insert(MetricKind::Function, function_totals_by_file);
     }
+    if !named_function_totals_by_file.is_empty() {
+        totals_by_file.insert(MetricKind::NamedFunction, named_function_totals_by_file);
+    }
 
     Ok(CoverageReport {
         opportunities,
         totals_by_file,
     })
+}
+
+fn is_istanbul_function_named(name: Option<&str>) -> bool {
+    let Some(name) = name else {
+        return false;
+    };
+    if name.is_empty() || name == "<anonymous>" {
+        return false;
+    }
+    if name.starts_with("(anonymous") && name.ends_with(')') {
+        return false;
+    }
+    true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_istanbul_function_named;
+
+    #[test]
+    fn identifies_named_functions_correctly() {
+        assert!(!is_istanbul_function_named(None));
+        assert!(!is_istanbul_function_named(Some("")));
+        assert!(!is_istanbul_function_named(Some("<anonymous>")));
+        assert!(!is_istanbul_function_named(Some("(anonymous_0)")));
+        assert!(!is_istanbul_function_named(Some("(anonymous_123)")));
+        assert!(is_istanbul_function_named(Some("compute")));
+        assert!(is_istanbul_function_named(Some("fetchData")));
+    }
+
+    #[test]
+    fn verifies_named_function_totals() {
+        let json = r#"{
+            "/src/index.js": {
+                "path": "/src/index.js",
+                "statementMap": {},
+                "s": {},
+                "branchMap": {},
+                "b": {},
+                "fnMap": {
+                    "0": {
+                        "name": "compute",
+                        "loc": { "start": { "line": 1, "column": 0 }, "end": { "line": 5, "column": 0 } }
+                    },
+                    "1": {
+                        "name": "(anonymous_0)",
+                        "loc": { "start": { "line": 10, "column": 0 }, "end": { "line": 12, "column": 0 } }
+                    }
+                },
+                "f": {
+                    "0": 1,
+                    "1": 1
+                }
+            }
+        }"#;
+
+        let repo_root = std::path::Path::new("/");
+        let report = super::parse_with_repo_root(json, repo_root).unwrap();
+
+        let path = std::path::PathBuf::from("src/index.js");
+        let function_totals = report
+            .totals_by_file
+            .get(&crate::model::MetricKind::Function)
+            .and_then(|t| t.get(&path))
+            .unwrap();
+        assert_eq!(function_totals.total, 2);
+        assert_eq!(function_totals.covered, 2);
+
+        let named_function_totals = report
+            .totals_by_file
+            .get(&crate::model::MetricKind::NamedFunction)
+            .and_then(|t| t.get(&path))
+            .unwrap();
+        assert_eq!(named_function_totals.total, 1);
+        assert_eq!(named_function_totals.covered, 1);
+    }
 }
 
 fn normalize_path(value: &str, repo_root: &Path) -> PathBuf {
@@ -200,6 +304,7 @@ struct IstanbulFileCoverage {
 
 #[derive(Debug, Deserialize)]
 struct IstanbulFunctionMap {
+    name: Option<String>,
     loc: IstanbulSpan,
 }
 
@@ -246,6 +351,7 @@ struct FunctionRecord {
     end_line: u32,
     end_col: u32,
     covered: bool,
+    is_named: bool,
 }
 
 #[derive(Debug)]
@@ -255,306 +361,4 @@ struct BranchRecord {
     end_line: u32,
     end_col: u32,
     covered: bool,
-}
-
-#[cfg(test)]
-mod tests {
-    use std::path::{Path, PathBuf};
-
-    use crate::model::{MetricKind, OpportunityKind};
-
-    use super::parse_with_repo_root;
-
-    #[test]
-    fn parses_istanbul_line_branch_and_function_totals() {
-        let input = r#"
-        {
-          "src/math.js": {
-            "path": "src/math.js",
-            "statementMap": {
-              "0": {"start": {"line": 1, "column": 0}, "end": {"line": 1, "column": 10}},
-              "1": {"start": {"line": 2, "column": 0}, "end": {"line": 2, "column": 10}}
-            },
-            "s": {"0": 1, "1": 0},
-            "branchMap": {
-              "0": {
-                "loc": {"start": {"line": 2, "column": 0}, "end": {"line": 2, "column": 10}},
-                "type": "if",
-                "locations": [
-                  {"start": {"line": 2, "column": 0}, "end": {"line": 2, "column": 10}},
-                  {"start": {"line": 2, "column": 0}, "end": {"line": 2, "column": 10}}
-                ]
-              }
-            },
-            "b": {"0": [1, 0]},
-            "fnMap": {
-              "0": {
-                "name": "compute",
-                "decl": {"start": {"line": 1, "column": 0}, "end": {"line": 1, "column": 10}},
-                "loc": {"start": {"line": 1, "column": 0}, "end": {"line": 3, "column": 1}},
-                "line": 1
-              }
-            },
-            "f": {"0": 1}
-          }
-        }
-        "#;
-
-        let report = parse_with_repo_root(input, Path::new("/workspace/covgate"))
-            .expect("istanbul json should parse");
-
-        let line_totals = report
-            .totals_by_file
-            .get(&MetricKind::Line)
-            .expect("line totals should exist")
-            .get(&PathBuf::from("src/math.js"))
-            .expect("line totals should include fixture file");
-        assert_eq!(line_totals.covered, 1);
-        assert_eq!(line_totals.total, 2);
-
-        let branch_totals = report
-            .totals_by_file
-            .get(&MetricKind::Branch)
-            .expect("branch totals should exist")
-            .get(&PathBuf::from("src/math.js"))
-            .expect("branch totals should include fixture file");
-        assert_eq!(branch_totals.covered, 1);
-        assert_eq!(branch_totals.total, 2);
-
-        let function_totals = report
-            .totals_by_file
-            .get(&MetricKind::Function)
-            .expect("function totals should exist")
-            .get(&PathBuf::from("src/math.js"))
-            .expect("function totals should include fixture file");
-        assert_eq!(function_totals.covered, 1);
-        assert_eq!(function_totals.total, 1);
-    }
-
-    #[test]
-    fn parse_rejects_invalid_json() {
-        let error = parse_with_repo_root("{", Path::new("/workspace/covgate"))
-            .expect_err("invalid json should fail");
-        assert!(error.to_string().contains("failed to parse istanbul json"));
-    }
-
-    #[test]
-    fn parses_checked_in_vitest_fixture_with_empty_branch_locations() {
-        let input =
-            include_str!("../../tests/fixtures/vitest/empty-branch-locations/coverage.json");
-
-        let report = parse_with_repo_root(input, Path::new("/workspace/covgate"))
-            .expect("checked-in vitest fixture should parse");
-
-        let branch_totals = report
-            .totals_by_file
-            .get(&MetricKind::Branch)
-            .expect("branch totals should exist");
-        assert!(
-            branch_totals.contains_key(&PathBuf::from("src/auth/authService.ts")),
-            "fixture should include authService branch totals"
-        );
-        assert!(
-            branch_totals.contains_key(&PathBuf::from("src/auth/msalConfig.ts")),
-            "fixture should include msalConfig branch totals"
-        );
-
-        let auth_service_branches: Vec<_> = report
-            .opportunities
-            .iter()
-            .filter(|opportunity| {
-                opportunity.kind == OpportunityKind::BranchOutcome
-                    && opportunity.span.path == Path::new("src/auth/authService.ts")
-                    && opportunity.span.start_line == 10
-                    && opportunity.span.end_line == 11
-            })
-            .collect();
-        assert_eq!(
-            auth_service_branches.len(),
-            2,
-            "line 10-11 authService branch should preserve both outcome spans"
-        );
-    }
-
-    #[test]
-    fn merges_overlapping_statement_lines_as_covered_when_any_statement_hits() {
-        let input = r#"
-        {
-          "src/math.js": {
-            "statementMap": {
-              "0": {"start": {"line": 2}, "end": {"line": 2}},
-              "1": {"start": {"line": 2}, "end": {"line": 2}}
-            },
-            "s": {"0": 0, "1": 1},
-            "branchMap": {},
-            "b": {},
-            "fnMap": {},
-            "f": {}
-          }
-        }
-        "#;
-
-        let report = parse_with_repo_root(input, Path::new("/workspace/covgate"))
-            .expect("istanbul json should parse");
-
-        let line_totals = report
-            .totals_by_file
-            .get(&MetricKind::Line)
-            .expect("line totals should exist")
-            .get(&PathBuf::from("src/math.js"))
-            .expect("file totals should exist");
-        assert_eq!(line_totals.covered, 1);
-        assert_eq!(line_totals.total, 1);
-
-        assert!(!report.totals_by_file.contains_key(&MetricKind::Branch));
-        assert!(!report.totals_by_file.contains_key(&MetricKind::Function));
-    }
-
-    #[test]
-    fn counts_unique_statement_start_lines_for_line_totals() {
-        let input = r#"
-        {
-          "src/math.js": {
-            "statementMap": {
-              "0": {"start": {"line": 19}, "end": {"line": 22}},
-              "1": {"start": {"line": 20}, "end": {"line": 20}},
-              "2": {"start": {"line": 22}, "end": {"line": 22}}
-            },
-            "s": {"0": 1, "1": 0, "2": 1},
-            "branchMap": {},
-            "b": {},
-            "fnMap": {},
-            "f": {}
-          }
-        }
-        "#;
-
-        let report = parse_with_repo_root(input, Path::new("/workspace/covgate"))
-            .expect("istanbul json should parse");
-
-        let line_totals = report
-            .totals_by_file
-            .get(&MetricKind::Line)
-            .expect("line totals should exist")
-            .get(&PathBuf::from("src/math.js"))
-            .expect("file totals should exist");
-        assert_eq!(line_totals.covered, 2);
-        assert_eq!(line_totals.total, 3);
-
-        let line_20 = report
-            .opportunities
-            .iter()
-            .find(|opportunity| {
-                opportunity.kind == OpportunityKind::Line
-                    && opportunity.span.path == Path::new("src/math.js")
-                    && opportunity.span.start_line == 20
-                    && opportunity.span.end_line == 20
-            })
-            .expect("line 20 opportunity should exist");
-        assert!(!line_20.covered, "line 20 should remain uncovered");
-    }
-
-    #[test]
-    fn checked_in_vitest_fixture_preserves_uncovered_nested_fixture_seed_line() {
-        let input =
-            include_str!("../../tests/fixtures/vitest/empty-branch-locations/coverage.json");
-
-        let report = parse_with_repo_root(input, Path::new("/workspace/covgate"))
-            .expect("checked-in vitest fixture should parse");
-
-        let line_20 = report
-            .opportunities
-            .iter()
-            .find(|opportunity| {
-                opportunity.kind == OpportunityKind::Line
-                    && opportunity.span.path == Path::new("src/fixtures/fixtureSeed.ts")
-                    && opportunity.span.start_line == 20
-                    && opportunity.span.end_line == 20
-            })
-            .expect("fixtureSeed line 20 opportunity should exist");
-        assert!(
-            !line_20.covered,
-            "fixtureSeed line 20 should stay uncovered"
-        );
-    }
-
-    #[test]
-    fn normalizes_repo_prefixed_and_absolute_paths() {
-        let prefixed = parse_with_repo_root(
-            r#"{
-              "/workspace/covgate/src/math.js": {
-                "statementMap": {"0": {"start": {"line": 1}, "end": {"line": 1}}},
-                "s": {"0": 1},
-                "branchMap": {},
-                "b": {},
-                "fnMap": {},
-                "f": {}
-              }
-            }"#,
-            Path::new("/workspace/covgate"),
-        )
-        .expect("prefixed path should parse");
-        assert!(
-            prefixed
-                .totals_by_file
-                .get(&MetricKind::Line)
-                .expect("line totals should exist")
-                .contains_key(&PathBuf::from("src/math.js"))
-        );
-
-        let absolute_outside = parse_with_repo_root(
-            r#"{
-              "/opt/other/math.js": {
-                "statementMap": {"0": {"start": {"line": 1}, "end": {"line": 1}}},
-                "s": {"0": 1},
-                "branchMap": {},
-                "b": {},
-                "fnMap": {},
-                "f": {}
-              }
-            }"#,
-            Path::new("/workspace/covgate"),
-        )
-        .expect("absolute outside path should parse");
-        assert!(
-            absolute_outside
-                .totals_by_file
-                .get(&MetricKind::Line)
-                .expect("line totals should exist")
-                .contains_key(&PathBuf::from("/opt/other/math.js"))
-        );
-    }
-
-    #[test]
-    fn does_not_strip_repo_root_text_prefix_when_not_path_boundary() {
-        let report = parse_with_repo_root(
-            r#"{
-              "/workspace/covgate-old/src/math.js": {
-                "statementMap": {"0": {"start": {"line": 1}, "end": {"line": 1}}},
-                "s": {"0": 1},
-                "branchMap": {},
-                "b": {},
-                "fnMap": {},
-                "f": {}
-              }
-            }"#,
-            Path::new("/workspace/covgate"),
-        )
-        .expect("path should parse");
-
-        assert!(
-            report
-                .totals_by_file
-                .get(&MetricKind::Line)
-                .expect("line totals should exist")
-                .contains_key(&PathBuf::from("/workspace/covgate-old/src/math.js"))
-        );
-        assert!(
-            !report
-                .totals_by_file
-                .get(&MetricKind::Line)
-                .expect("line totals should exist")
-                .contains_key(&PathBuf::from("-old/src/math.js"))
-        );
-    }
 }

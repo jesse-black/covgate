@@ -31,10 +31,12 @@ fn args_for_config_discovery() -> Args {
         fail_under_lines: None,
         fail_under_branches: None,
         fail_under_functions: None,
+        fail_under_named_functions: None,
         fail_uncovered_regions: None,
         fail_uncovered_lines: None,
         fail_uncovered_branches: None,
         fail_uncovered_functions: None,
+        fail_uncovered_named_functions: None,
         markdown_output: None,
         verbose: false,
     }

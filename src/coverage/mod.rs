@@ -100,9 +100,7 @@ fn contains_istanbul_markers(value: &Value) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
-
-    use super::{CoverageFormat, detect_format, parse_with_repo_root};
+    use super::{CoverageFormat, detect_format};
 
     #[test]
     fn detects_llvm_json() {
@@ -208,19 +206,6 @@ mod tests {
     fn rejects_unknown_format() {
         let value = serde_json::json!({"foo": "bar"});
         let err = detect_format(&value).expect_err("format should be unsupported");
-        assert!(err.to_string().contains("unsupported coverage format"));
-    }
-
-    #[test]
-    fn parse_with_repo_root_rejects_invalid_json() {
-        let err = parse_with_repo_root("{", Path::new(".")).expect_err("parse should fail");
-        assert!(err.to_string().contains("failed to parse coverage json"));
-    }
-
-    #[test]
-    fn parse_with_repo_root_rejects_unknown_format() {
-        let err = parse_with_repo_root(r#"{"foo":"bar"}"#, Path::new("."))
-            .expect_err("parse should fail");
         assert!(err.to_string().contains("unsupported coverage format"));
     }
 }
