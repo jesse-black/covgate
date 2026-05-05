@@ -12,6 +12,12 @@ pub enum MetricKind {
     NamedFunction,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Verbosity {
+    Normal,
+    Verbose,
+}
+
 impl MetricKind {
     #[must_use]
     pub fn as_str(self) -> &'static str {
@@ -63,21 +69,34 @@ impl GateRule {
     #[must_use]
     pub fn metric(&self) -> MetricKind {
         match self {
-            Self::Percent { metric, .. } => *metric,
-            Self::UncoveredCount { metric, .. } => *metric,
+            Self::Percent {
+                metric,
+                minimum_percent: _,
+            } => *metric,
+            Self::UncoveredCount {
+                metric,
+                maximum_count: _,
+            } => *metric,
         }
     }
 
     #[must_use]
     pub fn label(&self) -> String {
         match self {
-            Self::Percent { metric, .. } => format!("fail-under-{}", metric.label()),
-            Self::UncoveredCount { metric, .. } => format!("fail-uncovered-{}", metric.label()),
+            Self::Percent {
+                metric,
+                minimum_percent: _,
+            } => format!("fail-under-{}", metric.label()),
+            Self::UncoveredCount {
+                metric,
+                maximum_count: _,
+            } => format!("fail-uncovered-{}", metric.label()),
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[must_use]
 pub struct RuleOutcome {
     pub rule: GateRule,
     pub passed: bool,
@@ -205,6 +224,7 @@ pub struct LineRange {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[must_use]
 pub struct ComputedMetric {
     pub metric: MetricKind,
     pub covered: usize,
@@ -216,6 +236,7 @@ pub struct ComputedMetric {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[must_use]
 pub struct GateResult {
     pub metrics: Vec<ComputedMetric>,
     pub rules: Vec<RuleOutcome>,

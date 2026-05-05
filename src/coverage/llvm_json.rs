@@ -204,11 +204,11 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
                             end_col,
                         } => (*start_line, *start_col, *end_line, *end_col),
                         FunctionKey::NormalizedName {
+                            normalized_name: _,
                             start_line,
                             start_col,
                             end_line,
                             end_col,
-                            ..
                         } => (*start_line, *start_col, *end_line, *end_col),
                     };
                     let is_named = is_llvm_function_named(&key);
@@ -255,6 +255,13 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
         }
     }
 
+    let opportunities = opportunities;
+    let region_totals_by_file = region_totals_by_file;
+    let line_totals_by_file = line_totals_by_file;
+    let branch_totals_by_file = branch_totals_by_file;
+    let function_totals_by_file = function_totals_by_file;
+    let named_function_totals_by_file = named_function_totals_by_file;
+
     let mut totals_by_file = BTreeMap::new();
     if !region_totals_by_file.is_empty() {
         totals_by_file.insert(MetricKind::Region, region_totals_by_file);
@@ -280,9 +287,18 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
 
 fn is_llvm_function_named(key: &FunctionKey) -> bool {
     match key {
-        FunctionKey::Span { .. } => false,
+        FunctionKey::Span {
+            start_line: _,
+            start_col: _,
+            end_line: _,
+            end_col: _,
+        } => false,
         FunctionKey::NormalizedName {
-            normalized_name, ..
+            normalized_name,
+            start_line: _,
+            start_col: _,
+            end_line: _,
+            end_col: _,
         } => !normalized_name
             .split("::")
             .any(|segment| segment.starts_with('{') && segment.ends_with('}')),

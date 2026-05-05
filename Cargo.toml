@@ -31,13 +31,13 @@ toml = "1.1"
 [dev-dependencies]
 tempfile = "3.15"
 
-[lints.clippy]
+[workspace.lints.clippy]
 indexing_slicing = "deny"
 fallible_impl_from = "deny"
 wildcard_enum_match_arm = "deny"
 fn_params_excessive_bools = "deny"
 must_use_candidate = "deny"
-unneeded_field_pattern = "deny"
+# unneeded_field_pattern = "deny" # Removed to allow exhaustive destructuring
 
 [workspace]
 members = [".", "xtask"]

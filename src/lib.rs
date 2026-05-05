@@ -38,8 +38,13 @@ pub fn run(config: Config) -> Result<i32> {
 
     let gate_result = gate::evaluate(metrics, &config.rules)?;
 
-    let console =
-        render::console::render(&gate_result, &config.diff_source.describe(), config.verbose);
+    let verbosity = if config.verbose {
+        crate::model::Verbosity::Verbose
+    } else {
+        crate::model::Verbosity::Normal
+    };
+
+    let console = render::console::render(&gate_result, &config.diff_source.describe(), verbosity);
     println!("{console}");
 
     if let Some(path) = &config.markdown_output {

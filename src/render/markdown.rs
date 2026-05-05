@@ -12,7 +12,8 @@ pub fn render(result: &GateResult, _diff_description: &str) -> String {
         let status = if outcome.passed { "✅PASS" } else { "❌FAIL" };
         match &outcome.rule {
             crate::model::GateRule::Percent {
-                minimum_percent, ..
+                metric: _,
+                minimum_percent,
             } => {
                 out.push_str(&format!(
                     "| {} | `{}` | {:.2}% | ≥ {:.2}% |\n",
@@ -22,7 +23,10 @@ pub fn render(result: &GateResult, _diff_description: &str) -> String {
                     minimum_percent
                 ));
             }
-            crate::model::GateRule::UncoveredCount { maximum_count, .. } => {
+            crate::model::GateRule::UncoveredCount {
+                metric: _,
+                maximum_count,
+            } => {
                 out.push_str(&format!(
                     "| {} | `{}` | {} | ≤ {} |\n",
                     status,

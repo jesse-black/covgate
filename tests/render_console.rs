@@ -1,7 +1,8 @@
 use covgate::model::{
     ComputedMetric, CoverageOpportunity, FileTotals, GateResult, GateRule, MetricKind,
-    OpportunityKind, RuleOutcome, SourceSpan,
+    OpportunityKind, RuleOutcome, SourceSpan, Verbosity,
 };
+
 use covgate::render::console::render;
 use std::{collections::BTreeMap, path::PathBuf};
 
@@ -46,7 +47,7 @@ fn renders_console_summary_minimal() {
         passed: false,
     };
 
-    let rendered = render(&result, "origin/main...HEAD", false);
+    let rendered = render(&result, "origin/main...HEAD", Verbosity::Normal);
     assert!(!rendered.contains("Diff Coverage: FAIL"));
     assert!(rendered.contains("src/lib.rs (50.00% region)"));
     assert!(rendered.contains("FAIL  Regions:      50.00%         (1/2)  ≱ 90.00%"));
@@ -93,7 +94,7 @@ fn renders_console_summary_verbose() {
         passed: false,
     };
 
-    let rendered = render(&result, "origin/main...HEAD", true);
+    let rendered = render(&result, "origin/main...HEAD", Verbosity::Verbose);
     assert!(rendered.contains("Diff Coverage: FAIL"));
     assert!(rendered.contains("src/lib.rs (50.00%)"));
     assert!(rendered.contains("Rule fail-under-regions: FAIL (50.00% ≱ 90.00%)"));
@@ -154,7 +155,7 @@ fn groups_duplicate_spans_with_counts() {
         passed: false,
     };
 
-    let rendered = render(&result, "origin/main...HEAD", false);
+    let rendered = render(&result, "origin/main...HEAD", Verbosity::Normal);
     assert!(rendered.contains("5-6(2)"));
 }
 
@@ -213,7 +214,7 @@ fn sorts_spans_numerically() {
         passed: false,
     };
 
-    let rendered = render(&result, "origin/main...HEAD", false);
+    let rendered = render(&result, "origin/main...HEAD", Verbosity::Normal);
     let spans_row = rendered
         .lines()
         .find(|line| line.contains("regions:"))
@@ -256,7 +257,7 @@ fn omits_non_gated_metrics_from_minimal_output() {
         passed: false,
     };
 
-    let rendered = render(&result, "origin/main...HEAD", false);
+    let rendered = render(&result, "origin/main...HEAD", Verbosity::Normal);
     assert!(rendered.contains("Regions:"));
     assert!(!rendered.contains("Lines:"));
 }
@@ -307,7 +308,7 @@ fn aligns_comparators_vertically() {
         passed: false,
     };
 
-    let rendered = render(&result, "diff", false);
+    let rendered = render(&result, "diff", Verbosity::Normal);
     let lines: Vec<_> = rendered
         .lines()
         .filter(|l| l.contains("PASS") || l.contains("FAIL"))
