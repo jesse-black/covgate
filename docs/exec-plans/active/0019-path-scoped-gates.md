@@ -26,11 +26,16 @@ description: "ExecPlan for implementing path-scoped gates with `[[gates]]` confi
 - [x] Implement CLI/config merge rules in `src/config.rs`: CLI threshold flags override only the fallback gate on a per-rule basis; if config has no fallback gate and CLI thresholds are present, synthesize one; scoped gates come only from config; `--base`, `--diff-file`, `--markdown-output`, and `--verbose` keep current precedence.
 - [x] Extend the runtime model and evaluation flow to handle multiple participating gates without introducing parallel collections. Add a gate-scoped result type that keeps gate label, computed metrics, and rule outcomes together. Keep one-gate runs cheap and straightforward.
 - [x] Implement changed-file gate assignment using the `ignore` crate. Match normalized repo-relative paths, respect repository ignore rules, and detect overlaps on actual changed files: if a changed file matches more than one scoped gate, fail with an error naming the file and the conflicting gates. If a changed file with supported opportunities matches no scoped gate and no fallback gate exists, fail with an actionable error.
-- [x] Update metric computation so each gate evaluates only its assigned files and reports filtered `changed_totals_by_file` and `totals_by_file`. Keep current zero-total behavior for percent and uncovered-count rules.
+- [x] Update metric computation so each gate evaluates only its assigned files and reports filtered `changed_totals_by_file`. Keep current zero-total behavior for percent and uncovered-count rules.
 - [x] Update console output. Minimal output should show gate labels only when needed: named or multiple participating gates get labels, an unnamed fallback gate renders as `default` when other gates also participate, and a lone unnamed fallback gate keeps the current unlabeled shape. Verbose output should group by gate.
 - [x] Update Markdown output without changing its table-based format. Add a `Gate` column only when multiple gates participate; render an unnamed fallback gate as `default` in that case; keep the current table shape unchanged when a lone unnamed fallback gate is the only participant.
 - [x] Add fixture-backed CLI tests with a dedicated mixed Vitest fixture containing both `*.ts` and `*.tsx` changed files. Use copied-fixture integration tests, not synthetic JSON. Cover: scoped gate pass/fail, fallback handling, overlap failure, unmatched-file failure without fallback, CLI override of fallback only, console minimal output labels, and Markdown `Gate` column behavior.
 - [x] Run focused checks during iteration, then `cargo xtask validate` before completion.
+- [ ] Add a failing integration test in `tests/cli_interface.rs` that reproduces the architectural regression: verify that 'Overall Coverage' does not have its scope narrowed inappropriately and includes all files from the coverage report even when scoped gates are configured.
+- [ ] Refactor `src/lib.rs` and `src/metrics.rs` to decouple informational overall coverage from gating logic. Compute repository-wide global metrics once per run, independent of gate scoping. Ensure `GateResult` carries both the scoped gate results and the global repository totals.
+- [ ] Refactor renderers to show a single global "Overall Coverage" section at the end of output. Remove gate-specific scoping or labeling from overall totals in both console and Markdown output.
+- [ ] Address review findings: O(gates * repo_size) config walk, variable shadowing, exhaustive destructuring, and moving `istanbul_json.rs` inline tests.
+- [ ] Run focused checks during iteration, then `cargo xtask validate` before completion.
 
 ## Validation
 - `cargo test config`
@@ -48,7 +53,20 @@ description: "ExecPlan for implementing path-scoped gates with `[[gates]]` confi
 - Manual fixture runs surfaced a CLI merge bug where scoped `[[gates]]` inherited `--fail-under-*` overrides. The fix was to gate CLI threshold precedence on `is_fallback`, plus an explicit config test for fallback-only override behavior.
 
 ## Review
-- [ ] None yet
+
+### Findings
+
+- **[MAJOR] Architectural Regression in Overall Coverage:** Informational overall coverage is currently coupled to gate-specific partitioning. This causes unchanged files to be omitted from the summary and fragments the repository-wide view. `ARCHITECTURE.md` has been updated to explicitly forbid this; overall coverage must be computed globally once per run.
+- **[PERF] Inefficient Config Loading:** `src/config.rs::PathMatcher::new` calls `build_repo_ignores` which recursively walks the entire repository to find `.gitignore` files. This walk is currently performed once for every `[[gates]]` entry in the config file. For a repository with many gates or a large file tree, this is O(gates * repo_size). Repository ignores should be built once and shared across matchers.
+- **[STYLE] Missing Variable Shadowing:** `src/lib.rs::run` and `src/config.rs` functions do not shadow mutable initialization variables to become immutable (`let x = x;`) after the initialization phase is complete, violating `CODESTYLE.md` ("Defensive Rust").
+- **[STYLE] Missing Exhaustive Destructuring:** Core logic in `src/lib.rs::run` and `src/config.rs` uses property access on `Args` and `Config` instead of exhaustive destructuring, violating `CODESTYLE.md` ("Defensive Rust"). This prevents the compiler from forcing updates when new metrics or flags are added.
+- **[TEST] Existing Debt:** `src/coverage/istanbul_json.rs` still contains inline tests that exercise only public APIs, which `docs/TESTING.md` explicitly calls out as incorrect. While existing debt, the branch successfully moved similar tests for `src/gate.rs`, so `istanbul_json.rs` should ideally be addressed as well to bring the codebase into compliance with the new standards.
+
+### Evidence
+
+- **Overall Coverage regression:** `src/lib.rs::assign_changed_files` only adds `changed_file.path` to `GateRunInput::paths`. These paths are then used in `src/metrics.rs::compute_changed_metric` to filter `totals_by_file`.
+- **Inefficient Walk:** `src/config.rs:480` `PathMatcher::new` calls `build_repo_ignores` directly.
+- **Shadowing/Destructuring:** Visible in `src/lib.rs:18` (`run` function) and `src/config.rs:218` (`resolve_gates`).
 
 ## Definition of Done
 
