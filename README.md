@@ -129,23 +129,31 @@ The Codex Cloud environment settings maintenance script should include `covgate 
 
 ### Configuration (`covgate.toml`)
 
-`covgate` reads repository-local defaults from `covgate.toml` so teams can keep their configuration checked in with the code. CLI flags always override config values.
+Store your coverage policies in `covgate.toml` to keep them consistent across the team.
 
-You can specify a default `base` and `markdown-output` at the top level, along with minimum percentage (`fail-under-*`) and maximum uncovered count (`fail-uncovered-*`) rules under `[gates]`.
+#### Path-scoped gates
+
+Not all code is equally critical. You might want 80% branch coverage on your TypeScript logic but a more relaxed standard for TSX components where render branches are often noisier. `covgate` handles this with path-scoped gates.
 
 ```toml
-# Set a default comparison base and output file
-base = "origin/main"
-markdown-output = "summary.md"
-
-[gates]
-# Percentage-based gates (fail if coverage percentage is less than this value)
+# Stricter rules for logic
+[[gates]]
+name = "logic"
+include = ["src/**/*.ts"]
+exclude = ["src/legacy/**"]
 fail-under-lines = 90
-fail-under-regions = 85
 fail-under-branches = 80
 
-# Raw count gates (fail if the count is greater than this value)
-fail-uncovered-functions = 0
+# Relaxed gates for UI components
+[[gates]]
+name = "ui"
+include = ["src/**/*.tsx"]
+fail-under-lines = 80
+fail-under-branches = 60
+
+# Fallback gate for any changed files not matched above
+[[gates]]
+fail-under-lines = 90
 ```
 
 With `covgate.toml` checked in, local invocations become frictionless:
