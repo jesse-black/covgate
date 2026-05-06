@@ -51,7 +51,7 @@ fn loads_config_from_parent_directory() {
     fs::create_dir_all(&nested).expect("nested dir should exist");
     fs::write(
         temp.path().join("covgate.toml"),
-        "markdown-output = \"summary.md\"\n[gates]\nfail-under-lines = 80\n",
+        "markdown-output = \"summary.md\"\n[[gates]]\nfail-under-lines = 80\n",
     )
     .expect("config should write");
 
@@ -77,7 +77,7 @@ fn does_not_walk_past_repo_root_when_config_is_missing_inside_repo() {
     run_git(&repo_root, &["init"]);
     fs::write(
         outer.join("covgate.toml"),
-        "markdown-output = \"outside.md\"\n[gates]\nfail-under-lines = 80\n",
+        "markdown-output = \"outside.md\"\n[[gates]]\nfail-under-lines = 80\n",
     )
     .expect("outer config should write");
 
@@ -100,7 +100,7 @@ fn still_walks_past_parent_boundaries_when_repo_root_is_unknown() {
     fs::create_dir_all(&nested).expect("nested dir should exist");
     fs::write(
         outer.join("covgate.toml"),
-        "markdown-output = \"outside.md\"\n[gates]\nfail-under-lines = 80\n",
+        "markdown-output = \"outside.md\"\n[[gates]]\nfail-under-lines = 80\n",
     )
     .expect("outer config should write");
 

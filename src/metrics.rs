@@ -1,13 +1,17 @@
-use std::{collections::BTreeMap, path::PathBuf};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    path::PathBuf,
+};
 
 use crate::model::{ChangedFile, ComputedMetric, CoverageReport, FileTotals, MetricKind};
 
 pub fn compute_changed_metric(
     report: &CoverageReport,
     diff: &[ChangedFile],
+    included_paths: &BTreeSet<PathBuf>,
     metric: MetricKind,
 ) -> anyhow::Result<ComputedMetric> {
-    let totals_by_file = report
+    let global_totals_by_file = report
         .totals_by_file
         .get(&metric)
         .filter(|totals| totals.values().any(|file_totals| file_totals.total > 0))
@@ -17,6 +21,11 @@ pub fn compute_changed_metric(
                 metric.as_str()
             )
         })?;
+    let totals_by_file: BTreeMap<PathBuf, FileTotals> = global_totals_by_file
+        .iter()
+        .filter(|(path, _)| included_paths.contains(*path))
+        .map(|(path, totals)| (path.clone(), totals.clone()))
+        .collect();
 
     let mut covered = 0usize;
     let mut total = 0usize;

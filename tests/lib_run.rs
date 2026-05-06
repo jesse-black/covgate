@@ -5,7 +5,7 @@ use std::{env, fs, sync::Mutex};
 use tempfile::tempdir;
 
 use covgate::{
-    config::Config,
+    config::{Config, ConfiguredGate},
     diff::DiffSource,
     model::{GateRule, MetricKind},
     run,
@@ -24,10 +24,10 @@ fn git_base_config(coverage_report: std::path::PathBuf) -> Config {
     Config {
         coverage_report,
         diff_source: DiffSource::GitBase("HEAD".to_string()),
-        rules: vec![GateRule::Percent {
+        gates: vec![ConfiguredGate::fallback(vec![GateRule::Percent {
             metric: MetricKind::Region,
             minimum_percent: 90.0,
-        }],
+        }])],
         markdown_output: None,
         verbose: false,
     }
@@ -47,10 +47,10 @@ fn run_with_diff_file_executes_without_untracked_warning_lookup() {
     let code = run(Config {
         coverage_report: fixture.coverage_json(),
         diff_source: DiffSource::DiffFile(diff_file),
-        rules: vec![GateRule::Percent {
+        gates: vec![ConfiguredGate::fallback(vec![GateRule::Percent {
             metric: MetricKind::Region,
             minimum_percent: 90.0,
-        }],
+        }])],
         markdown_output: None,
         verbose: false,
     })
@@ -74,10 +74,10 @@ fn run_with_git_base_checks_untracked_files_before_loading_diff() {
     let code = run(Config {
         coverage_report: fixture.coverage_json(),
         diff_source: DiffSource::GitBase("HEAD".to_string()),
-        rules: vec![GateRule::Percent {
+        gates: vec![ConfiguredGate::fallback(vec![GateRule::Percent {
             metric: MetricKind::Region,
             minimum_percent: 90.0,
-        }],
+        }])],
         markdown_output: None,
         verbose: false,
     })
@@ -101,10 +101,10 @@ fn run_with_git_base_quotes_paths_in_add_command_when_needed() {
     let code = run(Config {
         coverage_report: fixture.coverage_json(),
         diff_source: DiffSource::GitBase("HEAD".to_string()),
-        rules: vec![GateRule::Percent {
+        gates: vec![ConfiguredGate::fallback(vec![GateRule::Percent {
             metric: MetricKind::Region,
             minimum_percent: 90.0,
-        }],
+        }])],
         markdown_output: None,
         verbose: false,
     })
@@ -126,10 +126,10 @@ fn run_with_git_base_skips_warning_when_no_untracked_files_exist() {
     let code = run(Config {
         coverage_report: fixture.coverage_json(),
         diff_source: DiffSource::GitBase("HEAD".to_string()),
-        rules: vec![GateRule::Percent {
+        gates: vec![ConfiguredGate::fallback(vec![GateRule::Percent {
             metric: MetricKind::Region,
             minimum_percent: 90.0,
-        }],
+        }])],
         markdown_output: None,
         verbose: false,
     })

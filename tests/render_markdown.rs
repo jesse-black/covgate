@@ -1,14 +1,30 @@
 use covgate::model::{
-    ComputedMetric, FileTotals, GateResult, GateRule, MetricKind, OpportunityKind, RuleOutcome,
-    SourceSpan,
+    ComputedMetric, FileTotals, GateResult, GateRule, GateScopeResult, MetricKind, OpportunityKind,
+    RuleOutcome, SourceSpan,
 };
 use covgate::render::markdown::render;
 use std::{collections::BTreeMap, path::PathBuf};
 
+fn single_scope_result(
+    metrics: Vec<ComputedMetric>,
+    rules: Vec<RuleOutcome>,
+    passed: bool,
+) -> GateResult {
+    GateResult {
+        scopes: vec![GateScopeResult {
+            label: None,
+            metrics,
+            rules,
+            passed,
+        }],
+        passed,
+    }
+}
+
 #[test]
 fn renders_markdown_tables() {
-    let result = GateResult {
-        metrics: vec![ComputedMetric {
+    let result = single_scope_result(
+        vec![ComputedMetric {
             metric: MetricKind::Region,
             covered: 1,
             total: 2,
@@ -40,7 +56,7 @@ fn renders_markdown_tables() {
                 },
             )]),
         }],
-        rules: vec![RuleOutcome {
+        vec![RuleOutcome {
             rule: GateRule::Percent {
                 metric: MetricKind::Region,
                 minimum_percent: 90.0,
@@ -49,8 +65,8 @@ fn renders_markdown_tables() {
             observed_percent: 50.0,
             observed_uncovered_count: 1,
         }],
-        passed: false,
-    };
+        false,
+    );
 
     let rendered = render(&result, "origin/main...HEAD");
     assert!(rendered.contains("| Result | Rule | Observed | Configured |"));
@@ -69,8 +85,8 @@ fn renders_markdown_tables() {
 
 #[test]
 fn renders_all_nonzero_metrics_in_markdown_summary() {
-    let result = GateResult {
-        metrics: vec![
+    let result = single_scope_result(
+        vec![
             ComputedMetric {
                 metric: MetricKind::Region,
                 covered: 1,
@@ -114,7 +130,7 @@ fn renders_all_nonzero_metrics_in_markdown_summary() {
                 )]),
             },
         ],
-        rules: vec![RuleOutcome {
+        vec![RuleOutcome {
             rule: GateRule::Percent {
                 metric: MetricKind::Region,
                 minimum_percent: 90.0,
@@ -123,8 +139,8 @@ fn renders_all_nonzero_metrics_in_markdown_summary() {
             observed_percent: 50.0,
             observed_uncovered_count: 0,
         }],
-        passed: false,
-    };
+        false,
+    );
 
     let rendered = render(&result, "origin/main...HEAD");
     assert!(rendered.contains("#### Region"));
@@ -137,8 +153,8 @@ fn renders_all_nonzero_metrics_in_markdown_summary() {
 
 #[test]
 fn renders_rule_status_with_unicode_icons() {
-    let result = GateResult {
-        metrics: vec![ComputedMetric {
+    let result = single_scope_result(
+        vec![ComputedMetric {
             metric: MetricKind::Region,
             covered: 2,
             total: 2,
@@ -153,7 +169,7 @@ fn renders_rule_status_with_unicode_icons() {
             )]),
             totals_by_file: BTreeMap::new(),
         }],
-        rules: vec![
+        vec![
             RuleOutcome {
                 rule: GateRule::Percent {
                     metric: MetricKind::Region,
@@ -173,8 +189,8 @@ fn renders_rule_status_with_unicode_icons() {
                 observed_uncovered_count: 1,
             },
         ],
-        passed: false,
-    };
+        false,
+    );
 
     let rendered = render(&result, "origin/main...HEAD");
     assert!(rendered.contains("| ✅PASS | `fail-under-regions` | 100.00% | ≥ 90.00% |"));
@@ -183,8 +199,8 @@ fn renders_rule_status_with_unicode_icons() {
 
 #[test]
 fn renders_coverage_with_threshold_circles() {
-    let result = GateResult {
-        metrics: vec![ComputedMetric {
+    let result = single_scope_result(
+        vec![ComputedMetric {
             metric: MetricKind::Region,
             covered: 1,
             total: 3,
@@ -237,9 +253,9 @@ fn renders_coverage_with_threshold_circles() {
                 ),
             ]),
         }],
-        rules: vec![],
-        passed: true,
-    };
+        vec![],
+        true,
+    );
 
     let rendered = render(&result, "origin/main...HEAD");
     assert!(rendered.contains("| `src/red.rs` | 0 | 3 | 0.00% 🔴 |"));
@@ -252,8 +268,8 @@ fn renders_coverage_with_threshold_circles() {
 
 #[test]
 fn groups_duplicate_spans_with_counts() {
-    let result = GateResult {
-        metrics: vec![ComputedMetric {
+    let result = single_scope_result(
+        vec![ComputedMetric {
             metric: MetricKind::Region,
             covered: 1,
             total: 3,
@@ -293,7 +309,7 @@ fn groups_duplicate_spans_with_counts() {
             )]),
             totals_by_file: BTreeMap::new(),
         }],
-        rules: vec![RuleOutcome {
+        vec![RuleOutcome {
             rule: GateRule::Percent {
                 metric: MetricKind::Region,
                 minimum_percent: 90.0,
@@ -302,8 +318,8 @@ fn groups_duplicate_spans_with_counts() {
             observed_percent: 33.33,
             observed_uncovered_count: 2,
         }],
-        passed: false,
-    };
+        false,
+    );
 
     let rendered = render(&result, "origin/main...HEAD");
     assert!(rendered.contains("`5-6(2)`"));
@@ -311,8 +327,8 @@ fn groups_duplicate_spans_with_counts() {
 
 #[test]
 fn sorts_spans_numerically() {
-    let result = GateResult {
-        metrics: vec![ComputedMetric {
+    let result = single_scope_result(
+        vec![ComputedMetric {
             metric: MetricKind::Region,
             covered: 1,
             total: 3,
@@ -352,7 +368,7 @@ fn sorts_spans_numerically() {
             )]),
             totals_by_file: BTreeMap::new(),
         }],
-        rules: vec![RuleOutcome {
+        vec![RuleOutcome {
             rule: GateRule::Percent {
                 metric: MetricKind::Region,
                 minimum_percent: 90.0,
@@ -361,8 +377,8 @@ fn sorts_spans_numerically() {
             observed_percent: 33.33,
             observed_uncovered_count: 2,
         }],
-        passed: false,
-    };
+        false,
+    );
 
     let rendered = render(&result, "origin/main...HEAD");
     let row = rendered
