@@ -21,7 +21,13 @@ description: "ExecPlan for implementing path-scoped gates with `[[gates]]` confi
 - None
 
 ## Steps
-- [x] Add failing config tests for the new `[[gates]]` schema before implementation. Cover: valid scoped gates, valid fallback gate, duplicate explicit names, `exclude` without `include`, multiple fallback gates, fallback synthesized from CLI flags when config has only scoped gates, and legacy `[gates]` rejection with an actionable error.
+- [x] Add failing config tests for the new `[[gates]]` schema before implementation.
+- [x] Prove valid scoped-gate parsing with a dedicated config test.
+- [x] Prove valid fallback-gate parsing with a dedicated config test.
+- [x] Prove duplicate explicit gate names are rejected with a dedicated config test.
+- [x] Prove `exclude` without `include` is rejected with a dedicated config test.
+- [x] Prove multiple fallback gates are rejected with a dedicated config test.
+- [x] Prove legacy `[gates]` is rejected with an actionable error in a dedicated config test.
 - [x] Replace the current flat config model with a gate-entry model in `src/config.rs`. Each entry should carry optional `name`, optional include/exclude patterns, and resolved threshold rules. Add `ignore` as a dependency and compile gate matchers with gitignore-style semantics. Keep top-level `base`, `markdown-output`, and `verbose` behavior unchanged.
 - [x] Implement CLI/config merge rules in `src/config.rs`: CLI threshold flags override only the fallback gate on a per-rule basis; if config has no fallback gate and CLI thresholds are present, synthesize one; scoped gates come only from config; `--base`, `--diff-file`, `--markdown-output`, and `--verbose` keep current precedence.
 - [x] Extend the runtime model and evaluation flow to handle multiple participating gates without introducing parallel collections. Add a gate-scoped result type that keeps gate label, computed metrics, and rule outcomes together. Keep one-gate runs cheap and straightforward.
@@ -36,9 +42,13 @@ description: "ExecPlan for implementing path-scoped gates with `[[gates]]` confi
 - [x] Refactor renderers to show a single global "Overall Coverage" section at the end of output. Remove gate-specific scoping or labeling from overall totals in both console and Markdown output.
 - [x] Address review findings: O(gates * repo_size) config walk, variable shadowing, exhaustive destructuring, and moving `istanbul_json.rs` inline tests.
 - [x] Run focused checks during iteration, then `cargo xtask validate` before completion.
+- [ ] Prove scoped-only config plus CLI thresholds synthesizes a fallback gate with a dedicated reproducer test. Keep this as its own test case rather than treating explicit-fallback override coverage as equivalent.
+- [ ] Add an acceptance-evidence checklist to the final closeout pass: every completed config/CLI behavior in this plan must point to one named reproducer test or one named integration test. Do not close the plan while any acceptance clause is only covered indirectly by a neighboring test.
 
 ## Validation
 - `cargo test config`
+- `cargo test cli_thresholds_override_only_the_fallback_gate`
+- `cargo test path_scoped_gates`
 - `cargo test render_console`
 - `cargo test render_markdown`
 - `cargo test cli_interface`
@@ -58,6 +68,7 @@ description: "ExecPlan for implementing path-scoped gates with `[[gates]]` confi
 
 ### Findings
 
+- [ ] **Missing regression test for synthesized fallback gate from CLI-only thresholds.** The implementation does synthesize a fallback gate when config contains only scoped `[[gates]]` and the user passes CLI thresholds (`src/config.rs:296-301`), and the plan explicitly marks that case complete (`docs/exec-plans/active/0019-path-scoped-gates.md:24-26`). But the current test coverage never exercises that branch. The config tests cover fallback override when a fallback gate already exists (`src/config.rs:928-975`), and the CLI integration tests cover fallback behavior only with an explicit fallback gate (`tests/cli_interface.rs:671-759`). Add a failing test that starts from scoped-only config plus CLI thresholds, proves a synthetic fallback gate is created, and then rerun the relevant config/CLI tests.
 - [x] **Markdown overall-coverage regression is now pinned down for multi-scope rendering.** `tests/render_markdown.rs` now includes `renders_global_unlabeled_overall_coverage_for_multi_scope_results`, which constructs multiple gate scopes plus independent `overall_metrics` and proves the overall section remains global, unlabeled, and free of fallback-gate rows while the diff-coverage section still shows gate labels.
 - [x] **Residual `CODESTYLE.md` debt review note was stale.** Follow-up verification on `src/config.rs` and `src/gate.rs` found no remaining `..` struct destructures in the cited critical logic, so no production cleanup remained for the exhaustive-destructuring finding.
 - [x] **Architectural Regression in Overall Coverage:** Informational overall coverage has been successfully decoupled from gate-specific partitioning. It is computed once globally and included in a separate "Overall Coverage" section in both console (verbose mode) and Markdown output. Integration tests in `tests/cli_interface.rs` verify that it remains global and includes all files even when scoped gates are used.
@@ -68,12 +79,13 @@ description: "ExecPlan for implementing path-scoped gates with `[[gates]]` confi
 
 ### Evidence
 
+- **Missing synthesized-fallback regression test:** Verified by inspection. The synthesis branch exists in `src/config.rs:296-301`, but no test covers the "scoped-only config + CLI thresholds" case. Existing nearby coverage is limited to explicit-fallback override behavior in `src/config.rs:928-975` and explicit-fallback CLI integration coverage in `tests/cli_interface.rs:671-759`.
 - **Markdown multi-scope overall coverage pinned:** Verified in `tests/render_markdown.rs::renders_global_unlabeled_overall_coverage_for_multi_scope_results`.
 - **Exhaustive destructuring note stale:** Verified by inspection of `src/config.rs` and `src/gate.rs`; no remaining `..` struct destructures are present in the cited logic.
 - **Overall Coverage fixed:** Verified in `src/lib.rs:run` and `tests/cli_interface.rs::overall_coverage_remains_global_when_scoped_gates_are_configured`.
 - **Inefficient Walk fixed:** Verified in `src/config.rs:218` (single call to `build_repo_ignores` with `Arc` sharing).
 - **Shadowing fixed:** Verified in `src/lib.rs:25-28` and `src/config.rs:253`.
-- **Validation:** `cargo xtask validate` passed successfully.
+- **Validation:** `cargo test config`, `cargo test path_scoped_gates`, `cargo test render_markdown`, and `cargo xtask validate` all passed during this review.
 
 ## Definition of Done
 
@@ -81,15 +93,15 @@ description: "ExecPlan for implementing path-scoped gates with `[[gates]]` confi
 - [x] Plan is consistent, up to date, decision-complete, and ready to hand off.
 
 ### Generator
-- [x] Goal achieved: `covgate` supports `[[gates]]` path-scoped policies, fallback-only CLI merging, and scoped console/Markdown output as defined in `docs/design-docs/path-scoped-gates.md`.
-- [x] All planned steps are complete.
-- [x] All validation commands pass.
 - [x] Added or updated fixture-backed tests for scoped gating behavior and output shape.
 - [x] Handed off to an independent reviewer using the `evaluator-execplan` skill.
+- [ ] Goal achieved: `covgate` supports `[[gates]]` path-scoped policies, fallback-only CLI merging, and scoped console/Markdown output as defined in `docs/design-docs/path-scoped-gates.md`.
+- [ ] All planned steps are complete.
+- [ ] All validation commands pass.
 
 ### Evaluator
-- [x] Standard review posture applied.
-- [x] Adheres to `docs/CODESTYLE.md`.
+- [ ] Standard review posture applied.
+- [ ] Adheres to `docs/CODESTYLE.md`.
 - [ ] Adheres to `docs/TESTING.md`.
 - [ ] All review findings have been addressed.
 
