@@ -69,6 +69,7 @@ description: "ExecPlan for implementing path-scoped gates with `[[gates]]` confi
 
 ### Findings
 
+- [x] **`ConfiguredGate::fallback` no longer exists as special test-facing API.** The temporary constructor was removed from `src/config.rs` rather than justified. `tests/lib_run.rs` now exercises `run()` through the public `Args -> Config` path, so the review finding is resolved without a special constructor or `#[cfg(test)]`-shaped production API.
 - [x] **Missing regression test for synthesized fallback gate from CLI-only thresholds.** The implementation does synthesize a fallback gate when config contains only scoped `[[gates]]` and the user passes CLI thresholds (`src/config.rs:296-301`), and that branch is now exercised directly by `config::tests::cli_thresholds_synthesize_a_fallback_gate_when_config_is_scoped_only`.
 - [x] **Markdown overall-coverage regression is now pinned down for multi-scope rendering.** `tests/render_markdown.rs` now includes `renders_global_unlabeled_overall_coverage_for_multi_scope_results`, which constructs multiple gate scopes plus independent `overall_metrics` and proves the overall section remains global, unlabeled, and free of fallback-gate rows while the diff-coverage section still shows gate labels.
 - [x] **Residual `CODESTYLE.md` debt review note was stale.** Follow-up verification on `src/config.rs` and `src/gate.rs` found no remaining `..` struct destructures in the cited critical logic, so no production cleanup remained for the exhaustive-destructuring finding.
@@ -82,13 +83,14 @@ description: "ExecPlan for implementing path-scoped gates with `[[gates]]` confi
 ### Evidence
 
 - **Missing synthesized-fallback regression test (historical):** Previously verified by inspection against `src/config.rs:296-301`; that gap is now closed by `config::tests::cli_thresholds_synthesize_a_fallback_gate_when_config_is_scoped_only`.
+- **Special constructor removed:** Verified by inspection of `src/config.rs` (no `ConfiguredGate::fallback` remains) and `tests/lib_run.rs`, which now builds `Config` through `Config::try_from(Args { .. })` instead of constructing fallback gates directly.
 - **Synthesized-fallback regression test added:** Verified in `src/config.rs::tests::cli_thresholds_synthesize_a_fallback_gate_when_config_is_scoped_only`, plus focused passes from `cargo test config` and `cargo test path_scoped_gates`.
 - **Markdown multi-scope overall coverage pinned:** Verified in `tests/render_markdown.rs::renders_global_unlabeled_overall_coverage_for_multi_scope_results`.
 - **Exhaustive destructuring note stale:** Verified by inspection of `src/config.rs` and `src/gate.rs`; no remaining `..` struct destructures are present in the cited logic.
 - **Overall Coverage fixed:** Verified in `src/lib.rs:run` and `tests/cli_interface.rs::overall_coverage_remains_global_when_scoped_gates_are_configured`.
 - **Inefficient Walk fixed:** Verified in `src/config.rs:218` (single call to `build_repo_ignores` with `Arc` sharing).
 - **Shadowing fixed:** Verified in `src/lib.rs:25-28` and `src/config.rs:253`.
-- **Validation:** `cargo test config`, `cargo test path_scoped_gates`, `cargo test render_markdown`, and `cargo xtask validate` all passed during this review.
+- **Validation:** `cargo test --test lib_run`, `cargo test config`, `cargo test path_scoped_gates`, `cargo test render_markdown`, and `cargo xtask validate` all passed during this review.
 - **Checklist gap verified (historical):** Step 38 required named fixture-backed evidence for "scoped gate pass/fail"; that gap is now closed by the dedicated checklist entry pointing to `tests/cli_interface.rs::path_scoped_gates_render_labeled_minimal_output`.
 
 ### Acceptance Evidence Checklist

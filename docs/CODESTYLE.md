@@ -91,7 +91,7 @@ Worked examples grouped by topic. Each rule tags the principle(s) it expresses. 
 
 *Principle 6.*
 
-- NEVER fence production fields with `#[cfg(test)]` to expose internals to tests. The struct then has different layouts in test vs release builds and the test is implicitly checking implementation.
+- NEVER use `#[cfg(test)]` to widen or alter production type shape or API surface just to make tests easier. That includes test-only fields, constructors, accessors, or enum variants. The test build then has a different contract from the release build, and the test is implicitly checking implementation rather than the real public boundary.
 - ALWAYS expose deliberately-test-visible state through `pub(crate) fn` accessors that exist in both profiles. The corresponding rule for what tests should assert lives in `docs/TESTING.md`.
 
 ### Keep orchestration functions readable

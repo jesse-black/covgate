@@ -35,15 +35,6 @@ pub struct ConfiguredGate {
 
 impl ConfiguredGate {
     #[must_use]
-    pub fn fallback(rules: Vec<GateRule>) -> Self {
-        Self {
-            label: None,
-            rules,
-            matcher: None,
-        }
-    }
-
-    #[must_use]
     pub fn is_fallback(&self) -> bool {
         self.matcher.is_none()
     }
