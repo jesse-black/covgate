@@ -57,12 +57,13 @@ description: "ExecPlan for implementing path-scoped gates with `[[gates]]` confi
 
 ### Findings
 
-- **[PASSED] Architectural Regression in Overall Coverage:** Informational overall coverage has been successfully decoupled from gate-specific partitioning. It is computed once globally and included in a separate "Overall Coverage" section in both console (verbose mode) and Markdown output. Integration tests in `tests/cli_interface.rs` verify that it remains global and includes all files even when scoped gates are used.
-- **[PASSED] Inefficient Config Loading:** Config loading has been optimized. `build_repo_ignores` is now called once in `resolve_gates` and shared across all `PathMatcher` instances via `Arc`, resolving the O(gates * repo_size) walk issue.
-- **[PASSED] Variable Shadowing:** `src/lib.rs::run` and `src/config.rs::resolve_gates` now correctly use variable shadowing (`let x = x;`) to transition from mutable initialization to immutable usage, adhering to `CODESTYLE.md` ("Defensive Rust").
-- **[PASSED] Test Debt:** Inline tests in `src/coverage/istanbul_json.rs` have been removed, and coverage parsing is now exercised through integration tests in `tests/coverage_parse.rs` and other integration suites, adhering to `docs/TESTING.md`.
-- **[STYLE] Residual Exhaustive Destructuring Issues:** While major destructuring issues were addressed, some residual uses of `..` remain in `src/config.rs` (destructuring `Args`) and `src/gate.rs` (destructuring `GateRule`). `CODESTYLE.md` requires explicit `_` naming for ignored fields in critical logic. Given the breadth of the PR, these are minor but should be addressed in future cleanup.
-- **[DOC] Console Minimal Output:** "Overall Coverage" is correctly omitted from console minimal output to maintain token efficiency, while being present in verbose and Markdown output. This strikes a good balance for CLI usage.
+- [ ] **Markdown overall-coverage regression is not fully pinned down for multi-scope rendering.** `src/render/markdown.rs` now has a distinct multi-scope diff-coverage path and a separate overall-coverage path keyed off `result.overall_metrics` ([src/render/markdown.rs](/workspaces/covgate/src/render/markdown.rs:7)), but the renderer unit tests still build only single-scope `GateResult` values via `single_scope_result` ([tests/render_markdown.rs](/workspaces/covgate/tests/render_markdown.rs:8)). The added CLI regression test asserts one line-metric total row and the absence of `js-ui` in the overall section ([tests/cli_interface.rs](/workspaces/covgate/tests/cli_interface.rs:1071)), but it does not directly exercise a multi-scope `GateResult` at the renderer layer or assert that no fallback-labeled rows leak into the overall tables for the other metrics. A future refactor could regress Markdown overall coverage in the multi-scope renderer path without tripping `tests/render_markdown.rs`, so the review is not clean until there is a dedicated Markdown test that constructs multiple scopes plus independent `overall_metrics` and proves the overall section stays global and unlabeled.
+- [ ] **Residual `CODESTYLE.md` debt: exhaustive destructuring is not fully enforced yet.** The branch broadly follows `docs/CODESTYLE.md`, but there are still a few `..` destructures in critical logic, notably in [src/config.rs](/workspaces/covgate/src/config.rs) and [src/gate.rs](/workspaces/covgate/src/gate.rs), where the style guide prefers explicitly naming ignored fields so the compiler forces a decision when structs grow. This is minor, but if the review is claiming full adherence to `CODESTYLE.md`, this cleanup still needs to be addressed or explicitly accepted as non-blocking debt.
+- [x] **Architectural Regression in Overall Coverage:** Informational overall coverage has been successfully decoupled from gate-specific partitioning. It is computed once globally and included in a separate "Overall Coverage" section in both console (verbose mode) and Markdown output. Integration tests in `tests/cli_interface.rs` verify that it remains global and includes all files even when scoped gates are used.
+- [x] **Inefficient Config Loading:** Config loading has been optimized. `build_repo_ignores` is now called once in `resolve_gates` and shared across all `PathMatcher` instances via `Arc`, resolving the O(gates * repo_size) walk issue.
+- [x] **Variable Shadowing:** `src/lib.rs::run` and `src/config.rs::resolve_gates` now correctly use variable shadowing (`let x = x;`) to transition from mutable initialization to immutable usage, adhering to `CODESTYLE.md` ("Defensive Rust").
+- [x] **Test Debt:** Inline tests in `src/coverage/istanbul_json.rs` have been removed, and coverage parsing is now exercised through integration tests in `tests/coverage_parse.rs` and other integration suites, adhering to `docs/TESTING.md`.
+- [x] **Console Minimal Output:** "Overall Coverage" is correctly omitted from console minimal output to maintain token efficiency, while being present in verbose and Markdown output. This strikes a good balance for CLI usage.
 
 ### Evidence
 
@@ -86,8 +87,8 @@ description: "ExecPlan for implementing path-scoped gates with `[[gates]]` confi
 ### Evaluator
 - [x] Standard review posture applied.
 - [x] Adheres to `docs/CODESTYLE.md`.
-- [x] Adheres to `docs/TESTING.md`.
-- [x] All review findings have been addressed.
+- [ ] Adheres to `docs/TESTING.md`.
+- [ ] All review findings have been addressed.
 
 ## Assumptions and Defaults
 - This change is intentionally breaking: legacy top-level `[gates]` is removed rather than supported in parallel with `[[gates]]`.
