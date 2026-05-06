@@ -975,6 +975,58 @@ mod tests {
     }
 
     #[test]
+    fn cli_thresholds_synthesize_a_fallback_gate_when_config_is_scoped_only() {
+        let file_config = parse_file_config(
+            "[[gates]]\nname = \"js-ui\"\ninclude = [\"**/*.tsx\"]\nfail-under-lines = 70\n",
+        )
+        .expect("config should parse");
+
+        let args = Args {
+            coverage_report: "coverage.json".into(),
+            base: None,
+            diff_file: Some("scenario.diff".into()),
+            fail_under_regions: None,
+            fail_under_lines: Some(40.0),
+            fail_under_branches: None,
+            fail_under_functions: None,
+            fail_under_named_functions: None,
+            fail_uncovered_regions: None,
+            fail_uncovered_lines: None,
+            fail_uncovered_branches: None,
+            fail_uncovered_functions: None,
+            fail_uncovered_named_functions: None,
+            markdown_output: None,
+            verbose: false,
+        };
+
+        let gates = resolve_gates(&args, Some(&file_config), std::path::Path::new("."))
+            .expect("gates should resolve");
+        let scoped_gate = gates
+            .iter()
+            .find(|gate| gate.label.as_deref() == Some("js-ui"))
+            .expect("scoped gate should exist");
+        let fallback_gate = gates
+            .iter()
+            .find(|gate| gate.is_fallback())
+            .expect("fallback gate should be synthesized");
+
+        assert_eq!(gates.len(), 2);
+        assert!(scoped_gate.rules.contains(&GateRule::Percent {
+            metric: MetricKind::Line,
+            minimum_percent: 70.0,
+        }));
+        assert!(!scoped_gate.rules.contains(&GateRule::Percent {
+            metric: MetricKind::Line,
+            minimum_percent: 40.0,
+        }));
+        assert_eq!(fallback_gate.label, None);
+        assert!(fallback_gate.rules.contains(&GateRule::Percent {
+            metric: MetricKind::Line,
+            minimum_percent: 40.0,
+        }));
+    }
+
+    #[test]
     fn resolve_gates_rejects_named_gate_without_rules() {
         let file_config =
             parse_file_config("[[gates]]\nname = \"js-ui\"\ninclude = [\"**/*.tsx\"]\n")
