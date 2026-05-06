@@ -22,6 +22,18 @@ fn single_scope_result(
     }
 }
 
+fn multi_scope_result(
+    scopes: Vec<GateScopeResult>,
+    overall_metrics: Vec<ComputedMetric>,
+) -> GateResult {
+    let passed = scopes.iter().all(|scope| scope.passed);
+    GateResult {
+        scopes,
+        overall_metrics,
+        passed,
+    }
+}
+
 #[test]
 fn renders_markdown_tables() {
     let result = single_scope_result(
@@ -150,6 +162,154 @@ fn renders_all_nonzero_metrics_in_markdown_summary() {
         "| File | Covered Changed Lines | Changed Lines | Coverage | Missed Changed Spans |"
     ));
     assert!(rendered.contains("| File | Covered Lines | Lines | Missed Lines | Coverage |"));
+}
+
+#[test]
+fn renders_global_unlabeled_overall_coverage_for_multi_scope_results() {
+    let ui_changed_region_metric = ComputedMetric {
+        metric: MetricKind::Region,
+        covered: 1,
+        total: 2,
+        percent: 50.0,
+        uncovered_changed_opportunities: Vec::new(),
+        changed_totals_by_file: BTreeMap::from([(
+            PathBuf::from("ui/button.tsx"),
+            FileTotals {
+                covered: 1,
+                total: 2,
+            },
+        )]),
+        totals_by_file: BTreeMap::new(),
+    };
+    let backend_changed_region_metric = ComputedMetric {
+        metric: MetricKind::Region,
+        covered: 2,
+        total: 2,
+        percent: 100.0,
+        uncovered_changed_opportunities: Vec::new(),
+        changed_totals_by_file: BTreeMap::from([(
+            PathBuf::from("server/api.ts"),
+            FileTotals {
+                covered: 2,
+                total: 2,
+            },
+        )]),
+        totals_by_file: BTreeMap::new(),
+    };
+    let overall_region_metric = ComputedMetric {
+        metric: MetricKind::Region,
+        covered: 0,
+        total: 0,
+        percent: 0.0,
+        uncovered_changed_opportunities: Vec::new(),
+        changed_totals_by_file: BTreeMap::new(),
+        totals_by_file: BTreeMap::from([
+            (
+                PathBuf::from("server/api.ts"),
+                FileTotals {
+                    covered: 8,
+                    total: 10,
+                },
+            ),
+            (
+                PathBuf::from("ui/button.tsx"),
+                FileTotals {
+                    covered: 3,
+                    total: 5,
+                },
+            ),
+            (
+                PathBuf::from("shared/util.ts"),
+                FileTotals {
+                    covered: 4,
+                    total: 4,
+                },
+            ),
+        ]),
+    };
+    let overall_line_metric = ComputedMetric {
+        metric: MetricKind::Line,
+        covered: 0,
+        total: 0,
+        percent: 0.0,
+        uncovered_changed_opportunities: Vec::new(),
+        changed_totals_by_file: BTreeMap::new(),
+        totals_by_file: BTreeMap::from([
+            (
+                PathBuf::from("server/api.ts"),
+                FileTotals {
+                    covered: 40,
+                    total: 50,
+                },
+            ),
+            (
+                PathBuf::from("ui/button.tsx"),
+                FileTotals {
+                    covered: 12,
+                    total: 20,
+                },
+            ),
+            (
+                PathBuf::from("shared/util.ts"),
+                FileTotals {
+                    covered: 16,
+                    total: 16,
+                },
+            ),
+        ]),
+    };
+    let result = multi_scope_result(
+        vec![
+            GateScopeResult {
+                label: Some("js-ui".to_string()),
+                metrics: vec![ui_changed_region_metric],
+                rules: vec![RuleOutcome {
+                    rule: GateRule::Percent {
+                        metric: MetricKind::Region,
+                        minimum_percent: 60.0,
+                    },
+                    passed: false,
+                    observed_percent: 50.0,
+                    observed_uncovered_count: 0,
+                }],
+                passed: false,
+            },
+            GateScopeResult {
+                label: None,
+                metrics: vec![backend_changed_region_metric],
+                rules: vec![RuleOutcome {
+                    rule: GateRule::Percent {
+                        metric: MetricKind::Region,
+                        minimum_percent: 90.0,
+                    },
+                    passed: true,
+                    observed_percent: 100.0,
+                    observed_uncovered_count: 0,
+                }],
+                passed: true,
+            },
+        ],
+        vec![overall_region_metric, overall_line_metric],
+    );
+
+    let rendered = render(&result, "origin/main...HEAD");
+    let overall = rendered
+        .split("### Overall Coverage\n\n")
+        .nth(1)
+        .expect("overall coverage section should exist");
+
+    assert!(rendered.contains("| Gate | Result | Rule | Observed | Configured |"));
+    assert!(rendered.contains("| `js-ui` | ❌FAIL | `fail-under-regions` | 50.00% | ≥ 60.00% |"));
+    assert!(
+        rendered.contains("| `default` | ✅PASS | `fail-under-regions` | 100.00% | ≥ 90.00% |")
+    );
+    assert!(overall.contains("#### Region"));
+    assert!(overall.contains("#### Line"));
+    assert!(overall.contains("| `shared/util.ts` | 4 | 4 | 0 | 100.00% 🟢 |"));
+    assert!(overall.contains("| `shared/util.ts` | 16 | 16 | 0 | 100.00% 🟢 |"));
+    assert!(!overall.contains("| Gate |"));
+    assert!(!overall.contains("`js-ui`"));
+    assert!(!overall.contains("`default`"));
 }
 
 #[test]
