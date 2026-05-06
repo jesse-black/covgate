@@ -116,6 +116,21 @@ fn render_verbose(result: &GateResult, diff_description: &str) -> String {
         out.push_str("-------------\n");
     }
 
+    if !result.overall_metrics.is_empty() {
+        out.push_str("Overall Coverage\n");
+        out.push_str("-------------\n");
+        for metric in &result.overall_metrics {
+            out.push_str(&format!(
+                "{:<15} {:>7.2}% ({}/{})\n",
+                format!("{}:", title_case(metric.metric.as_str())),
+                metric.percent,
+                metric.covered,
+                metric.total
+            ));
+        }
+        out.push_str("-------------\n");
+    }
+
     if out.ends_with("-------------\n") {
         out.truncate(out.len() - 1);
     }

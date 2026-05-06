@@ -248,5 +248,6 @@ pub struct GateScopeResult {
 #[must_use]
 pub struct GateResult {
     pub scopes: Vec<GateScopeResult>,
+    pub overall_metrics: Vec<ComputedMetric>,
     pub passed: bool,
 }

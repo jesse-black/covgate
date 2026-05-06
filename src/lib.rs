@@ -14,13 +14,40 @@ use std::collections::BTreeSet;
 use crate::{
     config::{Config, ConfiguredGate},
     diff::DiffSource,
-    model::{ChangedFile, GateResult},
+    model::{ChangedFile, GateResult, MetricKind},
 };
 
 pub fn run(config: Config) -> Result<i32> {
-    let report = coverage::load_from_path(&config.coverage_report)?;
-    let diff = load_changed_lines_with_warnings(&config.diff_source)?;
-    let gate_inputs = assign_changed_files(&report, &diff, &config.gates)?;
+    let Config {
+        coverage_report,
+        diff_source,
+        gates,
+        markdown_output,
+        verbose,
+    } = config;
+    let coverage_report = &coverage_report;
+    let diff_source = &diff_source;
+    let gates = &gates;
+    let markdown_output = &markdown_output;
+
+    let report = coverage::load_from_path(coverage_report)?;
+    let diff = load_changed_lines_with_warnings(diff_source)?;
+
+    let mut overall_metrics = Vec::new();
+    for kind in [
+        MetricKind::Region,
+        MetricKind::Line,
+        MetricKind::Branch,
+        MetricKind::Function,
+        MetricKind::NamedFunction,
+    ] {
+        if let Ok(metric) = metrics::compute_overall_metric(&report, kind) {
+            overall_metrics.push(metric);
+        }
+    }
+    let overall_metrics = overall_metrics;
+
+    let gate_inputs = assign_changed_files(&report, &diff, gates)?;
     let mut scopes = Vec::new();
 
     for gate_input in gate_inputs {
@@ -64,22 +91,25 @@ pub fn run(config: Config) -> Result<i32> {
         )?;
         scopes.push(scope);
     }
+    let scopes = scopes;
+
     let gate_result = GateResult {
         passed: scopes.iter().all(|scope| scope.passed),
         scopes,
+        overall_metrics,
     };
 
-    let verbosity = if config.verbose {
+    let verbosity = if verbose {
         crate::model::Verbosity::Verbose
     } else {
         crate::model::Verbosity::Normal
     };
 
-    let console = render::console::render(&gate_result, &config.diff_source.describe(), verbosity);
+    let console = render::console::render(&gate_result, &diff_source.describe(), verbosity);
     println!("{console}");
 
-    if let Some(path) = &config.markdown_output {
-        let markdown = render::markdown::render(&gate_result, &config.diff_source.describe());
+    if let Some(path) = markdown_output {
+        let markdown = render::markdown::render(&gate_result, &diff_source.describe());
         std::fs::write(path, markdown)?;
     }
 

@@ -1,6 +1,7 @@
 use std::{
     env, fs,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use anyhow::{Context, Result, bail};
@@ -96,6 +97,24 @@ impl TryFrom<Args> for Config {
     type Error = anyhow::Error;
 
     fn try_from(args: Args) -> Result<Self> {
+        let Args {
+            coverage_report,
+            markdown_output,
+            verbose,
+            base: _,
+            diff_file: _,
+            fail_under_regions: _,
+            fail_under_lines: _,
+            fail_under_branches: _,
+            fail_under_functions: _,
+            fail_under_named_functions: _,
+            fail_uncovered_regions: _,
+            fail_uncovered_lines: _,
+            fail_uncovered_branches: _,
+            fail_uncovered_functions: _,
+            fail_uncovered_named_functions: _,
+        } = &args;
+
         let dir = env::current_dir()
             .context("failed to determine current directory for covgate config discovery")?;
         let repo_root = git::resolve_repo_root().ok().flatten();
@@ -103,19 +122,19 @@ impl TryFrom<Args> for Config {
         let match_root = repo_root.unwrap_or(dir);
         let diff_source = resolve_diff_source(&args, file_config.as_ref())?;
         let gates = resolve_gates(&args, file_config.as_ref(), &match_root)?;
-        let markdown_output = args.markdown_output.or_else(|| {
+        let markdown_output = markdown_output.clone().or_else(|| {
             file_config
                 .as_ref()
                 .and_then(|config| config.markdown_output.clone())
         });
-        let verbose = args.verbose
+        let verbose = *verbose
             || file_config
                 .as_ref()
                 .and_then(|config| config.verbose)
                 .unwrap_or(false);
 
         Ok(Self {
-            coverage_report: args.coverage_report,
+            coverage_report: coverage_report.clone(),
             diff_source,
             gates,
             markdown_output,
@@ -228,46 +247,50 @@ fn resolve_gates(
 ) -> Result<Vec<ConfiguredGate>> {
     let mut configured = Vec::new();
     let mut has_fallback = false;
+    let repo_ignores = Arc::new(build_repo_ignores(match_root)?);
 
-    for (index, gate) in file_config
-        .map(|config| config.gates.iter().enumerate())
-        .into_iter()
-        .flatten()
-    {
-        let is_fallback = gate.include.is_empty();
-        if is_fallback {
-            has_fallback = true;
-        }
+    if let Some(config) = file_config {
+        for (index, gate) in config.gates.iter().enumerate() {
+            let is_fallback = gate.include.is_empty();
+            if is_fallback {
+                has_fallback = true;
+            }
 
-        let rules = resolve_gate_rules(
-            args,
-            if is_fallback { Some(&gate.rules) } else { None },
-            Some(&gate.rules),
-            is_fallback,
-        );
+            let rules = resolve_gate_rules(
+                args,
+                if is_fallback { Some(&gate.rules) } else { None },
+                Some(&gate.rules),
+                is_fallback,
+            );
 
-        if rules.is_empty() {
-            let label = match &gate.name {
-                Some(label) => label.clone(),
-                None => format!("gate #{}", index + 1),
+            if rules.is_empty() {
+                let label = match &gate.name {
+                    Some(label) => label.clone(),
+                    None => format!("gate #{}", index + 1),
+                };
+                bail!("gate `{label}` has no rules configured");
+            }
+
+            let matcher = if is_fallback {
+                None
+            } else {
+                Some(PathMatcher::new(
+                    match_root,
+                    &gate.include,
+                    &gate.exclude,
+                    repo_ignores.clone(),
+                )?)
             };
-            bail!("gate `{label}` has no rules configured");
+
+            configured.push(ConfiguredGate {
+                label: gate
+                    .name
+                    .clone()
+                    .or_else(|| derive_scoped_gate_label(&gate.include, index + 1)),
+                rules,
+                matcher,
+            });
         }
-
-        let matcher = if is_fallback {
-            None
-        } else {
-            Some(PathMatcher::new(match_root, &gate.include, &gate.exclude)?)
-        };
-
-        configured.push(ConfiguredGate {
-            label: gate
-                .name
-                .clone()
-                .or_else(|| derive_scoped_gate_label(&gate.include, index + 1)),
-            rules,
-            matcher,
-        });
     }
 
     if !has_fallback && has_cli_rules(args) {
@@ -285,6 +308,7 @@ fn resolve_gates(
         )
     }
 
+    let configured = configured;
     Ok(configured)
 }
 
@@ -294,106 +318,202 @@ fn resolve_gate_rules(
     gate_config: Option<&GateRuleConfig>,
     allow_cli_overrides: bool,
 ) -> Vec<GateRule> {
+    let Args {
+        fail_under_regions,
+        fail_under_lines,
+        fail_under_branches,
+        fail_under_functions,
+        fail_under_named_functions,
+        fail_uncovered_regions,
+        fail_uncovered_lines,
+        fail_uncovered_branches,
+        fail_uncovered_functions,
+        fail_uncovered_named_functions,
+        coverage_report: _,
+        base: _,
+        diff_file: _,
+        markdown_output: _,
+        verbose: _,
+    } = args;
+
     let mut configured = Vec::new();
-    let cli_fail_under_regions = allow_cli_overrides
-        .then_some(args.fail_under_regions)
-        .flatten();
-    let cli_fail_under_lines = allow_cli_overrides
-        .then_some(args.fail_under_lines)
-        .flatten();
+    let cli_fail_under_regions = allow_cli_overrides.then_some(*fail_under_regions).flatten();
+    let cli_fail_under_lines = allow_cli_overrides.then_some(*fail_under_lines).flatten();
     let cli_fail_under_branches = allow_cli_overrides
-        .then_some(args.fail_under_branches)
+        .then_some(*fail_under_branches)
         .flatten();
     let cli_fail_under_functions = allow_cli_overrides
-        .then_some(args.fail_under_functions)
+        .then_some(*fail_under_functions)
         .flatten();
     let cli_fail_under_named_functions = allow_cli_overrides
-        .then_some(args.fail_under_named_functions)
+        .then_some(*fail_under_named_functions)
         .flatten();
     let cli_fail_uncovered_regions = allow_cli_overrides
-        .then_some(args.fail_uncovered_regions)
+        .then_some(*fail_uncovered_regions)
         .flatten();
     let cli_fail_uncovered_lines = allow_cli_overrides
-        .then_some(args.fail_uncovered_lines)
+        .then_some(*fail_uncovered_lines)
         .flatten();
     let cli_fail_uncovered_branches = allow_cli_overrides
-        .then_some(args.fail_uncovered_branches)
+        .then_some(*fail_uncovered_branches)
         .flatten();
     let cli_fail_uncovered_functions = allow_cli_overrides
-        .then_some(args.fail_uncovered_functions)
+        .then_some(*fail_uncovered_functions)
         .flatten();
     let cli_fail_uncovered_named_functions = allow_cli_overrides
-        .then_some(args.fail_uncovered_named_functions)
+        .then_some(*fail_uncovered_named_functions)
         .flatten();
+
+    let (
+        f_under_regions,
+        f_under_lines,
+        f_under_branches,
+        f_under_functions,
+        f_under_named_functions,
+        f_uncovered_regions,
+        f_uncovered_lines,
+        f_uncovered_branches,
+        f_uncovered_functions,
+        f_uncovered_named_functions,
+    ) = match fallback_config {
+        Some(c) => {
+            let GateRuleConfig {
+                fail_under_regions,
+                fail_under_lines,
+                fail_under_branches,
+                fail_under_functions,
+                fail_under_named_functions,
+                fail_uncovered_regions,
+                fail_uncovered_lines,
+                fail_uncovered_branches,
+                fail_uncovered_functions,
+                fail_uncovered_named_functions,
+            } = c;
+            (
+                *fail_under_regions,
+                *fail_under_lines,
+                *fail_under_branches,
+                *fail_under_functions,
+                *fail_under_named_functions,
+                *fail_uncovered_regions,
+                *fail_uncovered_lines,
+                *fail_uncovered_branches,
+                *fail_uncovered_functions,
+                *fail_uncovered_named_functions,
+            )
+        }
+        None => (None, None, None, None, None, None, None, None, None, None),
+    };
+
+    let (
+        g_under_regions,
+        g_under_lines,
+        g_under_branches,
+        g_under_functions,
+        g_under_named_functions,
+        g_uncovered_regions,
+        g_uncovered_lines,
+        g_uncovered_branches,
+        g_uncovered_functions,
+        g_uncovered_named_functions,
+    ) = match gate_config {
+        Some(c) => {
+            let GateRuleConfig {
+                fail_under_regions,
+                fail_under_lines,
+                fail_under_branches,
+                fail_under_functions,
+                fail_under_named_functions,
+                fail_uncovered_regions,
+                fail_uncovered_lines,
+                fail_uncovered_branches,
+                fail_uncovered_functions,
+                fail_uncovered_named_functions,
+            } = c;
+            (
+                *fail_under_regions,
+                *fail_under_lines,
+                *fail_under_branches,
+                *fail_under_functions,
+                *fail_under_named_functions,
+                *fail_uncovered_regions,
+                *fail_uncovered_lines,
+                *fail_uncovered_branches,
+                *fail_uncovered_functions,
+                *fail_uncovered_named_functions,
+            )
+        }
+        None => (None, None, None, None, None, None, None, None, None, None),
+    };
 
     push_percent_rule(
         &mut configured,
         MetricKind::Region,
-        fallback_config.and_then(|config| config.fail_under_regions),
-        gate_config.and_then(|config| config.fail_under_regions),
+        f_under_regions,
+        g_under_regions,
         cli_fail_under_regions,
     );
     push_percent_rule(
         &mut configured,
         MetricKind::Line,
-        fallback_config.and_then(|config| config.fail_under_lines),
-        gate_config.and_then(|config| config.fail_under_lines),
+        f_under_lines,
+        g_under_lines,
         cli_fail_under_lines,
     );
     push_percent_rule(
         &mut configured,
         MetricKind::Branch,
-        fallback_config.and_then(|config| config.fail_under_branches),
-        gate_config.and_then(|config| config.fail_under_branches),
+        f_under_branches,
+        g_under_branches,
         cli_fail_under_branches,
     );
     push_percent_rule(
         &mut configured,
         MetricKind::Function,
-        fallback_config.and_then(|config| config.fail_under_functions),
-        gate_config.and_then(|config| config.fail_under_functions),
+        f_under_functions,
+        g_under_functions,
         cli_fail_under_functions,
     );
     push_percent_rule(
         &mut configured,
         MetricKind::NamedFunction,
-        fallback_config.and_then(|config| config.fail_under_named_functions),
-        gate_config.and_then(|config| config.fail_under_named_functions),
+        f_under_named_functions,
+        g_under_named_functions,
         cli_fail_under_named_functions,
     );
     push_uncovered_rule(
         &mut configured,
         MetricKind::Region,
-        fallback_config.and_then(|config| config.fail_uncovered_regions),
-        gate_config.and_then(|config| config.fail_uncovered_regions),
+        f_uncovered_regions,
+        g_uncovered_regions,
         cli_fail_uncovered_regions,
     );
     push_uncovered_rule(
         &mut configured,
         MetricKind::Line,
-        fallback_config.and_then(|config| config.fail_uncovered_lines),
-        gate_config.and_then(|config| config.fail_uncovered_lines),
+        f_uncovered_lines,
+        g_uncovered_lines,
         cli_fail_uncovered_lines,
     );
     push_uncovered_rule(
         &mut configured,
         MetricKind::Branch,
-        fallback_config.and_then(|config| config.fail_uncovered_branches),
-        gate_config.and_then(|config| config.fail_uncovered_branches),
+        f_uncovered_branches,
+        g_uncovered_branches,
         cli_fail_uncovered_branches,
     );
     push_uncovered_rule(
         &mut configured,
         MetricKind::Function,
-        fallback_config.and_then(|config| config.fail_uncovered_functions),
-        gate_config.and_then(|config| config.fail_uncovered_functions),
+        f_uncovered_functions,
+        g_uncovered_functions,
         cli_fail_uncovered_functions,
     );
     push_uncovered_rule(
         &mut configured,
         MetricKind::NamedFunction,
-        fallback_config.and_then(|config| config.fail_uncovered_named_functions),
-        gate_config.and_then(|config| config.fail_uncovered_named_functions),
+        f_uncovered_named_functions,
+        g_uncovered_named_functions,
         cli_fail_uncovered_named_functions,
     );
 
@@ -460,16 +580,20 @@ fn derive_scoped_gate_label(include: &[String], index: usize) -> Option<String> 
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct PathMatcher {
-    repo_ignores: Gitignore,
+    repo_ignores: Arc<Gitignore>,
     include: Gitignore,
     exclude: Gitignore,
 }
 
 impl PathMatcher {
-    fn new(root: &Path, include: &[String], exclude: &[String]) -> Result<Self> {
-        let repo_ignores = build_repo_ignores(root)?;
+    fn new(
+        root: &Path,
+        include: &[String],
+        exclude: &[String],
+        repo_ignores: Arc<Gitignore>,
+    ) -> Result<Self> {
         let include = build_pattern_matcher(root, include)?;
         let exclude = build_pattern_matcher(root, exclude)?;
         Ok(Self {
@@ -901,7 +1025,10 @@ mod tests {
         let temp = tempfile::tempdir().expect("tempdir should exist");
         fs::write(temp.path().join(".gitignore"), "ignored.ts\n").expect("gitignore should exist");
 
-        let matcher = PathMatcher::new(temp.path(), &["**/*.ts".to_string()], &[])
+        let repo_ignores = std::sync::Arc::new(
+            super::build_repo_ignores(temp.path()).expect("repo ignores should build"),
+        );
+        let matcher = PathMatcher::new(temp.path(), &["**/*.ts".to_string()], &[], repo_ignores)
             .expect("matcher should build");
 
         assert!(matcher.matches(std::path::Path::new("src/kept.ts")));

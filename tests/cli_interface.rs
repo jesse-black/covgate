@@ -1066,3 +1066,65 @@ fn minimal_fail_output_is_focused() {
     // Should NOT contain the "Rule fail-under-regions: FAIL" line
     assert!(!stdout.contains("Rule fail-under-regions: FAIL"));
 }
+
+#[test]
+fn overall_coverage_remains_global_when_scoped_gates_are_configured() {
+    let fixture = vitest_path_scoped_gates_fixture();
+    let (temp, worktree, diff_file) = setup_path_scoped_fixture();
+    let markdown_output = temp.path().join("summary.md");
+
+    // Configure scoped gates that only cover a subset of files
+    fs::write(
+        worktree.join("covgate.toml"),
+        "[[gates]]\nname = \"js-ui\"\ninclude = [\"**/*.tsx\"]\nfail-under-lines = 70\n\n[[gates]]\nfail-under-lines = 10\n",
+    )
+    .expect("config should be written");
+
+    let output = run_covgate(
+        &worktree,
+        fixture,
+        &[
+            "--diff-file".to_string(),
+            diff_file.to_string_lossy().into_owned(),
+            "--markdown-output".to_string(),
+            markdown_output.to_string_lossy().into_owned(),
+        ],
+    );
+
+    if !markdown_output.exists() {
+        panic!(
+            "summary.md was not created. exit={:?}\nstdout:\n{}\nstderr:\n{}",
+            output.status.code(),
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    let markdown = fs::read_to_string(markdown_output).expect("markdown should be readable");
+
+    // The "Overall Coverage" section should still contain the global total for the entire fixture.
+    // It should NOT be partitioned by gate or narrowed to changed files only.
+    assert!(markdown.contains("### Overall Coverage"));
+
+    // In the broken implementation, the "Overall Coverage" section will have a "Gate" column
+    // and multiple "Total" rows (one per gate).
+    // The corrected implementation should have one global section.
+
+    // Assert that the global total (15 lines) is present in a standard table row.
+    // Broken implementation will have "| **js-ui Total** |" or "| **default Total** |" instead of "| **Total** |".
+    assert!(
+        markdown.contains("| **Total** | **9** | **15** | **6** | **60.00% 🟡** |"),
+        "Markdown 'Overall Coverage' should contain a single global 'Total' row, but was:\n{markdown}"
+    );
+
+    // Assert that gate labels are NOT present in the Overall Coverage section tables.
+    let overall_section = &markdown[markdown.find("### Overall Coverage").unwrap()..];
+    assert!(
+        !overall_section.contains("| Gate |"),
+        "Overall Coverage should not have a 'Gate' column"
+    );
+    assert!(
+        !overall_section.contains("js-ui"),
+        "Overall Coverage should not contain gate labels"
+    );
+}

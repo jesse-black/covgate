@@ -26,11 +26,13 @@ pub fn evaluate(
 
         let rule_passed = match rule {
             GateRule::Percent {
-                minimum_percent, ..
+                minimum_percent,
+                metric: _,
             } => metric.percent + f64::EPSILON >= *minimum_percent,
-            GateRule::UncoveredCount { maximum_count, .. } => {
-                metric.uncovered_changed_opportunities.len() <= *maximum_count
-            }
+            GateRule::UncoveredCount {
+                maximum_count,
+                metric: _,
+            } => metric.uncovered_changed_opportunities.len() <= *maximum_count,
         };
 
         if !rule_passed {

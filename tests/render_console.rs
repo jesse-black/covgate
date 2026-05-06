@@ -13,10 +13,11 @@ fn single_scope_result(
     GateResult {
         scopes: vec![GateScopeResult {
             label: None,
-            metrics,
+            metrics: metrics.clone(),
             rules,
             passed,
         }],
+        overall_metrics: metrics,
         passed,
     }
 }

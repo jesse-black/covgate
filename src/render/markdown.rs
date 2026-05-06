@@ -44,18 +44,9 @@ pub fn render(result: &GateResult, _diff_description: &str) -> String {
     }
 
     out.push_str("### Overall Coverage\n\n");
-    for metric_kind in metric_kinds(result) {
-        out.push_str(&format!("#### {}\n\n", title_case(metric_kind.as_str())));
-        if multiple_scopes {
-            render_overall_metric_table_multi_scope(&mut out, result, metric_kind);
-        } else if let Some(scope) = result.scopes.first()
-            && let Some(metric) = scope
-                .metrics
-                .iter()
-                .find(|metric| metric.metric == metric_kind)
-        {
-            render_overall_metric_table_single_scope(&mut out, metric);
-        }
+    for metric in &result.overall_metrics {
+        out.push_str(&format!("#### {}\n\n", title_case(metric.metric.as_str())));
+        render_overall_metric_table_single_scope(&mut out, metric);
         out.push('\n');
     }
 
@@ -224,62 +215,6 @@ fn render_overall_metric_table_single_scope(out: &mut String, metric: &ComputedM
         overall_percent,
         coverage_circle(overall_percent)
     ));
-}
-
-fn render_overall_metric_table_multi_scope(
-    out: &mut String,
-    result: &GateResult,
-    metric_kind: MetricKind,
-) {
-    let metric_label = title_case(metric_kind.label());
-    out.push_str(&format!(
-        "| Gate | File | Covered {metric_label} | {metric_label} | Missed {metric_label} | Coverage |\n"
-    ));
-    out.push_str("| --- | --- | ---: | ---: | ---: | ---: |\n");
-    for scope in &result.scopes {
-        let Some(metric) = scope
-            .metrics
-            .iter()
-            .find(|metric| metric.metric == metric_kind)
-        else {
-            continue;
-        };
-        let gate_label = scope_label(scope, true);
-        for (path, totals) in &metric.totals_by_file {
-            let percent = percent(totals.covered, totals.total);
-            let missed = totals.total.saturating_sub(totals.covered);
-            out.push_str(&format!(
-                "| `{gate_label}` | `{}` | {} | {} | {} | {:.2}% {} |\n",
-                path.display(),
-                totals.covered,
-                totals.total,
-                missed,
-                percent,
-                coverage_circle(percent)
-            ));
-        }
-        let overall_covered: usize = metric
-            .totals_by_file
-            .values()
-            .map(|totals| totals.covered)
-            .sum();
-        let overall_total: usize = metric
-            .totals_by_file
-            .values()
-            .map(|totals| totals.total)
-            .sum();
-        let overall_percent = percent(overall_covered, overall_total);
-        let overall_missed = overall_total.saturating_sub(overall_covered);
-        out.push_str(&format!(
-            "| **{} Total** |  | **{}** | **{}** | **{}** | **{:.2}% {}** |\n",
-            gate_label,
-            overall_covered,
-            overall_total,
-            overall_missed,
-            overall_percent,
-            coverage_circle(overall_percent)
-        ));
-    }
 }
 
 fn metric_kinds(result: &GateResult) -> Vec<MetricKind> {
