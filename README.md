@@ -54,54 +54,61 @@ cargo install covgate
 
 ## Usage
 
-Run `covgate` in your CI pipeline after your tests generate coverage artifacts. Invoke it with either a Git base reference or a diff file.
+Define your coverage policy in `covgate.toml`, check it in alongside your code, and every contributor and CI job enforces the same thresholds automatically.
 
-### CLI Surface
+```toml
+[[gates]]
+fail-under-lines = 90
+fail-under-branches = 80
+```
 
-`check <coverage-report>` runs coverage checks for the provided report.
-Options:
-- `--base <REF>` selects the Git base reference to diff against.
-- `--diff-file <FILE>` uses a precomputed unified diff instead of Git base discovery.
-- `--fail-under-regions <PERCENT>` fails if changed-region coverage is below this threshold.
-- `--fail-under-lines <PERCENT>` fails if changed-line coverage is below this threshold.
-- `--fail-under-branches <PERCENT>` fails if changed-branch coverage is below this threshold.
-- `--fail-under-functions <PERCENT>` fails if changed-function coverage is below this threshold.
-- `--fail-uncovered-regions <MAX>` fails if the raw count of uncovered regions exceeds this limit.
-- `--fail-uncovered-lines <MAX>` fails if the raw count of uncovered lines exceeds this limit.
-- `--fail-uncovered-branches <MAX>` fails if the raw count of uncovered branches exceeds this limit.
-- `--fail-uncovered-functions <MAX>` fails if the raw count of uncovered functions exceeds this limit.
-- `--markdown-output <FILE>` writes a Markdown summary for CI interfaces like GitHub Actions.
-
-`record-base` captures a stable task-start base when normal branch refs are unavailable.
-
-### Gating a Pull Request Locally
+Then run `covgate` after generating your coverage report:
 
 ```bash
-# Generate JSON coverage report
 cargo llvm-cov --json --output-path coverage.json
+covgate check coverage.json
+```
 
-# Run covgate against the origin/main branch, failing if region coverage is below 80%
-covgate check coverage.json --base origin/main --fail-under-regions 80
+### Path-Scoped Gates
+
+Coverage gates should protect the code where coverage is a good signal. In a React app, .ts logic often reaches strict line and branch gates cleanly, while .tsx components can turn the last few branch points into brittle render tests that slow down refactors. Path-scoped gates let those files follow different rules: stricter for logic, more pragmatic for UI.
+
+```toml
+# Stricter rules for logic
+[[gates]]
+name = "logic"
+include = ["src/**/*.ts"]
+exclude = ["src/generated/**"]
+fail-under-lines = 90
+fail-under-branches = 80
+
+# Relaxed gates for UI components
+[[gates]]
+name = "ui"
+include = ["src/**/*.tsx"]
+fail-under-lines = 80
+fail-under-branches = 60
+
+# Fallback gate for any changed files not matched above
+[[gates]]
+fail-under-lines = 80
 ```
 
 ### Standard Checkout Workflow
 
-In a standard checkout, the normal workflow is simply `covgate check <coverage-report>`. If `--base` is omitted, `covgate` automatically checks `origin/HEAD`, `origin/main`, `origin/master`, `main`, and `master`. No `record-base` step is needed in that case.
+If `--base` is omitted, `covgate` automatically checks `origin/HEAD`, `origin/main`, `origin/master`, `main`, and `master` in order. No `record-base` step is needed.
 
 When diffing against a Git base, `covgate` compares the merge-base snapshot to your current worktree. This includes committed changes plus staged/unstaged tracked edits, so local diagnosis reflects in-progress work.
 
 ```bash
-# Generate JSON coverage report
 cargo llvm-cov --json --output-path coverage.json
-
-# Let covgate auto-discover the base ref in a standard checkout
-covgate check coverage.json --fail-under-lines 90 --fail-under-regions 85
+covgate check coverage.json
 ```
 
-If your team wants a non-default base, pass it explicitly:
+If your team uses a non-default base branch, set it in `covgate.toml` or pass it explicitly:
 
 ```bash
-covgate check coverage.json --base origin/main --fail-under-regions 80
+covgate check coverage.json --base origin/develop
 ```
 
 ### Cloud-Agent Workflow
@@ -122,46 +129,14 @@ covgate record-base
 
 # Generate coverage and gate locally against the recorded base
 cargo llvm-cov --json --output-path coverage.json
-covgate check coverage.json --fail-under-lines 90 --fail-under-regions 85
+covgate check coverage.json
 ```
 
 The Codex Cloud environment settings maintenance script should include `covgate record-base` so coverage checks can validate the task reliably. Jules does not have a maintenance-script setting, so instructions for Jules should require running `covgate record-base` before every task.
 
-### Configuration (`covgate.toml`)
+### CLI Reference
 
-Store your coverage policies in `covgate.toml` to keep them consistent across the team.
-
-#### Path-scoped gates
-
-Not all code is equally critical. You might want 80% branch coverage on your TypeScript logic but a more relaxed standard for TSX components where render branches are often noisier. `covgate` handles this with path-scoped gates.
-
-```toml
-# Stricter rules for logic
-[[gates]]
-name = "logic"
-include = ["src/**/*.ts"]
-exclude = ["src/legacy/**"]
-fail-under-lines = 90
-fail-under-branches = 80
-
-# Relaxed gates for UI components
-[[gates]]
-name = "ui"
-include = ["src/**/*.tsx"]
-fail-under-lines = 80
-fail-under-branches = 60
-
-# Fallback gate for any changed files not matched above
-[[gates]]
-fail-under-lines = 90
-```
-
-With `covgate.toml` checked in, local invocations become frictionless:
-
-```bash
-# Run covgate using the thresholds and base defined in covgate.toml
-covgate check coverage.json
-```
+Every threshold in `covgate.toml` has a corresponding CLI flag for one-off use. Run `covgate --help` for the full list.
 
 ## GitHub Actions
 
