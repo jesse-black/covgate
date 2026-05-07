@@ -1,6 +1,6 @@
 mod support;
 
-use std::{env, path::PathBuf, sync::Mutex};
+use std::{collections::BTreeSet, env, path::PathBuf, sync::Mutex};
 
 use covgate::{
     coverage, diff,
@@ -35,7 +35,11 @@ fn load_changed_metric(
     let result = (|| {
         let report = coverage::load_from_path(&coverage_json)?;
         let diff = diff::load_changed_lines(&diff::DiffSource::DiffFile(diff_file))?;
-        compute_changed_metric(&report, &diff, metric)
+        let included_paths = diff
+            .iter()
+            .map(|file| file.path.clone())
+            .collect::<BTreeSet<_>>();
+        compute_changed_metric(&report, &diff, &included_paths, metric)
     })();
 
     env::set_current_dir(original_cwd)?;
@@ -60,7 +64,11 @@ fn load_changed_metric_from_subdir(
     let result = (|| {
         let report = coverage::load_from_path(&coverage_json)?;
         let diff = diff::load_changed_lines(&diff::DiffSource::DiffFile(diff_file))?;
-        compute_changed_metric(&report, &diff, metric)
+        let included_paths = diff
+            .iter()
+            .map(|file| file.path.clone())
+            .collect::<BTreeSet<_>>();
+        compute_changed_metric(&report, &diff, &included_paths, metric)
     })();
 
     env::set_current_dir(original_cwd)?;
@@ -92,7 +100,11 @@ fn load_real_fixture_changed_metric(
     let result = (|| {
         let report = coverage::load_from_path(&coverage_json)?;
         let diff = diff::load_changed_lines(&diff::DiffSource::DiffFile(diff_file))?;
-        compute_changed_metric(&report, &diff, metric)
+        let included_paths = diff
+            .iter()
+            .map(|file| file.path.clone())
+            .collect::<BTreeSet<_>>();
+        compute_changed_metric(&report, &diff, &included_paths, metric)
     })();
 
     env::set_current_dir(original_cwd)?;

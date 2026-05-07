@@ -4,30 +4,33 @@ use std::{env, fs, sync::Mutex};
 
 use tempfile::tempdir;
 
-use covgate::{
-    config::Config,
-    diff::DiffSource,
-    model::{GateRule, MetricKind},
-    run,
-};
+use covgate::{cli::Args, config::Config, run};
 
 static CWD_LOCK: Mutex<()> = Mutex::new(());
 
 struct CwdGuard(std::path::PathBuf);
+
 impl Drop for CwdGuard {
     fn drop(&mut self) {
         let _ = std::env::set_current_dir(&self.0);
     }
 }
 
-fn git_base_config(coverage_report: std::path::PathBuf) -> Config {
-    Config {
+fn git_base_args(coverage_report: std::path::PathBuf) -> Args {
+    Args {
         coverage_report,
-        diff_source: DiffSource::GitBase("HEAD".to_string()),
-        rules: vec![GateRule::Percent {
-            metric: MetricKind::Region,
-            minimum_percent: 90.0,
-        }],
+        base: Some("HEAD".to_string()),
+        diff_file: None,
+        fail_under_regions: Some(90.0),
+        fail_under_lines: None,
+        fail_under_branches: None,
+        fail_under_functions: None,
+        fail_under_named_functions: None,
+        fail_uncovered_regions: None,
+        fail_uncovered_lines: None,
+        fail_uncovered_branches: None,
+        fail_uncovered_functions: None,
+        fail_uncovered_named_functions: None,
         markdown_output: None,
         verbose: false,
     }
@@ -44,17 +47,26 @@ fn run_with_diff_file_executes_without_untracked_warning_lookup() {
     let _guard = CwdGuard(previous);
     env::set_current_dir(&worktree).expect("should chdir into worktree");
 
-    let code = run(Config {
+    let config = Config::try_from(Args {
         coverage_report: fixture.coverage_json(),
-        diff_source: DiffSource::DiffFile(diff_file),
-        rules: vec![GateRule::Percent {
-            metric: MetricKind::Region,
-            minimum_percent: 90.0,
-        }],
+        base: None,
+        diff_file: Some(diff_file),
+        fail_under_regions: Some(90.0),
+        fail_under_lines: None,
+        fail_under_branches: None,
+        fail_under_functions: None,
+        fail_under_named_functions: None,
+        fail_uncovered_regions: None,
+        fail_uncovered_lines: None,
+        fail_uncovered_branches: None,
+        fail_uncovered_functions: None,
+        fail_uncovered_named_functions: None,
         markdown_output: None,
         verbose: false,
     })
-    .expect("run should succeed");
+    .expect("config should resolve");
+
+    let code = run(config).expect("run should succeed");
 
     assert_eq!(code, 0);
 }
@@ -71,17 +83,9 @@ fn run_with_git_base_checks_untracked_files_before_loading_diff() {
     let _guard = CwdGuard(previous);
     env::set_current_dir(&worktree).expect("should chdir into worktree");
 
-    let code = run(Config {
-        coverage_report: fixture.coverage_json(),
-        diff_source: DiffSource::GitBase("HEAD".to_string()),
-        rules: vec![GateRule::Percent {
-            metric: MetricKind::Region,
-            minimum_percent: 90.0,
-        }],
-        markdown_output: None,
-        verbose: false,
-    })
-    .expect("run should succeed");
+    let config =
+        Config::try_from(git_base_args(fixture.coverage_json())).expect("config should resolve");
+    let code = run(config).expect("run should succeed");
 
     assert_eq!(code, 0);
 }
@@ -98,17 +102,9 @@ fn run_with_git_base_quotes_paths_in_add_command_when_needed() {
     let _guard = CwdGuard(previous);
     env::set_current_dir(&worktree).expect("should chdir into worktree");
 
-    let code = run(Config {
-        coverage_report: fixture.coverage_json(),
-        diff_source: DiffSource::GitBase("HEAD".to_string()),
-        rules: vec![GateRule::Percent {
-            metric: MetricKind::Region,
-            minimum_percent: 90.0,
-        }],
-        markdown_output: None,
-        verbose: false,
-    })
-    .expect("run should succeed");
+    let config =
+        Config::try_from(git_base_args(fixture.coverage_json())).expect("config should resolve");
+    let code = run(config).expect("run should succeed");
 
     assert_eq!(code, 0);
 }
@@ -123,17 +119,9 @@ fn run_with_git_base_skips_warning_when_no_untracked_files_exist() {
     let _guard = CwdGuard(previous);
     env::set_current_dir(&worktree).expect("should chdir into worktree");
 
-    let code = run(Config {
-        coverage_report: fixture.coverage_json(),
-        diff_source: DiffSource::GitBase("HEAD".to_string()),
-        rules: vec![GateRule::Percent {
-            metric: MetricKind::Region,
-            minimum_percent: 90.0,
-        }],
-        markdown_output: None,
-        verbose: false,
-    })
-    .expect("run should succeed");
+    let config =
+        Config::try_from(git_base_args(fixture.coverage_json())).expect("config should resolve");
+    let code = run(config).expect("run should succeed");
 
     assert_eq!(code, 0);
 }
@@ -147,7 +135,9 @@ fn run_with_git_base_requires_git_repo_for_coverage_path_normalization() {
     let _guard = CwdGuard(previous);
     env::set_current_dir(temp.path()).expect("should chdir into tempdir");
 
-    let err = run(git_base_config(fixture.coverage_json())).expect_err("run should fail");
+    let config =
+        Config::try_from(git_base_args(fixture.coverage_json())).expect("config should resolve");
+    let err = run(config).expect_err("run should fail");
     assert!(
         err.to_string()
             .contains("covgate requires a git repository to run"),

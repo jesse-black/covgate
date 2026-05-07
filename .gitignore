@@ -1,3 +1,4 @@
 /target
 .codex
 local.nix
+settings.local.json

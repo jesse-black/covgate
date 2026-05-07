@@ -28,20 +28,12 @@
           ({ pkgs, ... }: {
             home.packages = with pkgs; [
               # Core CLI tools
-              curl
-              git
-              jq
               yq-go
               ripgrep
               fd
               eza
               gh
-              zip
-              unzip
               file
-              which
-              less
-              tree
               python3
 
               # Shell/script tooling

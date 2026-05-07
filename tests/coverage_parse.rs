@@ -1458,3 +1458,50 @@ fn parse_with_repo_root_rejects_unknown_format() {
         parse_with_repo_root(r#"{"foo":"bar"}"#, Path::new(".")).expect_err("parse should fail");
     assert!(err.to_string().contains("unsupported coverage format"));
 }
+
+#[test]
+fn istanbul_verifies_named_function_totals() {
+    let json = r#"{
+        "/src/index.js": {
+            "path": "/src/index.js",
+            "statementMap": {},
+            "s": {},
+            "branchMap": {},
+            "b": {},
+            "fnMap": {
+                "0": {
+                    "name": "compute",
+                    "loc": { "start": { "line": 1, "column": 0 }, "end": { "line": 5, "column": 0 } }
+                },
+                "1": {
+                    "name": "(anonymous_0)",
+                    "loc": { "start": { "line": 10, "column": 0 }, "end": { "line": 12, "column": 0 } }
+                }
+            },
+            "f": {
+                "0": 1,
+                "1": 1
+            }
+        }
+    }"#;
+
+    let repo_root = std::path::Path::new("/");
+    let report = covgate::coverage::parse_with_repo_root(json, repo_root).unwrap();
+
+    let path = std::path::PathBuf::from("src/index.js");
+    let function_totals = report
+        .totals_by_file
+        .get(&covgate::model::MetricKind::Function)
+        .and_then(|t| t.get(&path))
+        .unwrap();
+    assert_eq!(function_totals.total, 2);
+    assert_eq!(function_totals.covered, 2);
+
+    let named_function_totals = report
+        .totals_by_file
+        .get(&covgate::model::MetricKind::NamedFunction)
+        .and_then(|t| t.get(&path))
+        .unwrap();
+    assert_eq!(named_function_totals.total, 1);
+    assert_eq!(named_function_totals.covered, 1);
+}

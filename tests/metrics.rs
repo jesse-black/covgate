@@ -4,7 +4,10 @@ use covgate::model::{
     ChangedFile, CoverageOpportunity, CoverageReport, FileTotals, LineRange, MetricKind,
     OpportunityKind, SourceSpan,
 };
-use std::{collections::BTreeMap, path::PathBuf};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    path::PathBuf,
+};
 
 #[test]
 fn computes_changed_region_metric() {
@@ -51,7 +54,12 @@ fn computes_changed_region_metric() {
         changed_lines: vec![LineRange { start: 1, end: 6 }],
     }];
 
-    let metric = compute_changed_metric(&report, &diff, MetricKind::Region).expect("metric works");
+    let included_paths = diff
+        .iter()
+        .map(|file| file.path.clone())
+        .collect::<BTreeSet<_>>();
+    let metric = compute_changed_metric(&report, &diff, &included_paths, MetricKind::Region)
+        .expect("metric works");
     assert_eq!(metric.covered, 1);
     assert_eq!(metric.total, 2);
     assert_eq!(metric.uncovered_changed_opportunities.len(), 1);
@@ -79,7 +87,7 @@ fn metric_with_only_zero_totals_is_treated_as_unavailable() {
         )]),
     };
 
-    let error = compute_changed_metric(&report, &[], MetricKind::Branch)
+    let error = compute_changed_metric(&report, &[], &BTreeSet::new(), MetricKind::Branch)
         .expect_err("branch metric with only zero totals should be unavailable");
 
     assert_eq!(
@@ -100,7 +108,12 @@ fn changed_branch_metric_counts_multiline_vitest_branch_outcomes() {
         changed_lines: vec![LineRange { start: 11, end: 11 }],
     }];
 
-    let metric = compute_changed_metric(&report, &diff, MetricKind::Branch).expect("metric works");
+    let included_paths = diff
+        .iter()
+        .map(|file| file.path.clone())
+        .collect::<BTreeSet<_>>();
+    let metric = compute_changed_metric(&report, &diff, &included_paths, MetricKind::Branch)
+        .expect("metric works");
 
     assert_eq!(metric.covered, 1);
     assert_eq!(metric.total, 2);
@@ -118,7 +131,12 @@ fn changed_line_metric_keeps_uncovered_fixture_seed_call_visible() {
         changed_lines: vec![LineRange { start: 20, end: 20 }],
     }];
 
-    let metric = compute_changed_metric(&report, &diff, MetricKind::Line).expect("metric works");
+    let included_paths = diff
+        .iter()
+        .map(|file| file.path.clone())
+        .collect::<BTreeSet<_>>();
+    let metric = compute_changed_metric(&report, &diff, &included_paths, MetricKind::Line)
+        .expect("metric works");
 
     assert_eq!(metric.covered, 0);
     assert_eq!(metric.total, 1);

@@ -6,6 +6,7 @@ use covgate::model::{ComputedMetric, GateRule, MetricKind};
 #[test]
 fn fails_below_percent_threshold() {
     let result = evaluate(
+        None,
         vec![ComputedMetric {
             metric: MetricKind::Region,
             covered: 1,
@@ -35,6 +36,7 @@ fn fails_below_percent_threshold() {
 #[test]
 fn fails_above_uncovered_count_threshold() {
     let result = evaluate(
+        None,
         vec![ComputedMetric {
             metric: MetricKind::Region,
             covered: 1,
@@ -83,6 +85,7 @@ fn fails_above_uncovered_count_threshold() {
 #[test]
 fn multiple_rules_fail_if_any_fails() {
     let result = evaluate(
+        None,
         vec![ComputedMetric {
             metric: MetricKind::Region,
             covered: 9,
@@ -124,6 +127,7 @@ fn multiple_rules_fail_if_any_fails() {
 #[test]
 fn mismatched_metric_returns_error() {
     let error = evaluate(
+        None,
         vec![ComputedMetric {
             metric: MetricKind::Region,
             covered: 1,
@@ -145,4 +149,27 @@ fn mismatched_metric_returns_error() {
             .to_string()
             .contains("not supported by the loaded report")
     );
+}
+
+#[test]
+fn mismatched_metric_error_mentions_gate_label() {
+    let error = evaluate(
+        Some("js-ui".to_string()),
+        vec![ComputedMetric {
+            metric: MetricKind::Region,
+            covered: 1,
+            total: 2,
+            percent: 50.0,
+            uncovered_changed_opportunities: Vec::new(),
+            changed_totals_by_file: BTreeMap::new(),
+            totals_by_file: BTreeMap::new(),
+        }],
+        &[GateRule::Percent {
+            metric: MetricKind::Line,
+            minimum_percent: 90.0,
+        }],
+    )
+    .expect_err("should return error");
+
+    assert!(error.to_string().contains("js-ui"));
 }

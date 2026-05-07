@@ -16,4 +16,5 @@ cargo xtask regen-fixture-coverage vitest/basic-pass
 cargo xtask regen-fixture-coverage vitest/statement-line-divergence
 cargo xtask regen-fixture-coverage vitest/empty-branch-locations
 cargo xtask regen-fixture-coverage vitest/tsx-line-summary
+cargo xtask regen-fixture-coverage vitest/path-scoped-gates
 ```

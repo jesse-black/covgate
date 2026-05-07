@@ -119,7 +119,7 @@ Console and Markdown output are views over computed results. They must not silen
 
 In particular, normal `covgate` summaries are calculation-backed, not pass-through views of native upstream summary fields. Native summaries are useful for comparison, investigation, and regression tests, but they are not the production source of truth for `covgate` output.
 
-This invariant matters because some native tools, especially LLVM-based ones, can expose competing report semantics for the same run. `covgate` must not hide that ambiguity by printing upstream summary numbers as if they were equivalent to its own calculation model.
+Overall coverage is a global informational summary. It reflects the state of the entire repository as provided by the coverage report. It must remain decoupled from gate-specific scoping or partitioning; even when multiple scoped gates are configured, there is only one repository-wide "Overall Coverage" section.
 
 ### Path normalization is part of correctness
 

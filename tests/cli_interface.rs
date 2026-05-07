@@ -1,13 +1,13 @@
 mod support;
 
-use std::{fs, process::Output};
+use std::{fs, path::PathBuf, process::Output};
 
 use tempfile::tempdir;
 
 use crate::support::{
     copy_tree, init_git_repo, run_covgate, run_covgate_raw, run_covgate_with_coverage, run_git,
     rust_basic_fail_fixture, rust_basic_pass_fixture, setup_fixture_worktree,
-    write_absolute_path_coverage_fixture, write_worktree_diff,
+    vitest_path_scoped_gates_fixture, write_absolute_path_coverage_fixture, write_worktree_diff,
 };
 
 fn run_covgate_raw_with_path(worktree: &std::path::Path, path: &str, args: &[String]) -> Output {
@@ -17,6 +17,14 @@ fn run_covgate_raw_with_path(worktree: &std::path::Path, path: &str, args: &[Str
     command.current_dir(worktree);
     command.env("PATH", path);
     command.output().expect("covgate should run")
+}
+
+fn setup_path_scoped_fixture() -> (tempfile::TempDir, PathBuf, PathBuf) {
+    let fixture = vitest_path_scoped_gates_fixture();
+    let temp = tempdir().expect("tempdir should exist");
+    let worktree = setup_fixture_worktree(temp.path(), fixture);
+    let diff_file = write_worktree_diff(temp.path(), &worktree);
+    (temp, worktree, diff_file)
 }
 
 #[test]
@@ -591,6 +599,166 @@ fn markdown_summary_rust_fixture() {
 }
 
 #[test]
+fn path_scoped_gates_render_labeled_minimal_output() {
+    let fixture = vitest_path_scoped_gates_fixture();
+    let (_temp, worktree, diff_file) = setup_path_scoped_fixture();
+    fs::write(
+        worktree.join("covgate.toml"),
+        "[[gates]]\nname = \"js-logic\"\ninclude = [\"**/*.ts\"]\nexclude = [\"**/*.tsx\"]\nfail-under-lines = 30\nfail-under-branches = 20\nfail-under-functions = 40\n\n[[gates]]\nname = \"js-ui\"\ninclude = [\"**/*.tsx\"]\nfail-under-lines = 90\nfail-under-branches = 100\nfail-under-functions = 70\n",
+    )
+    .expect("config should be written");
+
+    let output = run_covgate(
+        &worktree,
+        fixture,
+        &[
+            "--diff-file".to_string(),
+            diff_file.to_string_lossy().into_owned(),
+        ],
+    );
+
+    assert_eq!(output.status.code(), Some(1));
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+    assert!(
+        stdout.contains("[js-logic] PASS  Lines:"),
+        "stdout={stdout}"
+    );
+    assert!(
+        stdout.contains("[js-logic] PASS  Branches:"),
+        "stdout={stdout}"
+    );
+    assert!(stdout.contains("[js-ui] FAIL  Lines:"), "stdout={stdout}");
+    assert!(
+        stdout.contains("[js-ui] FAIL  Functions:"),
+        "stdout={stdout}"
+    );
+}
+
+#[test]
+fn path_scoped_gates_markdown_adds_gate_column() {
+    let fixture = vitest_path_scoped_gates_fixture();
+    let (temp, worktree, diff_file) = setup_path_scoped_fixture();
+    let markdown_output = temp.path().join("summary.md");
+    fs::write(
+        worktree.join("covgate.toml"),
+        "[[gates]]\nname = \"js-ui\"\ninclude = [\"**/*.tsx\"]\nfail-under-lines = 70\n\n[[gates]]\nfail-under-lines = 40\n",
+    )
+    .expect("config should be written");
+
+    let output = run_covgate(
+        &worktree,
+        fixture,
+        &[
+            "--diff-file".to_string(),
+            diff_file.to_string_lossy().into_owned(),
+            "--markdown-output".to_string(),
+            markdown_output.to_string_lossy().into_owned(),
+        ],
+    );
+
+    assert_eq!(output.status.code(), Some(1));
+    let markdown = fs::read_to_string(markdown_output).expect("markdown should be readable");
+    assert!(markdown.contains("| Gate | Result | Rule | Observed | Configured |"));
+    assert!(markdown.contains("| `js-ui` | ✅PASS | `fail-under-lines` | 80.00% | ≥ 70.00% |"));
+    assert!(markdown.contains("| `default` | ❌FAIL | `fail-under-lines` | 33.33% | ≥ 40.00% |"));
+    assert!(markdown.contains(
+        "| Gate | File | Covered Changed Lines | Changed Lines | Coverage | Missed Changed Spans |"
+    ));
+    assert!(markdown.contains("| **default Total** |  | **2** | **6** | **33.33% 🔴** |  |"));
+}
+
+#[test]
+fn path_scoped_gates_cli_thresholds_override_only_the_fallback_gate() {
+    let fixture = vitest_path_scoped_gates_fixture();
+    let (_temp, worktree, diff_file) = setup_path_scoped_fixture();
+    fs::write(
+        worktree.join("covgate.toml"),
+        "[[gates]]\nname = \"js-ui\"\ninclude = [\"**/*.tsx\"]\nfail-under-lines = 70\n\n[[gates]]\nfail-under-lines = 10\n",
+    )
+    .expect("config should be written");
+
+    let output = run_covgate(
+        &worktree,
+        fixture,
+        &[
+            "--diff-file".to_string(),
+            diff_file.to_string_lossy().into_owned(),
+            "--fail-under-lines".to_string(),
+            "40".to_string(),
+        ],
+    );
+
+    assert_eq!(output.status.code(), Some(1));
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+    assert!(stdout.contains("[js-ui] PASS  Lines:"), "stdout={stdout}");
+    assert!(stdout.contains("≥ 70.00%"), "stdout={stdout}");
+    assert!(stdout.contains("[default] FAIL  Lines:"), "stdout={stdout}");
+    assert!(stdout.contains("≱ 40.00%"), "stdout={stdout}");
+}
+
+#[test]
+fn path_scoped_gates_reject_overlap_on_changed_files() {
+    let fixture = vitest_path_scoped_gates_fixture();
+    let (_temp, worktree, diff_file) = setup_path_scoped_fixture();
+    fs::write(
+        worktree.join("covgate.toml"),
+        "[[gates]]\nname = \"ts-all\"\ninclude = [\"**/*.ts\"]\nfail-under-lines = 10\n\n[[gates]]\nname = \"src-ts\"\ninclude = [\"src/**/*.ts\"]\nfail-under-lines = 10\n",
+    )
+    .expect("config should be written");
+
+    let output = run_covgate(
+        &worktree,
+        fixture,
+        &[
+            "--diff-file".to_string(),
+            diff_file.to_string_lossy().into_owned(),
+        ],
+    );
+
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
+    assert!(stderr.contains("src/math.ts"), "stderr={stderr}");
+    assert!(
+        stderr.contains("matches multiple scoped gates"),
+        "stderr={stderr}"
+    );
+    assert!(stderr.contains("ts-all"), "stderr={stderr}");
+    assert!(stderr.contains("src-ts"), "stderr={stderr}");
+}
+
+#[test]
+fn path_scoped_gates_require_a_fallback_for_unmatched_supported_files() {
+    let fixture = vitest_path_scoped_gates_fixture();
+    let (_temp, worktree, diff_file) = setup_path_scoped_fixture();
+    fs::write(
+        worktree.join("covgate.toml"),
+        "[[gates]]\nname = \"js-ui\"\ninclude = [\"**/*.tsx\"]\nfail-under-lines = 70\n",
+    )
+    .expect("config should be written");
+
+    let output = run_covgate(
+        &worktree,
+        fixture,
+        &[
+            "--diff-file".to_string(),
+            diff_file.to_string_lossy().into_owned(),
+        ],
+    );
+
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
+    assert!(stderr.contains("src/math.ts"), "stderr={stderr}");
+    assert!(
+        stderr.contains("does not match any scoped gate"),
+        "stderr={stderr}"
+    );
+    assert!(
+        stderr.contains("no fallback gate is configured"),
+        "stderr={stderr}"
+    );
+}
+
+#[test]
 fn absolute_llvm_paths_match_diff_fixture() {
     let fixture = rust_basic_pass_fixture();
     let temp = tempdir().expect("tempdir should exist");
@@ -672,7 +840,7 @@ fn uses_repo_config_defaults_for_base_and_threshold() {
     run_git(&worktree, &["commit", "-m", "feature change"]);
     fs::write(
         worktree.join("covgate.toml"),
-        "base = \"main\"\n[gates]\nfail-under-regions = 0.0\n",
+        "base = \"main\"\n[[gates]]\nfail-under-regions = 0.0\n",
     )
     .expect("config should be written");
     run_git(&worktree, &["add", "covgate.toml"]);
@@ -708,7 +876,7 @@ fn uses_repo_config_defaults_from_parent_directory() {
     run_git(&worktree, &["commit", "-m", "feature change"]);
     fs::write(
         worktree.join("covgate.toml"),
-        "base = \"main\"\n[gates]\nfail-under-regions = 0.0\n",
+        "base = \"main\"\n[[gates]]\nfail-under-regions = 0.0\n",
     )
     .expect("config should be written");
     run_git(&worktree, &["add", "covgate.toml"]);
@@ -742,7 +910,7 @@ fn mixed_cli_over_toml_precedence() {
     run_git(&worktree, &["commit", "-m", "feature change"]);
     fs::write(
         worktree.join("covgate.toml"),
-        "base = \"main\"\n[gates]\nfail-under-regions = 0.0\nfail-uncovered-regions = 10\n",
+        "base = \"main\"\n[[gates]]\nfail-under-regions = 0.0\nfail-uncovered-regions = 10\n",
     )
     .expect("config should be written");
     run_git(&worktree, &["add", "covgate.toml"]);
@@ -784,7 +952,7 @@ fn cli_threshold_overrides_repo_config_default() {
     run_git(&worktree, &["commit", "-m", "feature change"]);
     fs::write(
         worktree.join("covgate.toml"),
-        "base = \"main\"\n[gates]\nfail-under-regions = 0.0\n",
+        "base = \"main\"\n[[gates]]\nfail-under-regions = 0.0\n",
     )
     .expect("config should be written");
     run_git(&worktree, &["add", "covgate.toml"]);
@@ -897,4 +1065,66 @@ fn minimal_fail_output_is_focused() {
 
     // Should NOT contain the "Rule fail-under-regions: FAIL" line
     assert!(!stdout.contains("Rule fail-under-regions: FAIL"));
+}
+
+#[test]
+fn overall_coverage_remains_global_when_scoped_gates_are_configured() {
+    let fixture = vitest_path_scoped_gates_fixture();
+    let (temp, worktree, diff_file) = setup_path_scoped_fixture();
+    let markdown_output = temp.path().join("summary.md");
+
+    // Configure scoped gates that only cover a subset of files
+    fs::write(
+        worktree.join("covgate.toml"),
+        "[[gates]]\nname = \"js-ui\"\ninclude = [\"**/*.tsx\"]\nfail-under-lines = 70\n\n[[gates]]\nfail-under-lines = 10\n",
+    )
+    .expect("config should be written");
+
+    let output = run_covgate(
+        &worktree,
+        fixture,
+        &[
+            "--diff-file".to_string(),
+            diff_file.to_string_lossy().into_owned(),
+            "--markdown-output".to_string(),
+            markdown_output.to_string_lossy().into_owned(),
+        ],
+    );
+
+    if !markdown_output.exists() {
+        panic!(
+            "summary.md was not created. exit={:?}\nstdout:\n{}\nstderr:\n{}",
+            output.status.code(),
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    let markdown = fs::read_to_string(markdown_output).expect("markdown should be readable");
+
+    // The "Overall Coverage" section should still contain the global total for the entire fixture.
+    // It should NOT be partitioned by gate or narrowed to changed files only.
+    assert!(markdown.contains("### Overall Coverage"));
+
+    // In the broken implementation, the "Overall Coverage" section will have a "Gate" column
+    // and multiple "Total" rows (one per gate).
+    // The corrected implementation should have one global section.
+
+    // Assert that the global total (15 lines) is present in a standard table row.
+    // Broken implementation will have "| **js-ui Total** |" or "| **default Total** |" instead of "| **Total** |".
+    assert!(
+        markdown.contains("| **Total** | **9** | **15** | **6** | **60.00% 🟡** |"),
+        "Markdown 'Overall Coverage' should contain a single global 'Total' row, but was:\n{markdown}"
+    );
+
+    // Assert that gate labels are NOT present in the Overall Coverage section tables.
+    let overall_section = &markdown[markdown.find("### Overall Coverage").unwrap()..];
+    assert!(
+        !overall_section.contains("| Gate |"),
+        "Overall Coverage should not have a 'Gate' column"
+    );
+    assert!(
+        !overall_section.contains("js-ui"),
+        "Overall Coverage should not contain gate labels"
+    );
 }

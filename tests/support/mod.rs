@@ -128,6 +128,13 @@ pub fn vitest_tsx_line_summary_fixture() -> Fixture {
     }
 }
 
+pub fn vitest_path_scoped_gates_fixture() -> Fixture {
+    Fixture {
+        language: "vitest",
+        name: "path-scoped-gates",
+    }
+}
+
 pub fn fail_fixtures_with_regions() -> Vec<Fixture> {
     vec![
         rust_basic_fail_fixture(),

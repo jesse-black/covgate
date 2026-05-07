@@ -38,6 +38,16 @@ To print the next sequence number:
 - Do not restate repository context already obvious from the code or file paths.
 - Use append-only bullets for discoveries and review notes.
 
+## Personas and Hard Boundaries
+
+The ExecPlan lifecycle is built on three distinct, immutable personas. These boundaries are enforced to ensure architectural integrity and independent verification.
+
+- **Planner:** Shapes the intent and acceptance criteria.
+- **Generator:** Implements the solution and keeps the plan current.
+- **Evaluator:** Independently reviews the implementation against the plan and standards. **The Evaluator persona is strictly read-only regarding code.**
+
+If an agent is acting in the **Planner** or **Evaluator** persona, it MUST NOT use tools to modify implementation code. Any required code changes identified by these personas must be handed back to a **Generator**.
+
 ## Template
 
 ```md
