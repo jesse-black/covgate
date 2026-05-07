@@ -1,18 +1,27 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::str::FromStr;
 
 use anyhow::{Context, Result, bail};
+use semver::Version;
+use toml_edit::{DocumentMut, Item};
 
 fn main() -> Result<()> {
     let mut args = std::env::args().skip(1);
     let Some(task) = args.next() else {
         bail!(
-            "usage: cargo xtask <task>\n\n  validate\n  regen-fixture-coverage <language>/<scenario>\n  regen-fixture-coverage-all"
+            "usage: cargo xtask <task>\n\n  validate\n  release-version <semver>\n  regen-fixture-coverage <language>/<scenario>\n  regen-fixture-coverage-all"
         );
     };
 
     match task.as_str() {
         "validate" => validate(),
+        "release-version" => {
+            let Some(version) = args.next() else {
+                bail!("usage: cargo xtask release-version <semver>");
+            };
+            release_version(&version)
+        }
         "regen-fixture-coverage" => {
             let Some(fixture_id) = args.next() else {
                 bail!("usage: cargo xtask regen-fixture-coverage <language>/<scenario>");
@@ -21,6 +30,107 @@ fn main() -> Result<()> {
         }
         "regen-fixture-coverage-all" => regen_fixture_coverage_all(),
         _ => bail!("unknown xtask `{task}`"),
+    }
+}
+
+fn release_version(version: &str) -> Result<()> {
+    let parsed =
+        Version::parse(version).with_context(|| format!("invalid SemVer version `{version}`"))?;
+    let repo_root = project_root()?;
+    let manifest_path = repo_root.join("Cargo.toml");
+    let lockfile_path = repo_root.join("Cargo.lock");
+    let mut summary = update_root_package_version(&manifest_path, &parsed)?;
+
+    if !summary.manifest_changed {
+        eprintln!("release-version: no files changed");
+        return Ok(());
+    }
+
+    let lockfile_before = read_optional_file(&lockfile_path)?;
+    run_in_dir("cargo", &["generate-lockfile"], &repo_root)?;
+    let lockfile_after = read_optional_file(&lockfile_path)?;
+    summary.lockfile_changed = lockfile_before != lockfile_after;
+
+    let changed_files = summary.changed_files();
+    eprintln!("release-version: updated {}", changed_files.join(", "));
+    Ok(())
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct ReleaseVersionSummary {
+    manifest_changed: bool,
+    lockfile_changed: bool,
+}
+
+impl ReleaseVersionSummary {
+    fn changed_files(&self) -> Vec<&'static str> {
+        let mut changed = Vec::new();
+        if self.manifest_changed {
+            changed.push("Cargo.toml");
+        }
+        if self.lockfile_changed {
+            changed.push("Cargo.lock");
+        }
+        changed
+    }
+}
+
+fn update_root_package_version(
+    manifest_path: &Path,
+    version: &Version,
+) -> Result<ReleaseVersionSummary> {
+    let original = std::fs::read_to_string(manifest_path)
+        .with_context(|| format!("failed to read manifest: {}", manifest_path.display()))?;
+    let mut document = original
+        .parse::<DocumentMut>()
+        .with_context(|| format!("failed to parse manifest: {}", manifest_path.display()))?;
+
+    let package = document
+        .as_table_mut()
+        .get_mut("package")
+        .and_then(Item::as_table_mut)
+        .context("Cargo.toml has no [package].version")?;
+    let version_item = package
+        .get_mut("version")
+        .context("Cargo.toml has no [package].version")?;
+    let current = version_item
+        .as_str()
+        .context("Cargo.toml has non-string [package].version")?;
+
+    if current == version.to_string() {
+        return Ok(ReleaseVersionSummary {
+            manifest_changed: false,
+            lockfile_changed: false,
+        });
+    }
+
+    let decor = version_item
+        .as_value()
+        .context("Cargo.toml has non-string [package].version")?
+        .decor()
+        .clone();
+    let mut updated_value = toml_edit::Value::from_str(&format!("\"{version}\""))
+        .context("failed to encode SemVer version for Cargo.toml")?;
+    *updated_value.decor_mut() = decor;
+    *version_item = Item::Value(updated_value);
+
+    let updated = document.to_string();
+    if updated != original {
+        std::fs::write(manifest_path, updated)
+            .with_context(|| format!("failed to write manifest: {}", manifest_path.display()))?;
+    }
+
+    Ok(ReleaseVersionSummary {
+        manifest_changed: true,
+        lockfile_changed: false,
+    })
+}
+
+fn read_optional_file(path: &Path) -> Result<Option<Vec<u8>>> {
+    match std::fs::read(path) {
+        Ok(bytes) => Ok(Some(bytes)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error).with_context(|| format!("failed to read {}", path.display())),
     }
 }
 
@@ -939,4 +1049,97 @@ fn run_to_file(program: &str, args: &[&str], destination: &Path) -> Result<()> {
             destination.display()
         )
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const MANIFEST_WITH_COMMENTS: &str = r#"[package]
+# Keep this comment.
+name = "covgate"
+version = "0.1.4" # trailing comment
+edition = "2024"
+"#;
+
+    #[test]
+    fn update_root_package_version_rewrites_only_package_version() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let manifest_path = temp.path().join("Cargo.toml");
+        std::fs::write(&manifest_path, MANIFEST_WITH_COMMENTS).expect("write manifest");
+
+        let summary =
+            update_root_package_version(&manifest_path, &Version::parse("1.2.3").expect("semver"))
+                .expect("update manifest");
+
+        assert_eq!(
+            summary,
+            ReleaseVersionSummary {
+                manifest_changed: true,
+                lockfile_changed: false,
+            }
+        );
+
+        let updated = std::fs::read_to_string(&manifest_path).expect("read manifest");
+        assert!(updated.contains("version = \"1.2.3\" # trailing comment"));
+        assert!(updated.contains("# Keep this comment."));
+        assert!(updated.contains("name = \"covgate\""));
+        assert!(!updated.contains("version = \"0.1.4\""));
+    }
+
+    #[test]
+    fn update_root_package_version_is_noop_when_version_matches() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let manifest_path = temp.path().join("Cargo.toml");
+        std::fs::write(&manifest_path, MANIFEST_WITH_COMMENTS).expect("write manifest");
+
+        let before = std::fs::read_to_string(&manifest_path).expect("read manifest");
+        let summary =
+            update_root_package_version(&manifest_path, &Version::parse("0.1.4").expect("semver"))
+                .expect("update manifest");
+        let after = std::fs::read_to_string(&manifest_path).expect("read manifest");
+
+        assert_eq!(
+            summary,
+            ReleaseVersionSummary {
+                manifest_changed: false,
+                lockfile_changed: false,
+            }
+        );
+        assert_eq!(after, before);
+    }
+
+    #[test]
+    fn update_root_package_version_errors_when_package_version_is_missing() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let manifest_path = temp.path().join("Cargo.toml");
+        std::fs::write(
+            &manifest_path,
+            "[package]\nname = \"covgate\"\nedition = \"2024\"\n",
+        )
+        .expect("write manifest");
+
+        let error =
+            update_root_package_version(&manifest_path, &Version::parse("1.2.3").expect("semver"))
+                .expect_err("missing version should fail");
+
+        assert!(
+            error
+                .to_string()
+                .contains("Cargo.toml has no [package].version"),
+            "unexpected error: {error:#}"
+        );
+    }
+
+    #[test]
+    fn release_version_rejects_invalid_semver() {
+        let error = release_version("not-semver").expect_err("invalid semver should fail");
+
+        assert!(
+            error
+                .to_string()
+                .contains("invalid SemVer version `not-semver`"),
+            "unexpected error: {error:#}"
+        );
+    }
 }
