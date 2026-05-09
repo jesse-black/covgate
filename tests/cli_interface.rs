@@ -635,6 +635,34 @@ fn path_scoped_gates_render_labeled_minimal_output() {
 }
 
 #[test]
+fn path_scoped_gates_accept_single_string_include_and_exclude() {
+    let fixture = vitest_path_scoped_gates_fixture();
+    let (_temp, worktree, diff_file) = setup_path_scoped_fixture();
+    fs::write(
+        worktree.join("covgate.toml"),
+        "[[gates]]\nname = \"js-logic\"\ninclude = \"**/*.ts\"\nexclude = \"**/*.tsx\"\nfail-under-lines = 30\n\n[[gates]]\nname = \"js-ui\"\ninclude = \"**/*.tsx\"\nfail-under-lines = 70\n",
+    )
+    .expect("config should be written");
+
+    let output = run_covgate(
+        &worktree,
+        fixture,
+        &[
+            "--diff-file".to_string(),
+            diff_file.to_string_lossy().into_owned(),
+        ],
+    );
+
+    assert_eq!(output.status.code(), Some(0));
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+    assert!(
+        stdout.contains("[js-logic] PASS  Lines:"),
+        "stdout={stdout}"
+    );
+    assert!(stdout.contains("[js-ui] PASS  Lines:"), "stdout={stdout}");
+}
+
+#[test]
 fn path_scoped_gates_markdown_adds_gate_column() {
     let fixture = vitest_path_scoped_gates_fixture();
     let (temp, worktree, diff_file) = setup_path_scoped_fixture();

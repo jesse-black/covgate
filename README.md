@@ -78,15 +78,15 @@ Coverage gates should protect the code where coverage is a good signal. In a Rea
 # Stricter rules for logic
 [[gates]]
 name = "logic"
-include = ["src/**/*.ts"]
-exclude = ["src/generated/**"]
+include = "src/**/*.ts"
+exclude = "src/generated/**"
 fail-under-lines = 90
 fail-under-branches = 80
 
 # Relaxed gates for UI components
 [[gates]]
 name = "ui"
-include = ["src/**/*.tsx"]
+include = "src/**/*.tsx"
 fail-under-lines = 80
 fail-under-branches = 60
 

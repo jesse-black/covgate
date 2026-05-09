@@ -40,7 +40,7 @@ Each `[[gates]]` entry is one gate policy:
 - if it has `include`, it is a scoped gate
 - if it omits `include`, it is the fallback gate for unmatched changed files
 
-This makes the old global gate just another gate entry instead of a separate config concept.
+`include` and `exclude` accept either a single string (for one pattern) or a sequence of strings.
 
 Example:
 
@@ -59,7 +59,7 @@ fail-under-named-functions = 100
 [[gates]]
 name = "js-ui"
 include = ["**/*.jsx", "**/*.tsx"]
-exclude = ["**/*.stories.*"]
+exclude = "**/*.stories.*"
 fail-under-lines = 80
 fail-under-branches = 70
 fail-under-functions = 90
@@ -71,8 +71,8 @@ fail-under-lines = 90
 ### Config Rules
 
 - `name` is optional. If present, it must be unique.
-- `include` is optional. When present, it contains one or more gitignore-style patterns and makes the entry scoped.
-- `exclude` is optional and removes paths from the scope after `include` matching.
+- `include` is optional. When present, it contains one or more gitignore-style patterns and makes the entry scoped. It accepts a single string or a list of strings.
+- `exclude` is optional and removes paths from the scope after `include` matching. It accepts a single string or a list of strings.
 - `exclude` is invalid without `include`.
 - The coverage rule keys live directly on each `[[gates]]` entry.
 - At most one entry may omit `include`; that entry is the fallback gate.
