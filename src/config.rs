@@ -4,9 +4,9 @@ use std::{
     sync::Arc,
 };
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, anyhow, bail};
 use ignore::gitignore::{Gitignore, GitignoreBuilder};
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer, de::Error as _};
 
 use crate::{
     cli::Args,
@@ -47,40 +47,33 @@ impl ConfiguredGate {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 struct FileConfig {
     base: Option<String>,
     markdown_output: Option<PathBuf>,
     verbose: Option<bool>,
+    #[serde(default)]
     gates: Vec<GateEntryConfig>,
 }
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "kebab-case")]
-struct RawFileConfig {
-    base: Option<String>,
-    markdown_output: Option<PathBuf>,
-    verbose: Option<bool>,
-    #[serde(default)]
-    gates: Vec<RawGateEntryConfig>,
-}
-
-#[derive(Debug, Default)]
 struct GateEntryConfig {
     name: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_pattern_vec")]
     include: Vec<String>,
+    #[serde(default, deserialize_with = "deserialize_pattern_vec")]
     exclude: Vec<String>,
+    #[serde(flatten)]
     rules: GateRuleConfig,
 }
 
-#[derive(Debug, Default, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-struct RawGateEntryConfig {
-    name: Option<String>,
-    include: Option<toml::Value>,
-    exclude: Option<toml::Value>,
-    #[serde(flatten)]
-    rules: GateRuleConfig,
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum PatternList {
+    Single(String),
+    Multiple(Vec<String>),
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -171,48 +164,22 @@ fn parse_file_config(text: &str) -> Result<FileConfig> {
         bail!("legacy [gates] table is no longer supported; use [[gates]] entries instead");
     }
 
-    let raw_config =
-        toml::from_str::<RawFileConfig>(text).context("failed to parse covgate config text")?;
-    let config = normalize_file_config(raw_config)?;
+    let config = toml::from_str::<FileConfig>(text)
+        .map_err(|error| anyhow!("failed to parse covgate config text: {error}"))?;
     validate_file_config(&config)?;
     Ok(config)
 }
 
-fn normalize_file_config(raw: RawFileConfig) -> Result<FileConfig> {
-    let mut gates = Vec::new();
-    for raw_gate in raw.gates {
-        gates.push(GateEntryConfig {
-            name: raw_gate.name,
-            include: normalize_pattern_list(raw_gate.include, "include")?,
-            exclude: normalize_pattern_list(raw_gate.exclude, "exclude")?,
-            rules: raw_gate.rules,
-        });
-    }
-
-    Ok(FileConfig {
-        base: raw.base,
-        markdown_output: raw.markdown_output,
-        verbose: raw.verbose,
-        gates,
-    })
-}
-
-fn normalize_pattern_list(value: Option<toml::Value>, field: &str) -> Result<Vec<String>> {
-    match value {
-        None => Ok(Vec::new()),
-        Some(toml::Value::String(pattern)) => Ok(vec![pattern]),
-        Some(toml::Value::Array(values)) => {
-            let mut patterns = Vec::new();
-            for value in values {
-                if let toml::Value::String(pattern) = value {
-                    patterns.push(pattern);
-                } else {
-                    bail!("gate `{field}` must be a string or list of strings");
-                }
-            }
-            Ok(patterns)
-        }
-        Some(_) => bail!("gate `{field}` must be a string or list of strings"),
+#[inline(always)]
+fn deserialize_pattern_vec<'de, D>(deserializer: D) -> std::result::Result<Vec<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let patterns = PatternList::deserialize(deserializer)
+        .map_err(|_| D::Error::custom("expected string or list of strings"))?;
+    match patterns {
+        PatternList::Single(pattern) => Ok(vec![pattern]),
+        PatternList::Multiple(patterns) => Ok(patterns),
     }
 }
 
@@ -731,9 +698,11 @@ fn add_gitignore_files(dir: &Path, builder: &mut GitignoreBuilder) -> Result<()>
 mod tests {
     use std::{fs, path::PathBuf};
 
+    use serde::de::IntoDeserializer;
+
     use super::{
-        PathMatcher, config_candidate_paths, derive_scoped_gate_label, parse_file_config,
-        resolve_diff_source, resolve_gates,
+        PathMatcher, config_candidate_paths, derive_scoped_gate_label, deserialize_pattern_vec,
+        parse_file_config, resolve_diff_source, resolve_gates,
     };
     use crate::{
         cli::Args,
@@ -1259,8 +1228,8 @@ mod tests {
         )
         .expect("config should parse with single string include/exclude");
 
-        assert_eq!(config.gates[0].include, vec!["**/*.ts".to_string()]);
-        assert_eq!(config.gates[0].exclude, vec!["**/*.test.ts".to_string()]);
+        assert_eq!(config.gates[0].include, ["**/*.ts"]);
+        assert_eq!(config.gates[0].exclude, ["**/*.test.ts"]);
     }
 
     #[test]
@@ -1270,14 +1239,8 @@ mod tests {
         )
         .expect("config should parse with sequence include/exclude");
 
-        assert_eq!(
-            config.gates[0].include,
-            vec!["**/*.ts".to_string(), "**/*.js".to_string()]
-        );
-        assert_eq!(
-            config.gates[0].exclude,
-            vec!["**/*.test.ts".to_string(), "**/*.test.js".to_string()]
-        );
+        assert_eq!(config.gates[0].include, ["**/*.ts", "**/*.js"]);
+        assert_eq!(config.gates[0].exclude, ["**/*.test.ts", "**/*.test.js"]);
     }
 
     #[test]
@@ -1293,6 +1256,24 @@ mod tests {
             parse_file_config("[[gates]]\ninclude = [\"**/*.rs\", 42]\nfail-under-lines = 90\n")
                 .expect_err("config should fail with invalid include item type");
         assert!(error.to_string().contains("include"));
+    }
+
+    #[test]
+    fn deserialize_pattern_vec_accepts_string_and_list() {
+        let single =
+            deserialize_pattern_vec(toml::Value::String("**/*.rs".to_string()).into_deserializer())
+                .expect("single pattern should deserialize");
+        let multiple = deserialize_pattern_vec(
+            toml::Value::Array(vec![
+                toml::Value::String("src/**/*.rs".to_string()),
+                toml::Value::String("tests/**/*.rs".to_string()),
+            ])
+            .into_deserializer(),
+        )
+        .expect("pattern list should deserialize");
+
+        assert_eq!(single, ["**/*.rs"]);
+        assert_eq!(multiple, ["src/**/*.rs", "tests/**/*.rs"]);
     }
 
     #[test]

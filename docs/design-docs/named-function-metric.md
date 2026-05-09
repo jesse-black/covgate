@@ -4,7 +4,7 @@
 
 `covgate` currently exposes a `functions` metric that counts all function-level coverage opportunities regardless of whether they are named, anonymous, or compiler-generated. This means closures, lambdas, async state machines, and other synthetic callables inflate the function count and can cause gates to fail for coverage that is impractical to test directly.
 
-The goal is a `named-functions` metric that applies the same diff-gating semantics as `functions` but restricted to functions with genuine source-level names — excluding closures, anonymous function expressions, and compiler-generated synthetic methods.
+The goal is a `named-functions` metric that applies the same diff-gating semantics as `functions` but restricted to review-relevant source-level functions. The broader `functions` metric remains the place to enforce every function-like unit reported by a coverage backend. `named-functions` is intentionally more opinionated: it should exclude anonymous, synthetic, and generated-looking entries where possible, and it should avoid making users chase backend artifacts such as generic/template monomorphizations.
 
 ---
 
@@ -89,14 +89,41 @@ C# compiler-generated methods always include angle brackets (`<` and `>`) in the
 
 ---
 
+## Classification Hierarchy
+
+`named-functions` should classify function coverage records in this order:
+
+1. **Exclude synthetic, anonymous, and generated-looking entries.** Closure bodies, anonymous function expressions, async/coroutine state-machine entries, compiler-generated methods, and nameless records do not count as named functions. These entries remain part of the broader `functions` metric.
+2. **Collapse generic/template instantiations to their authored base function identity.** A generic or templated function may appear in coverage as multiple backend function records, one per concrete instantiation. For `named-functions`, those records should represent one authored function. The collapsed function is covered if any reported instantiation is covered, and uncovered only if all reported instantiations for that authored function are uncovered.
+3. **Count ordinary named source functions normally.** After synthetic/generated exclusions and generic/template collapsing, the remaining named records form the `named-functions` opportunities and totals.
+
+This hierarchy keeps `named-functions` focused on the code review question: "Did each meaningful function the author wrote get exercised?" Users who want raw backend function accounting can use `functions`.
+
+### Generic / Template Instantiations
+
+Generic and template instantiations are not synthetic in the same sense as closures or compiler-generated state machines: they often come from user-authored source functions. However, counting each concrete instantiation separately makes named-function gates depend on compiler and coverage-backend mechanics rather than on authored behavior units.
+
+For example, these LLVM-demangled records should collapse to one `my_crate::parse` named-function opportunity:
+
+```text
+my_crate::parse::<toml::de::Deserializer>
+my_crate::parse::<serde_json::de::Deserializer>
+```
+
+The collapsed opportunity is covered if either instantiation is covered. This enforces that at least one concrete variant of a user-authored generic function ran, without requiring every monomorphized variant to run. It also avoids treating framework or deserialization adapter callbacks as multiple independent named functions merely because they were instantiated through generic machinery.
+
+The collapse rule must not rely on framework-specific names such as `serde`, `toml`, or `clap`. It should be based on generic/template syntax in the normalized backend name, such as Rust/C++ demangled `<...>` instantiation suffixes, when the format exposes enough information to do so.
+
+Generic/template collapsing is a format-specific concern, not a universal parser requirement. It applies where a coverage backend can report multiple function records for one authored generic/template function. Today that means LLVM-backed parsers, especially Rust and future C/C++ support. Istanbul does not need this rule because TypeScript generics are erased before runtime and Istanbul reports instrumented source function locations. Coverlet does not currently need this rule because its method keys are already source-method oriented for this metric; compiler-generated C# artifacts remain handled by the `<...>` exclusion rule.
+
 ## Classification Rules Summary
 
-| Format       | Named                                         | Anonymous / Excluded                                                  |
-|--------------|-----------------------------------------------|-----------------------------------------------------------------------|
-| LLVM (Rust)  | Demangled name has no `{...}` path segment    | Any `{closure#N}`, `{async_fn#N}`, `{coroutine#N}`, etc. segment     |
-| LLVM (C/C++) | Same `{...}` rule via `cpp_demangle` output   | `{lambda()#N}::operator()` and similar                               |
-| Istanbul     | `name` non-empty, not `(anonymous_N)` / `<anonymous>` | Empty name, `(anonymous_N)`, `<anonymous>`                   |
-| Coverlet     | Method name segment has no `<` or `>`         | `<Add>b__0_0`, `<HandleAsync>d__0::MoveNext`, `<>c`, `<>c__DisplayClass` |
+| Format       | Named                                         | Anonymous / Excluded                                                  | Generic / template handling |
+|--------------|-----------------------------------------------|-----------------------------------------------------------------------|-----------------------------|
+| LLVM (Rust)  | Demangled non-generic base name has no `{...}` path segment | Any `{closure#N}`, `{async_fn#N}`, `{coroutine#N}`, etc. segment | Collapse `<...>` instantiations to the base function identity |
+| LLVM (C/C++) | Same `{...}` rule via `cpp_demangle` output   | `{lambda()#N}::operator()` and similar                               | Collapse template instantiations when available through demangling |
+| Istanbul     | `name` non-empty, not `(anonymous_N)` / `<anonymous>` | Empty name, `(anonymous_N)`, `<anonymous>`                   | Not applicable; TypeScript generics are erased and Istanbul reports source function locations |
+| Coverlet     | Method name segment has no `<` or `>`         | `<Add>b__0_0`, `<HandleAsync>d__0::MoveNext`, `<>c`, `<>c__DisplayClass` | Not currently applied; method keys are source-method oriented for this metric |
 
 ---
 
@@ -106,28 +133,8 @@ C# compiler-generated methods always include angle brackets (`<` and `>`) in the
 
 - **LLVM records with no name field:** No name means not classifiable as named, so excluded. This is not a special case — a function without a name is by definition not a named function.
 
+- **LLVM generic instantiations:** Generic/template instantiations should collapse to the authored base function identity rather than being excluded outright or counted once per instantiation. This preserves enforcement for user-authored generic functions while avoiding monomorphization-shaped gate failures.
+
 - **Coverlet static constructors:** `.cctor` and `.ctor` are plain identifiers (no `<>`), so they are classified as named. Initial behavior: include them.
 
 - **Metrics display:** `named-functions` appears in output only when a named-function gate is configured, matching the behavior of the existing function metric.
-
----
-
-## Implementation Plan
-
-1. **`src/model.rs`:** Add `MetricKind::NamedFunction`. Add `is_named_function: Option<bool>` to `CoverageOpportunity`. Update all `MetricKind` match arms throughout the codebase.
-
-2. **`src/coverage/llvm_json.rs`:** Add `is_named` classification using the demangled name. Emit `is_named_function` on function opportunities. Accumulate `named_function_totals_by_file` and insert under `MetricKind::NamedFunction`.
-
-3. **`src/coverage/istanbul_json.rs`:** Add `name: Option<String>` to `IstanbulFunctionMap`. Classify and emit `is_named_function`. Accumulate named function totals.
-
-4. **`src/coverage/coverlet_json.rs`:** Switch to `methods.iter()`. Classify method key. Emit `is_named_function`. Accumulate named function totals.
-
-5. **`src/metrics.rs`:** Add filter branch for `MetricKind::NamedFunction` in `compute_changed_metric`.
-
-6. **`src/cli.rs`:** Add `--fail-under-named-functions` and `--fail-uncovered-named-functions` arguments.
-
-7. **`src/config.rs`:** Map new TOML keys and CLI args to `GateRule::Percent` / `GateRule::UncoveredCount` with `MetricKind::NamedFunction`.
-
-8. **`src/gate.rs` / `src/render/`:** Update label and display for the new metric kind.
-
-9. **Tests:** Add unit tests for each parser's named-function classification. Add integration fixtures that include anonymous functions (closures, lambdas, compiler-generated methods) and verify they are excluded from the named-function count. Add gate integration tests for both new gate rules.

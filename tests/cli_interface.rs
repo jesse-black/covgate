@@ -640,7 +640,7 @@ fn path_scoped_gates_accept_single_string_include_and_exclude() {
     let (_temp, worktree, diff_file) = setup_path_scoped_fixture();
     fs::write(
         worktree.join("covgate.toml"),
-        "[[gates]]\nname = \"js-logic\"\ninclude = \"**/*.ts\"\nexclude = \"**/*.tsx\"\nfail-under-lines = 30\n\n[[gates]]\nname = \"js-ui\"\ninclude = \"**/*.tsx\"\nfail-under-lines = 70\n",
+        "[[gates]]\nname = \"js-logic\"\ninclude = \"**/*\"\nexclude = \"**/*.tsx\"\nfail-under-lines = 30\n\n[[gates]]\nname = \"js-ui\"\ninclude = \"**/*.tsx\"\nfail-under-lines = 70\n",
     )
     .expect("config should be written");
 
