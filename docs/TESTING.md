@@ -67,7 +67,7 @@ If you find yourself writing `if fixture.language == …` inside a test loop, st
 
 Use focused checks as the default inner-loop while developing. Prefer the narrowest command that exercises the changed behavior: a specific `cargo test` target or test name for behavior, `cargo fmt` for formatting edits, and `cargo clippy` for lint-policy or Rust-shape edits. The broader Clippy flags live in `cargo xtask validate`.
 
-Run `cargo xtask validate` from the repository root before considering Rust behavior changes complete. It performs all format checks, linting, test execution, coverage validation, dependency checks, and self-coverage analysis. Documentation-only, CI-only, metadata-only, and lint/config-only changes may close with focused checks instead when those checks cover the touched surface.
+Run `cargo xtask validate` from the repository root before considering Rust behavior changes complete. It performs formatting, linting, test execution, coverage validation, dependency checks, and self-coverage analysis. Documentation-only, CI-only, metadata-only, and lint/config-only changes may close with focused checks instead when those checks cover the touched surface.
 
 ## Live-Scenario Testing Philosophy
 

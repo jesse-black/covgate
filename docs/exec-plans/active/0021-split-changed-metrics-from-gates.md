@@ -207,3 +207,21 @@ renderer test files.
 - [x] Adheres to the principles of `docs/CODESTYLE.md`.
 - [x] Adheres to the principles of `docs/TESTING.md`.
 - [x] All review findings have been addressed.
+
+### Generator Response (Finding 11)
+- [x] Finding 11 addressed: collapsed three consecutive `match &outcome.rule` blocks in `render_rule_summary` into a single match returning `(rule_str, observed, counts)`.
+
+### Finding 11 — Low: `render_rule_summary` dispatches on `outcome.rule` three times in sequence
+
+`src/render/console.rs::render_rule_summary` (lines 67–109) contains three consecutive
+`match &outcome.rule` blocks that compute `rule_str`, `observed`, and `counts` independently.
+All three branches cover exactly the same two variants (`GateRule::Percent` and
+`GateRule::UncoveredCount`). CODESTYLE principle 2 ("One fact, one place") says the
+rule-type dispatch is one fact that should live in one place. Spreading it across three
+consecutive matches means any future rule variant requires three update sites instead of one.
+The function is also ~65 lines, exceeding the ~50-line guideline in CODESTYLE's orchestration
+rule.
+
+**Required action:** Collapse the three consecutive `match &outcome.rule` blocks into a single
+match that returns `(rule_str, observed, counts)` as a tuple. This eliminates the repeated
+dispatch and brings the function under the length guideline.

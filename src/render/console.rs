@@ -64,48 +64,32 @@ fn render_rule_summary(outcome: &RuleOutcome, scope_label: Option<&str>) -> Stri
     let status = if outcome.passed { "PASS" } else { "FAIL" };
     let metric_label = title_case(outcome.rule.metric().label());
 
-    let rule_str = match &outcome.rule {
+    let (rule_str, observed, counts) = match &outcome.rule {
         GateRule::Percent {
             metric: _,
             minimum_percent,
         } => {
             let comparator = if outcome.passed { "≥" } else { "≱" };
-            format!("  {} {:.2}%", comparator, minimum_percent)
+            (
+                format!("  {} {:.2}%", comparator, minimum_percent),
+                format_percent(outcome.observed_percent, outcome.observed_total_count),
+                format!(
+                    "({}/{})",
+                    outcome.observed_covered_count, outcome.observed_total_count
+                ),
+            )
         }
         GateRule::UncoveredCount {
             metric: _,
             maximum_count,
         } => {
             let comparator = if outcome.passed { "≤" } else { "≰" };
-            format!("  {} {}", comparator, maximum_count)
-        }
-    };
-
-    let observed = match &outcome.rule {
-        GateRule::Percent {
-            metric: _,
-            minimum_percent: _,
-        } => format_percent(outcome.observed_percent, outcome.observed_total_count),
-        GateRule::UncoveredCount {
-            metric: _,
-            maximum_count: _,
-        } => outcome.observed_uncovered_count.to_string(),
-    };
-
-    let counts = match &outcome.rule {
-        GateRule::Percent {
-            metric: _,
-            minimum_percent: _,
-        } => {
-            format!(
-                "({}/{})",
-                outcome.observed_covered_count, outcome.observed_total_count
+            (
+                format!("  {} {}", comparator, maximum_count),
+                outcome.observed_uncovered_count.to_string(),
+                String::new(),
             )
         }
-        GateRule::UncoveredCount {
-            metric: _,
-            maximum_count: _,
-        } => String::new(),
     };
 
     let summary = format!(

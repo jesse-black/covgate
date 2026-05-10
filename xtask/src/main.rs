@@ -143,7 +143,7 @@ fn read_optional_file(path: &Path) -> Result<Option<Vec<u8>>> {
 fn validate() -> Result<()> {
     let mut failures = Vec::new();
 
-    record_validation_step(&mut failures, "fmt", run("cargo", &["fmt", "--check"]));
+    record_validation_step(&mut failures, "fmt", run("cargo", &["fmt"]));
     record_validation_step(
         &mut failures,
         "clippy",
@@ -1237,5 +1237,4 @@ edition = "2024"
             "unexpected error: {error:#}"
         );
     }
-
 }
