@@ -29,11 +29,11 @@ Rule fail-under-lines: PASS (100.00% ≥ 90.00%)
 
 **Proposed (Minimal):**
 ```
-PASS  Lines:     100.00% (10/10)  ≥ 90.00%
-PASS  Branches:   85.00% (17/20)  ≥ 80.00%
-PASS  Functions:  0 uncovered     ≤ 0
+PASS Lines: 100.00% (10/10) ≥ 90.00%
+PASS Branches: 85.00% (17/20) ≥ 80.00%
+PASS Functions: 0 uncovered ≤ 0
 ```
-*Note: The per-file list (`file1.ts (100.00%)`) and the `Diff Coverage: PASS` header are intentionally dropped. When every file passes, listing them adds tokens without actionable information — agents only need to act on failures. PASS/FAIL leads each line so the verdict is visible without scanning across. The covered/total counts (e.g. `10/10`) come directly from `ComputedMetric.covered` / `.total`.*
+*Note: The per-file list (`file1.ts (100.00%)`) and the `Diff Coverage: PASS` header are intentionally dropped. When every file passes, listing them adds tokens without actionable information — agents only need to act on failures. PASS/FAIL leads each line so the verdict is visible without scanning across. Minimal console output is intentionally not table-aligned: fixed-width padding spends tokens, makes snapshots brittle, and encourages unlike rule families to share one visual column model. Percent rules render a percent plus covered/total counts. Uncovered-count rules render the observed uncovered count directly (for example, `0 uncovered`) and must not borrow the percent/count display from the corresponding changed metric.*
 
 ### 2. Focused Failure Output (FAIL)
 When the gate fails, `covgate` should only print details for files that have uncovered changes. Context about the diff range is kept but modernized.
@@ -47,9 +47,9 @@ web/src/features/chat/Chat.tsx (81.48% line, 84.48% branch)
   branches: 52:10-52:15, 88:4-92:10
   functions: 171:15-171:30, 180:5-180:45
 
-FAIL  Lines:     81.48% (164/201)  ≥ 90.00%
-FAIL  Branches:  75.58% (164/217)  ≥ 80.00%
-PASS  Functions: 0 uncovered       ≤ 0
+FAIL Lines: 81.48% (164/201) ≥ 90.00%
+FAIL Branches: 75.58% (164/217) ≥ 80.00%
+PASS Functions: 0 uncovered ≤ 0
 ```
 *Note: Rulers are replaced with single blank lines. The `Diff Coverage: FAIL` header is omitted (same reasoning as PASS). All configured metrics are shown — passing and failing — so agents see the complete picture in one scan. The diff description string comes from `DiffSource::describe()` in `src/diff.rs` and is passed through unchanged.*
 
@@ -71,12 +71,3 @@ To balance efficiency and debuggability, the following flag is proposed:
 - `--verbose`: Print the comprehensive output (current behavior), including 100% covered files and a full table of results.
 - Default behavior: Token-efficient output as described above.
 
-## Implementation Plan (Conceptual)
-1.  Update `src/model.rs`: Add `start_col: Option<u32>` and `end_col: Option<u32>` to `SourceSpan`. Update `display()` to include column numbers when present, and `overlaps_line_range()` if column-aware overlap checking is needed.
-2.  Update Parsers (`src/coverage/*.rs`): Extract column information from LLVM and Istanbul formats. Coverlet remains line-only; leave its `start_col`/`end_col` as `None`.
-3.  Update `src/render/console.rs`:
-    - Refactor `render` to group by file.
-    - Implement the "Minimal" vs "Focused" logic based on `result.passed`.
-    - Format spans with column numbers when available, falling back to line-only (including the existing `(count)` deduplication for column-less spans such as those from Coverlet).
-4.  Update CLI (`src/cli.rs`): Add the `--verbose` flag to control output verbosity.
-5.  Update tests: Add/update tests in `tests/` for the new console output format. Cover the PASS minimal format, FAIL focused format (including multi-metric FAIL), and the column-present vs. column-absent span formatting paths.
