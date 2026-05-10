@@ -357,9 +357,9 @@ fn real_fixture_config_second_range_gates_fail_and_pass_as_expected() {
 
     assert_eq!(output.status.code(), Some(1));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-    assert!(stdout.contains("FAIL  Lines:"), "stdout={stdout}");
-    assert!(stdout.contains("PASS  Regions:"), "stdout={stdout}");
-    assert!(stdout.contains("PASS  Functions:"), "stdout={stdout}");
+    assert!(stdout.contains("FAIL Lines:"), "stdout={stdout}");
+    assert!(stdout.contains("PASS Regions:"), "stdout={stdout}");
+    assert!(stdout.contains("PASS Functions:"), "stdout={stdout}");
 }
 
 #[test]
@@ -372,9 +372,9 @@ fn real_fixture_coverlet_json_range_gates_pass_as_expected() {
 
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-    assert!(stdout.contains("PASS  Lines:"), "stdout={stdout}");
-    assert!(stdout.contains("PASS  Regions:"), "stdout={stdout}");
-    assert!(stdout.contains("PASS  Functions:"), "stdout={stdout}");
+    assert!(stdout.contains("PASS Lines:"), "stdout={stdout}");
+    assert!(stdout.contains("PASS Regions:"), "stdout={stdout}");
+    assert!(stdout.contains("PASS Functions:"), "stdout={stdout}");
 }
 
 #[test]
@@ -387,9 +387,9 @@ fn real_fixture_render_markdown_range_uncovered_line_budget_fails_as_expected() 
 
     assert_eq!(output.status.code(), Some(1));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-    assert!(stdout.contains("FAIL  Lines:"), "stdout={stdout}");
-    assert!(stdout.contains("PASS  Regions:"), "stdout={stdout}");
-    assert!(stdout.contains("PASS  Functions:"), "stdout={stdout}");
+    assert!(stdout.contains("FAIL Lines:"), "stdout={stdout}");
+    assert!(stdout.contains("PASS Regions:"), "stdout={stdout}");
+    assert!(stdout.contains("PASS Functions:"), "stdout={stdout}");
 }
 
 #[test]

@@ -570,7 +570,7 @@ fn markdown_summary_rust_fixture() {
 
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-    assert!(stdout.contains("PASS  Regions:"));
+    assert!(stdout.contains("PASS Regions:"));
     assert!(markdown_output.exists(), "markdown file should be written");
 
     let markdown = fs::read_to_string(markdown_output).expect("markdown should be readable");
@@ -611,17 +611,14 @@ fn path_scoped_gates_render_labeled_minimal_output() {
 
     assert_eq!(output.status.code(), Some(1));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+    assert!(stdout.contains("[js-logic] PASS Lines:"), "stdout={stdout}");
     assert!(
-        stdout.contains("[js-logic] PASS  Lines:"),
+        stdout.contains("[js-logic] PASS Branches:"),
         "stdout={stdout}"
     );
+    assert!(stdout.contains("[js-ui] FAIL Lines:"), "stdout={stdout}");
     assert!(
-        stdout.contains("[js-logic] PASS  Branches:"),
-        "stdout={stdout}"
-    );
-    assert!(stdout.contains("[js-ui] FAIL  Lines:"), "stdout={stdout}");
-    assert!(
-        stdout.contains("[js-ui] FAIL  Functions:"),
+        stdout.contains("[js-ui] FAIL Functions:"),
         "stdout={stdout}"
     );
 }
@@ -647,11 +644,8 @@ fn path_scoped_gates_accept_single_string_include_and_exclude() {
 
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-    assert!(
-        stdout.contains("[js-logic] PASS  Lines:"),
-        "stdout={stdout}"
-    );
-    assert!(stdout.contains("[js-ui] PASS  Lines:"), "stdout={stdout}");
+    assert!(stdout.contains("[js-logic] PASS Lines:"), "stdout={stdout}");
+    assert!(stdout.contains("[js-ui] PASS Lines:"), "stdout={stdout}");
 }
 
 #[test]
@@ -815,7 +809,7 @@ fn absolute_llvm_paths_match_diff_fixture() {
 
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-    assert!(stdout.contains("PASS  Regions:"));
+    assert!(stdout.contains("PASS Regions:"));
     assert!(!stdout.contains("(0/"));
 }
 
@@ -848,7 +842,7 @@ fn pr_branch_against_main_fixture() {
 
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-    assert!(stdout.contains("PASS  Regions:"));
+    assert!(stdout.contains("PASS Regions:"));
     assert!(stdout.contains("100.00%"));
 }
 
@@ -880,7 +874,7 @@ fn uses_repo_config_defaults_for_base_and_threshold() {
 
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-    assert!(stdout.contains("PASS  Regions:"));
+    assert!(stdout.contains("PASS Regions:"));
 }
 
 #[test]
@@ -915,7 +909,7 @@ fn uses_repo_config_defaults_from_parent_directory() {
 
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-    assert!(stdout.contains("PASS  Regions:"));
+    assert!(stdout.contains("PASS Regions:"));
 }
 
 #[test]
@@ -970,7 +964,7 @@ fn minimal_pass_output_is_token_efficient() {
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
 
     // Should contain the summary line
-    assert!(stdout.contains("PASS  Regions:"));
+    assert!(stdout.contains("PASS Regions:"));
     assert!(stdout.contains("100.00%"));
     assert!(stdout.contains("(3/3)"));
     assert!(stdout.contains("≥ 90.00%"));
@@ -1001,7 +995,7 @@ fn minimal_fail_output_is_focused() {
     assert_eq!(output.status.code(), Some(1));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
     // Should contain the summary line with FAIL
-    assert!(stdout.contains("FAIL  Regions:"));
+    assert!(stdout.contains("FAIL Regions:"));
     assert!(stdout.contains("0.00%"));
     assert!(stdout.contains("(0/3)"));
     assert!(stdout.contains("≱ 100.00%"));
