@@ -1012,7 +1012,7 @@ fn run_llvm_cov(coverage_path: &Path) -> Result<()> {
         "--json",
         "--output-path",
         coverage_json_str,
-        "--fail-under-regions=88",
+        "--fail-under-regions=96",
     ]);
 
     run("cargo", &coverage_args)
