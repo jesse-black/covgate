@@ -39,6 +39,10 @@ description: "ExecPlan for separating gate policy evaluations from changed metri
 - Current worktree contains an earlier `participates`-based attempt that must be replaced rather than extended.
 - Focused tests passed for `render_markdown`, `render_console`, `cli_interface path_scoped_gates`, and `path_scoped_gates`; full validation remains.
 - `cargo xtask validate` passed after updating stale CLI output expectations.
+- Review follow-up keeps `GateEvaluation` policy-only and adds `GateMetricEvidence` on `CheckResult` so console rendering can use gate-scoped metric evidence without re-coupling policy outcomes and changed metric tables.
+- Shared renderer outcome helpers now live in `tests/helpers/mod.rs`; `uncovered_outcome` uses self-consistent percent counts.
+- Review follow-up validation passed: `cargo test --test render_console`, `cargo test --test render_markdown`, `cargo test --test gate`, `cargo test --test cli_interface path_scoped_gates`, `cargo test path_scoped_gates`, and `cargo xtask validate`.
+- Final validation required a small clippy cleanup in the already-modified `xtask/src/main.rs`; `cargo xtask validate` now passes.
 
 ## Review
 
@@ -109,6 +113,13 @@ The inconsistency is a trap for anyone later adding render coverage of these fie
 **Required action (addressable with Finding 3):** When extracting the shared helper, use
 `observed_covered_count: observed_uncovered_count, observed_total_count: observed_uncovered_count`
 (or zero them all and set `observed_percent: 0.0`) so the fields are self-consistent.
+
+### Generator Response
+- [x] Finding 1 addressed with `minimal_failures_only_show_files_from_failing_gate`; minimal console failures render from gate-scoped metrics.
+- [x] Finding 2 addressed with `verbose_file_details_stay_under_their_gate_labels`; verbose console file details render under each gate section for multi-gate results.
+- [x] Finding 3 addressed by extracting shared renderer outcome helpers to `tests/helpers/mod.rs`.
+- [x] Finding 4 addressed by removing the unused `covered` parameter from console `format_percent`.
+- [x] Finding 5 addressed by making the shared `uncovered_outcome` helper internally consistent.
 
 ## Definition of Done
 

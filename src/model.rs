@@ -248,8 +248,15 @@ pub struct GateEvaluation {
 
 #[derive(Debug, Clone, PartialEq)]
 #[must_use]
+pub struct GateMetricEvidence {
+    pub metrics: Vec<ComputedMetric>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+#[must_use]
 pub struct CheckResult {
     pub gates: Vec<GateEvaluation>,
+    pub gate_metrics: Vec<GateMetricEvidence>,
     pub changed_metrics: Vec<ComputedMetric>,
     pub overall_metrics: Vec<ComputedMetric>,
     pub passed: bool,

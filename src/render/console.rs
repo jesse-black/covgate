@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
 use crate::model::{
-    CheckResult, ComputedMetric, GateEvaluation, GateRule, MetricKind, RuleOutcome, SourceSpan,
-    Verbosity,
+    CheckResult, ComputedMetric, GateEvaluation, GateMetricEvidence, GateRule, MetricKind,
+    RuleOutcome, SourceSpan, Verbosity,
 };
 use crate::render::title_case;
 
@@ -24,7 +24,55 @@ fn render_verbose(result: &CheckResult, diff_description: &str) -> String {
     out.push_str(&format!("Diff: {diff_description}\n"));
     out.push_str("-------------\n");
 
-    for metric in &result.changed_metrics {
+    let multiple_gates = result.gates.len() > 1;
+    if multiple_gates && !result.gate_metrics.is_empty() {
+        for (index, gate) in result.gates.iter().enumerate() {
+            if let Some(label) = scope_label(gate, multiple_gates) {
+                out.push_str(&format!("Gate: {label}\n"));
+            }
+            let metrics = gate_metrics_for(result, index);
+            render_metric_file_details(&mut out, metrics);
+            render_changed_metric_totals(&mut out, metrics);
+            render_rule_outcomes(&mut out, gate);
+            out.push_str("-------------\n");
+        }
+    } else {
+        render_metric_file_details(&mut out, &result.changed_metrics);
+        out.push_str("-------------\n");
+        render_changed_metric_totals(&mut out, &result.changed_metrics);
+        for gate in &result.gates {
+            if let Some(label) = scope_label(gate, multiple_gates) {
+                out.push_str(&format!("Gate: {label}\n"));
+            }
+            render_rule_outcomes(&mut out, gate);
+            out.push_str("-------------\n");
+        }
+    }
+
+    if !result.overall_metrics.is_empty() {
+        out.push_str("Overall Coverage\n");
+        out.push_str("-------------\n");
+        for metric in &result.overall_metrics {
+            out.push_str(&format!(
+                "{:<15} {:>7.2}% ({}/{})\n",
+                format!("{}:", title_case(metric.metric.as_str())),
+                metric.percent,
+                metric.covered,
+                metric.total
+            ));
+        }
+        out.push_str("-------------\n");
+    }
+
+    if out.ends_with("-------------\n") {
+        out.truncate(out.len() - 1);
+    }
+
+    out
+}
+
+fn render_metric_file_details(out: &mut String, metrics: &[ComputedMetric]) {
+    for metric in metrics {
         let spans: Vec<&SourceSpan> = metric
             .uncovered_changed_opportunities
             .iter()
@@ -52,10 +100,10 @@ fn render_verbose(result: &CheckResult, diff_description: &str) -> String {
             }
         }
     }
+}
 
-    out.push_str("-------------\n");
-
-    for metric in &result.changed_metrics {
+fn render_changed_metric_totals(out: &mut String, metrics: &[ComputedMetric]) {
+    for metric in metrics {
         out.push_str(&format!(
             "Changed {}: {}\n",
             metric.metric.label(),
@@ -69,77 +117,45 @@ fn render_verbose(result: &CheckResult, diff_description: &str) -> String {
         out.push_str(&format!(
             "{} Coverage: {}\n",
             title_case(metric.metric.as_str()),
-            format_percent(metric.percent, metric.covered, metric.total)
+            format_percent(metric.percent, metric.total)
         ));
     }
+}
 
-    let multiple_gates = result.gates.len() > 1;
-    for gate in &result.gates {
-        if let Some(label) = scope_label(gate, multiple_gates) {
-            out.push_str(&format!("Gate: {label}\n"));
-        }
-
-        for outcome in &gate.rules {
-            let status = if outcome.passed { "PASS" } else { "FAIL" };
-            match &outcome.rule {
-                GateRule::Percent {
-                    metric: _,
-                    minimum_percent,
-                } => {
-                    let comparator = if outcome.passed { "≥" } else { "≱" };
-                    out.push_str(&format!(
-                        "Rule {}: {} ({} {} {:.2}%)\n",
-                        outcome.rule.label(),
-                        status,
-                        format_percent(
-                            outcome.observed_percent,
-                            outcome.observed_covered_count,
-                            outcome.observed_total_count
-                        ),
-                        comparator,
-                        minimum_percent
-                    ));
-                }
-                GateRule::UncoveredCount {
-                    metric: _,
-                    maximum_count,
-                } => {
-                    let comparator = if outcome.passed { "≤" } else { "≰" };
-                    out.push_str(&format!(
-                        "Rule {}: {} ({} {} {})\n",
-                        outcome.rule.label(),
-                        status,
-                        outcome.observed_uncovered_count,
-                        comparator,
-                        maximum_count
-                    ));
-                }
+fn render_rule_outcomes(out: &mut String, gate: &GateEvaluation) {
+    for outcome in &gate.rules {
+        let status = if outcome.passed { "PASS" } else { "FAIL" };
+        match &outcome.rule {
+            GateRule::Percent {
+                metric: _,
+                minimum_percent,
+            } => {
+                let comparator = if outcome.passed { "≥" } else { "≱" };
+                out.push_str(&format!(
+                    "Rule {}: {} ({} {} {:.2}%)\n",
+                    outcome.rule.label(),
+                    status,
+                    format_percent(outcome.observed_percent, outcome.observed_total_count),
+                    comparator,
+                    minimum_percent
+                ));
+            }
+            GateRule::UncoveredCount {
+                metric: _,
+                maximum_count,
+            } => {
+                let comparator = if outcome.passed { "≤" } else { "≰" };
+                out.push_str(&format!(
+                    "Rule {}: {} ({} {} {})\n",
+                    outcome.rule.label(),
+                    status,
+                    outcome.observed_uncovered_count,
+                    comparator,
+                    maximum_count
+                ));
             }
         }
-
-        out.push_str("-------------\n");
     }
-
-    if !result.overall_metrics.is_empty() {
-        out.push_str("Overall Coverage\n");
-        out.push_str("-------------\n");
-        for metric in &result.overall_metrics {
-            out.push_str(&format!(
-                "{:<15} {:>7.2}% ({}/{})\n",
-                format!("{}:", title_case(metric.metric.as_str())),
-                metric.percent,
-                metric.covered,
-                metric.total
-            ));
-        }
-        out.push_str("-------------\n");
-    }
-
-    if out.ends_with("-------------\n") {
-        out.truncate(out.len() - 1);
-    }
-
-    out
 }
 
 fn render_minimal(result: &CheckResult, diff_description: &str) -> String {
@@ -164,22 +180,34 @@ fn render_minimal(result: &CheckResult, diff_description: &str) -> String {
 
 fn render_failures(result: &CheckResult) -> String {
     let mut out = String::new();
-    let failed_metrics = result
-        .gates
-        .iter()
-        .flat_map(|gate| &gate.rules)
-        .filter_map(|outcome| (!outcome.passed).then_some(outcome.rule.metric()))
-        .collect::<Vec<_>>();
-    let files_with_uncovered = group_uncovered_by_file(&result.changed_metrics, &failed_metrics);
-    for (path, metrics) in files_with_uncovered {
-        out.push_str(&render_file_failure_header(
-            &path,
-            &result.changed_metrics,
-            &failed_metrics,
-        ));
+    if result.gate_metrics.is_empty() {
+        let failed_metrics = result
+            .gates
+            .iter()
+            .flat_map(|gate| &gate.rules)
+            .filter_map(|outcome| (!outcome.passed).then_some(outcome.rule.metric()))
+            .collect::<Vec<_>>();
+        render_failure_metrics(&mut out, &result.changed_metrics, &failed_metrics);
+    } else {
+        for (evidence, failed_metrics) in failed_gate_metrics(result) {
+            render_failure_metrics(&mut out, &evidence.metrics, &failed_metrics);
+        }
+    }
+
+    out
+}
+
+fn render_failure_metrics(
+    out: &mut String,
+    metrics: &[ComputedMetric],
+    failed_metrics: &[MetricKind],
+) {
+    let files_with_uncovered = group_uncovered_by_file(metrics, failed_metrics);
+    for (path, file_metrics) in files_with_uncovered {
+        out.push_str(&render_file_failure_header(&path, metrics, failed_metrics));
         out.push('\n');
 
-        for (metric_kind, spans) in metrics {
+        for (metric_kind, spans) in file_metrics {
             let grouped = group_file_spans(&spans);
             out.push_str(&format!(
                 "  {}: {}\n",
@@ -189,8 +217,31 @@ fn render_failures(result: &CheckResult) -> String {
         }
         out.push('\n');
     }
+}
 
-    out
+fn gate_metrics_for(result: &CheckResult, index: usize) -> &[ComputedMetric] {
+    result
+        .gate_metrics
+        .get(index)
+        .map(|evidence| evidence.metrics.as_slice())
+        .unwrap_or(&result.changed_metrics)
+}
+
+fn failed_gate_metrics<'a>(
+    result: &'a CheckResult,
+) -> impl Iterator<Item = (&'a GateMetricEvidence, Vec<MetricKind>)> + 'a {
+    result
+        .gate_metrics
+        .iter()
+        .zip(&result.gates)
+        .filter_map(|(evidence, gate)| {
+            let failed_metrics = gate
+                .rules
+                .iter()
+                .filter_map(|outcome| (!outcome.passed).then_some(outcome.rule.metric()))
+                .collect::<Vec<_>>();
+            (!failed_metrics.is_empty()).then_some((evidence, failed_metrics))
+        })
 }
 
 fn render_rule_summary(outcome: &RuleOutcome, scope_label: Option<&str>) -> String {
@@ -218,11 +269,7 @@ fn render_rule_summary(outcome: &RuleOutcome, scope_label: Option<&str>) -> Stri
         GateRule::Percent {
             metric: _,
             minimum_percent: _,
-        } => format_percent(
-            outcome.observed_percent,
-            outcome.observed_covered_count,
-            outcome.observed_total_count,
-        ),
+        } => format_percent(outcome.observed_percent, outcome.observed_total_count),
         GateRule::UncoveredCount {
             metric: _,
             maximum_count: _,
@@ -370,7 +417,7 @@ fn scope_label(gate: &GateEvaluation, multiple_scopes: bool) -> Option<&str> {
     None
 }
 
-fn format_percent(percent: f64, _covered: usize, total: usize) -> String {
+fn format_percent(percent: f64, total: usize) -> String {
     if total == 0 {
         "N/A".to_string()
     } else {

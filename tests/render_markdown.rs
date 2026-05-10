@@ -1,8 +1,11 @@
+mod helpers;
+
 use covgate::model::{
-    CheckResult, ComputedMetric, FileTotals, GateEvaluation, GateRule, MetricKind, OpportunityKind,
+    CheckResult, ComputedMetric, FileTotals, GateEvaluation, MetricKind, OpportunityKind,
     RuleOutcome, SourceSpan,
 };
 use covgate::render::markdown::render;
+use helpers::{percent_outcome, uncovered_outcome};
 use std::{collections::BTreeMap, path::PathBuf};
 
 fn single_scope_result(
@@ -15,6 +18,9 @@ fn single_scope_result(
             label: None,
             rules,
             passed,
+        }],
+        gate_metrics: vec![covgate::model::GateMetricEvidence {
+            metrics: metrics.clone(),
         }],
         changed_metrics: metrics.clone(),
         overall_metrics: metrics,
@@ -30,49 +36,10 @@ fn multi_scope_result(
     let passed = gates.iter().all(|gate| gate.passed);
     CheckResult {
         gates,
+        gate_metrics: Vec::new(),
         changed_metrics,
         overall_metrics,
         passed,
-    }
-}
-
-fn percent_outcome(
-    metric: MetricKind,
-    minimum_percent: f64,
-    passed: bool,
-    observed_percent: f64,
-    covered: usize,
-    total: usize,
-) -> RuleOutcome {
-    RuleOutcome {
-        rule: GateRule::Percent {
-            metric,
-            minimum_percent,
-        },
-        passed,
-        observed_percent,
-        observed_covered_count: covered,
-        observed_total_count: total,
-        observed_uncovered_count: total.saturating_sub(covered),
-    }
-}
-
-fn uncovered_outcome(
-    metric: MetricKind,
-    maximum_count: usize,
-    passed: bool,
-    observed_uncovered_count: usize,
-) -> RuleOutcome {
-    RuleOutcome {
-        rule: GateRule::UncoveredCount {
-            metric,
-            maximum_count,
-        },
-        passed,
-        observed_percent: 100.0,
-        observed_covered_count: 0,
-        observed_total_count: 0,
-        observed_uncovered_count,
     }
 }
 
