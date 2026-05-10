@@ -23,7 +23,6 @@ pub struct Config {
     pub diff_source: DiffSource,
     pub gates: Vec<ConfiguredGate>,
     pub markdown_output: Option<PathBuf>,
-    pub verbose: bool,
 }
 
 #[derive(Debug)]
@@ -52,7 +51,6 @@ impl ConfiguredGate {
 struct FileConfig {
     base: Option<String>,
     markdown_output: Option<PathBuf>,
-    verbose: Option<bool>,
     #[serde(default)]
     gates: Vec<GateEntryConfig>,
 }
@@ -98,7 +96,6 @@ impl TryFrom<Args> for Config {
         let Args {
             coverage_report,
             markdown_output,
-            verbose,
             base: _,
             diff_file: _,
             fail_under_regions: _,
@@ -125,18 +122,12 @@ impl TryFrom<Args> for Config {
                 .as_ref()
                 .and_then(|config| config.markdown_output.clone())
         });
-        let verbose = *verbose
-            || file_config
-                .as_ref()
-                .and_then(|config| config.verbose)
-                .unwrap_or(false);
 
         Ok(Self {
             coverage_report: coverage_report.clone(),
             diff_source,
             gates,
             markdown_output,
-            verbose,
         })
     }
 }
@@ -343,7 +334,6 @@ fn resolve_gate_rules(
         base: _,
         diff_file: _,
         markdown_output: _,
-        verbose: _,
     } = args;
 
     let mut configured = Vec::new();
@@ -732,7 +722,6 @@ mod tests {
                 fail_uncovered_functions: None,
                 fail_uncovered_named_functions: None,
                 markdown_output: None,
-                verbose: false,
             },
             None,
             std::path::Path::new("."),
@@ -773,7 +762,6 @@ mod tests {
             fail_uncovered_functions: None,
             fail_uncovered_named_functions: None,
             markdown_output: None,
-            verbose: false,
         };
 
         let diff_source =
@@ -820,7 +808,6 @@ mod tests {
             fail_uncovered_functions: None,
             fail_uncovered_named_functions: None,
             markdown_output: None,
-            verbose: false,
         };
 
         let diff_source =
@@ -867,7 +854,6 @@ mod tests {
             fail_uncovered_functions: None,
             fail_uncovered_named_functions: None,
             markdown_output: None,
-            verbose: false,
         };
 
         let rules = gate_rules(
@@ -908,7 +894,6 @@ mod tests {
             fail_uncovered_functions: Some(2),
             fail_uncovered_named_functions: None,
             markdown_output: None,
-            verbose: false,
         };
 
         let rules = gate_rules(
@@ -956,7 +941,6 @@ mod tests {
             fail_uncovered_functions: None,
             fail_uncovered_named_functions: None,
             markdown_output: None,
-            verbose: false,
         };
 
         let gates = resolve_gates(&args, Some(&file_config), std::path::Path::new("."))
@@ -1006,7 +990,6 @@ mod tests {
             fail_uncovered_functions: None,
             fail_uncovered_named_functions: None,
             markdown_output: None,
-            verbose: false,
         };
 
         let gates = resolve_gates(&args, Some(&file_config), std::path::Path::new("."))
@@ -1058,7 +1041,6 @@ mod tests {
                 fail_uncovered_functions: None,
                 fail_uncovered_named_functions: None,
                 markdown_output: None,
-                verbose: false,
             },
             Some(&file_config),
             std::path::Path::new("."),
@@ -1134,13 +1116,12 @@ mod tests {
     #[test]
     fn parses_file_config_from_toml_text() {
         let config = parse_file_config(
-            "base = \"main\"\nmarkdown-output = \"summary.md\"\nverbose = true\n[[gates]]\nfail-under-regions = 80\n",
+            "base = \"main\"\nmarkdown-output = \"summary.md\"\n[[gates]]\nfail-under-regions = 80\n",
         )
         .expect("config should parse");
 
         assert_eq!(config.base.as_deref(), Some("main"));
         assert_eq!(config.markdown_output, Some(PathBuf::from("summary.md")));
-        assert_eq!(config.verbose, Some(true));
         assert_eq!(config.gates.len(), 1);
         assert_eq!(config.gates[0].rules.fail_under_regions, Some(80.0));
     }
@@ -1176,7 +1157,6 @@ mod tests {
                     fail_uncovered_functions: None,
                     fail_uncovered_named_functions: None,
                     markdown_output: None,
-                    verbose: false,
                 },
                 Some(&config),
                 std::path::Path::new("."),

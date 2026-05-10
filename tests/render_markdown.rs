@@ -2,31 +2,11 @@ mod helpers;
 
 use covgate::model::{
     CheckResult, ComputedMetric, FileTotals, GateEvaluation, MetricKind, OpportunityKind,
-    RuleOutcome, SourceSpan,
+    SourceSpan,
 };
 use covgate::render::markdown::render;
-use helpers::{percent_outcome, uncovered_outcome};
+use helpers::{percent_outcome, single_scope_result, uncovered_outcome};
 use std::{collections::BTreeMap, path::PathBuf};
-
-fn single_scope_result(
-    metrics: Vec<ComputedMetric>,
-    rules: Vec<RuleOutcome>,
-    passed: bool,
-) -> CheckResult {
-    CheckResult {
-        gates: vec![GateEvaluation {
-            label: None,
-            rules,
-            passed,
-        }],
-        gate_metrics: vec![covgate::model::GateMetricEvidence {
-            metrics: metrics.clone(),
-        }],
-        changed_metrics: metrics.clone(),
-        overall_metrics: metrics,
-        passed,
-    }
-}
 
 fn multi_scope_result(
     gates: Vec<GateEvaluation>,
@@ -36,7 +16,6 @@ fn multi_scope_result(
     let passed = gates.iter().all(|gate| gate.passed);
     CheckResult {
         gates,
-        gate_metrics: Vec::new(),
         changed_metrics,
         overall_metrics,
         passed,

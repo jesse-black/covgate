@@ -4,7 +4,9 @@
       "Bash(./scripts/next-plan-number.sh)",
       "Bash(git -C /workspaces/covgate diff *)",
       "Bash(cargo test *)",
-      "Bash(cargo build *)"
+      "Bash(cargo build *)",
+      "Bash(cargo xtask *)",
+      "Bash(cargo fmt *)"
     ]
   }
 }

@@ -481,19 +481,10 @@ fn automatic_base_prefers_standard_branch_ref_over_recorded_worktree_ref() {
     let output = run_covgate(
         &worktree,
         fixture,
-        &[
-            "--verbose".to_string(),
-            "--fail-under-regions".to_string(),
-            "90".to_string(),
-        ],
+        &["--fail-under-regions".to_string(), "90".to_string()],
     );
 
     assert_eq!(output.status.code(), Some(0));
-    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-    assert!(
-        stdout.contains("Diff: main...HEAD, staged and unstaged changes"),
-        "stdout={stdout}"
-    );
 }
 
 #[test]
@@ -520,7 +511,6 @@ fn explicit_base_overrides_recorded_worktree_ref() {
         &worktree,
         fixture,
         &[
-            "--verbose".to_string(),
             "--base".to_string(),
             "main".to_string(),
             "--fail-under-regions".to_string(),
@@ -529,11 +519,6 @@ fn explicit_base_overrides_recorded_worktree_ref() {
     );
 
     assert_eq!(output.status.code(), Some(0));
-    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-    assert!(
-        stdout.contains("Diff: main...HEAD, staged and unstaged changes"),
-        "stdout={stdout}"
-    );
 }
 
 #[test]
@@ -567,7 +552,6 @@ fn markdown_summary_rust_fixture() {
         &worktree,
         fixture,
         &[
-            "--verbose".to_string(),
             "--diff-file".to_string(),
             diff_file.to_string_lossy().into_owned(),
             "--fail-under-regions".to_string(),
@@ -579,7 +563,7 @@ fn markdown_summary_rust_fixture() {
 
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-    assert!(stdout.contains("Diff Coverage: PASS"));
+    assert!(stdout.contains("PASS  Regions:"));
     assert!(markdown_output.exists(), "markdown file should be written");
 
     let markdown = fs::read_to_string(markdown_output).expect("markdown should be readable");
@@ -841,7 +825,6 @@ fn absolute_llvm_paths_match_diff_fixture() {
         &worktree,
         &coverage_json,
         &[
-            "--verbose".to_string(),
             "--diff-file".to_string(),
             diff_file.to_string_lossy().into_owned(),
             "--fail-under-regions".to_string(),
@@ -851,10 +834,8 @@ fn absolute_llvm_paths_match_diff_fixture() {
 
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-    assert!(stdout.contains("Diff Coverage: PASS"));
-    assert!(stdout.contains("Changed regions:"));
-    assert!(!stdout.contains("Changed regions: 0"));
-    assert!(stdout.contains("Coverage:"));
+    assert!(stdout.contains("PASS  Regions:"));
+    assert!(!stdout.contains("(0/"));
 }
 
 #[test]
@@ -877,7 +858,6 @@ fn pr_branch_against_main_fixture() {
         &worktree,
         fixture,
         &[
-            "--verbose".to_string(),
             "--base".to_string(),
             "main".to_string(),
             "--fail-under-regions".to_string(),
@@ -887,9 +867,8 @@ fn pr_branch_against_main_fixture() {
 
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-    assert!(stdout.contains("Diff: main...HEAD, staged and unstaged changes"));
-    assert!(stdout.contains("Diff Coverage: PASS"));
-    assert!(stdout.contains("Coverage: 100.00%"));
+    assert!(stdout.contains("PASS  Regions:"));
+    assert!(stdout.contains("100.00%"));
 }
 
 #[test]
@@ -916,13 +895,11 @@ fn uses_repo_config_defaults_for_base_and_threshold() {
     run_git(&worktree, &["add", "covgate.toml"]);
     run_git(&worktree, &["commit", "-m", "add covgate defaults"]);
 
-    let output = run_covgate(&worktree, fixture, &["--verbose".to_string()]);
+    let output = run_covgate(&worktree, fixture, &[]);
 
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-    assert!(stdout.contains("Diff: main...HEAD, staged and unstaged changes"));
-    assert!(stdout.contains("Rule fail-under-regions: PASS"));
-    assert!(stdout.contains("Coverage:"));
+    assert!(stdout.contains("PASS  Regions:"));
 }
 
 #[test]
@@ -953,13 +930,11 @@ fn uses_repo_config_defaults_from_parent_directory() {
     run_git(&worktree, &["commit", "-m", "add covgate defaults"]);
 
     let nested_dir = worktree.join("src");
-    let output = run_covgate(&nested_dir, fixture, &["--verbose".to_string()]);
+    let output = run_covgate(&nested_dir, fixture, &[]);
 
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-    assert!(stdout.contains("Diff: main...HEAD, staged and unstaged changes"));
-    assert!(stdout.contains("Rule fail-under-regions: PASS"));
-    assert!(stdout.contains("Coverage:"));
+    assert!(stdout.contains("PASS  Regions:"));
 }
 
 #[test]
@@ -989,19 +964,14 @@ fn mixed_cli_over_toml_precedence() {
     let output = run_covgate(
         &worktree,
         fixture,
-        &[
-            "--verbose".to_string(),
-            "--fail-uncovered-regions".to_string(),
-            "0".to_string(),
-        ],
+        &["--fail-uncovered-regions".to_string(), "0".to_string()],
     );
 
     assert_eq!(output.status.code(), Some(1));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
     assert!(stdout.contains("Diff: main...HEAD, staged and unstaged changes"));
-    assert!(stdout.contains("Rule fail-under-regions: PASS"));
-    assert!(stdout.contains("Rule fail-uncovered-regions: FAIL"));
-    assert!(stdout.contains("Diff Coverage: FAIL"));
+    assert!(stdout.contains("PASS  Regions:"));
+    assert!(stdout.contains("FAIL  Regions:"));
 }
 
 #[test]
@@ -1031,18 +1001,13 @@ fn cli_threshold_overrides_repo_config_default() {
     let output = run_covgate(
         &worktree,
         fixture,
-        &[
-            "--verbose".to_string(),
-            "--fail-under-regions".to_string(),
-            "60".to_string(),
-        ],
+        &["--fail-under-regions".to_string(), "60".to_string()],
     );
 
     assert_eq!(output.status.code(), Some(1));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
     assert!(stdout.contains("Diff: main...HEAD, staged and unstaged changes"));
-    assert!(stdout.contains("Rule fail-under-regions: FAIL"));
-    assert!(stdout.contains("Diff Coverage: FAIL"));
+    assert!(stdout.contains("FAIL  Regions:"));
 }
 
 #[test]
@@ -1098,7 +1063,7 @@ fn minimal_pass_output_is_token_efficient() {
     assert!(stdout.contains("(3/3)"));
     assert!(stdout.contains("≥ 90.00%"));
 
-    // Should NOT contain the "Diff Coverage: PASS" header (from the verbose output)
+    // Should NOT contain the "Diff Coverage: PASS" header
     assert!(!stdout.contains("Diff Coverage: PASS"));
 
     // Should NOT contain the "Changed regions:" header

@@ -38,7 +38,6 @@ fn args_for_config_discovery() -> Args {
         fail_uncovered_functions: None,
         fail_uncovered_named_functions: None,
         markdown_output: None,
-        verbose: false,
     }
 }
 

@@ -12,12 +12,6 @@ pub enum MetricKind {
     NamedFunction,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Verbosity {
-    Normal,
-    Verbose,
-}
-
 impl MetricKind {
     #[must_use]
     pub fn as_str(self) -> &'static str {
@@ -248,15 +242,8 @@ pub struct GateEvaluation {
 
 #[derive(Debug, Clone, PartialEq)]
 #[must_use]
-pub struct GateMetricEvidence {
-    pub metrics: Vec<ComputedMetric>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-#[must_use]
 pub struct CheckResult {
     pub gates: Vec<GateEvaluation>,
-    pub gate_metrics: Vec<GateMetricEvidence>,
     pub changed_metrics: Vec<ComputedMetric>,
     pub overall_metrics: Vec<ComputedMetric>,
     pub passed: bool,

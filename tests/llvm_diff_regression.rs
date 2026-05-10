@@ -128,7 +128,6 @@ fn run_real_fixture_gate(diff_text: &str, args: &[&str]) -> std::process::Output
     let mut covgate_args = vec![
         "check".to_string(),
         coverage_json.to_string_lossy().into_owned(),
-        "--verbose".to_string(),
         "--diff-file".to_string(),
         diff_file.to_string_lossy().into_owned(),
     ];
@@ -359,18 +358,9 @@ fn real_fixture_config_second_range_cli_gates_fail_and_pass_as_expected() {
 
     assert_eq!(output.status.code(), Some(1));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-    assert!(
-        stdout.contains("Rule fail-under-lines: FAIL"),
-        "stdout={stdout}"
-    );
-    assert!(
-        stdout.contains("Rule fail-under-regions: PASS"),
-        "stdout={stdout}"
-    );
-    assert!(
-        stdout.contains("Rule fail-uncovered-functions: PASS"),
-        "stdout={stdout}"
-    );
+    assert!(stdout.contains("FAIL  Lines:"), "stdout={stdout}");
+    assert!(stdout.contains("PASS  Regions:"), "stdout={stdout}");
+    assert!(stdout.contains("PASS  Functions:"), "stdout={stdout}");
 }
 
 #[test]
@@ -390,18 +380,9 @@ fn real_fixture_coverlet_json_range_cli_gates_pass_as_expected() {
 
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-    assert!(
-        stdout.contains("Rule fail-under-lines: PASS"),
-        "stdout={stdout}"
-    );
-    assert!(
-        stdout.contains("Rule fail-uncovered-regions: PASS"),
-        "stdout={stdout}"
-    );
-    assert!(
-        stdout.contains("Rule fail-under-functions: PASS"),
-        "stdout={stdout}"
-    );
+    assert!(stdout.contains("PASS  Lines:"), "stdout={stdout}");
+    assert!(stdout.contains("PASS  Regions:"), "stdout={stdout}");
+    assert!(stdout.contains("PASS  Functions:"), "stdout={stdout}");
 }
 
 #[test]
@@ -421,18 +402,9 @@ fn real_fixture_render_markdown_range_cli_uncovered_line_budget_fails_as_expecte
 
     assert_eq!(output.status.code(), Some(1));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-    assert!(
-        stdout.contains("Rule fail-uncovered-lines: FAIL"),
-        "stdout={stdout}"
-    );
-    assert!(
-        stdout.contains("Rule fail-under-regions: PASS"),
-        "stdout={stdout}"
-    );
-    assert!(
-        stdout.contains("Rule fail-under-functions: PASS"),
-        "stdout={stdout}"
-    );
+    assert!(stdout.contains("FAIL  Lines:"), "stdout={stdout}");
+    assert!(stdout.contains("PASS  Regions:"), "stdout={stdout}");
+    assert!(stdout.contains("PASS  Functions:"), "stdout={stdout}");
 }
 
 #[test]

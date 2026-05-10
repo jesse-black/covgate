@@ -67,7 +67,7 @@ Each adapter translates native report data into a shared `CoverageReport`. That 
 - `CoverageOpportunity`
 - `CoverageReport`
 - `ComputedMetric`
-- `GateResult`
+- `CheckResult`
 
 If you are trying to understand what `covgate` fundamentally "means" by line, region, branch, or function coverage in a diff gate, this file defines the vocabulary.
 
@@ -141,7 +141,7 @@ The overlap check in `SourceSpan::overlaps_line_range` is simple, but it is the 
 
 ### Calculation -> presentation
 
-`ComputedMetric` and `GateResult` are the boundary objects between "what the tool believes" and "how the tool explains it." This is why summary rows and gate messages should stay downstream of the calculation model.
+`ComputedMetric` and `CheckResult` are the boundary objects between "what the tool believes" and "how the tool explains it." This is why summary rows and gate messages should stay downstream of the calculation model.
 
 ## Cross-Cutting Concerns
 

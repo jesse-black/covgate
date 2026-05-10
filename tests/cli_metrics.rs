@@ -21,7 +21,6 @@ fn region_threshold_fails_when_below_threshold() {
             &worktree,
             fixture,
             &[
-                "--verbose".to_string(),
                 "--diff-file".to_string(),
                 diff_file.to_string_lossy().into_owned(),
                 "--fail-under-regions".to_string(),
@@ -37,15 +36,9 @@ fn region_threshold_fails_when_below_threshold() {
         );
         let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
         assert!(
-            stdout.contains("Diff Coverage: FAIL"),
+            stdout.contains("FAIL  Regions:"),
             "fixture={}",
             fixture.id()
-        );
-        assert!(
-            stdout.contains("Rule fail-under-regions: FAIL"),
-            "fixture={} stdout={}",
-            fixture.id(),
-            stdout
         );
     }
 }
@@ -61,7 +54,6 @@ fn uncovered_regions_budget_passes_when_met() {
             &worktree,
             fixture,
             &[
-                "--verbose".to_string(),
                 "--diff-file".to_string(),
                 diff_file.to_string_lossy().into_owned(),
                 "--fail-uncovered-regions".to_string(),
@@ -76,7 +68,7 @@ fn uncovered_regions_budget_passes_when_met() {
             fixture.id()
         );
         let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-        assert!(stdout.contains("Rule fail-uncovered-regions: PASS"));
+        assert!(stdout.contains("PASS  Regions:"));
     }
 }
 
@@ -91,7 +83,6 @@ fn uncovered_regions_budget_fails_when_exceeded() {
             &worktree,
             fixture,
             &[
-                "--verbose".to_string(),
                 "--diff-file".to_string(),
                 diff_file.to_string_lossy().into_owned(),
                 "--fail-uncovered-regions".to_string(),
@@ -106,7 +97,7 @@ fn uncovered_regions_budget_fails_when_exceeded() {
             fixture.id()
         );
         let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-        assert!(stdout.contains("Rule fail-uncovered-regions: FAIL"));
+        assert!(stdout.contains("FAIL  Regions:"));
     }
 }
 
@@ -121,7 +112,6 @@ fn line_threshold_fails_when_below_threshold() {
             &worktree,
             fixture,
             &[
-                "--verbose".to_string(),
                 "--diff-file".to_string(),
                 diff_file.to_string_lossy().into_owned(),
                 "--fail-under-lines".to_string(),
@@ -131,8 +121,7 @@ fn line_threshold_fails_when_below_threshold() {
 
         assert_eq!(output.status.code(), Some(1), "fixture={}", fixture.id());
         let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-        assert!(stdout.contains("Rule fail-under-lines: FAIL"));
-        assert!(stdout.contains("Line Coverage:"));
+        assert!(stdout.contains("FAIL  Lines:"));
     }
 }
 
@@ -147,7 +136,6 @@ fn uncovered_line_budget_fails_when_exceeded() {
             &worktree,
             fixture,
             &[
-                "--verbose".to_string(),
                 "--diff-file".to_string(),
                 diff_file.to_string_lossy().into_owned(),
                 "--fail-uncovered-lines".to_string(),
@@ -157,7 +145,7 @@ fn uncovered_line_budget_fails_when_exceeded() {
 
         assert_eq!(output.status.code(), Some(1), "fixture={}", fixture.id());
         let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-        assert!(stdout.contains("Rule fail-uncovered-lines: FAIL"));
+        assert!(stdout.contains("FAIL  Lines:"));
     }
 }
 
@@ -172,7 +160,6 @@ fn line_threshold_passes_for_all_pass_fixtures() {
             &worktree,
             fixture,
             &[
-                "--verbose".to_string(),
                 "--diff-file".to_string(),
                 diff_file.to_string_lossy().into_owned(),
                 "--fail-under-lines".to_string(),
@@ -182,7 +169,7 @@ fn line_threshold_passes_for_all_pass_fixtures() {
 
         assert_eq!(output.status.code(), Some(0), "fixture={}", fixture.id());
         let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-        assert!(stdout.contains("Rule fail-under-lines: PASS"));
+        assert!(stdout.contains("PASS  Lines:"));
     }
 }
 
@@ -197,7 +184,6 @@ fn branch_threshold_passes_for_branch_capable_fixtures() {
             &worktree,
             fixture,
             &[
-                "--verbose".to_string(),
                 "--diff-file".to_string(),
                 diff_file.to_string_lossy().into_owned(),
                 "--fail-under-branches".to_string(),
@@ -207,8 +193,7 @@ fn branch_threshold_passes_for_branch_capable_fixtures() {
 
         assert_eq!(output.status.code(), Some(0), "fixture={}", fixture.id());
         let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-        assert!(stdout.contains("Branch Coverage:"), "stdout={stdout}");
-        assert!(stdout.contains("Rule fail-under-branches: PASS"));
+        assert!(stdout.contains("PASS  Branches:"), "stdout={stdout}");
     }
 }
 
@@ -223,7 +208,6 @@ fn branch_threshold_fails_for_branch_capable_fixtures_when_below_threshold() {
             &worktree,
             fixture,
             &[
-                "--verbose".to_string(),
                 "--diff-file".to_string(),
                 diff_file.to_string_lossy().into_owned(),
                 "--fail-under-branches".to_string(),
@@ -233,8 +217,7 @@ fn branch_threshold_fails_for_branch_capable_fixtures_when_below_threshold() {
 
         assert_eq!(output.status.code(), Some(1), "fixture={}", fixture.id());
         let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-        assert!(stdout.contains("Branch Coverage:"), "stdout={stdout}");
-        assert!(stdout.contains("Rule fail-under-branches: FAIL"));
+        assert!(stdout.contains("FAIL  Branches:"), "stdout={stdout}");
     }
 }
 
@@ -249,7 +232,6 @@ fn uncovered_branch_budget_passes_for_branch_capable_fixtures() {
             &worktree,
             fixture,
             &[
-                "--verbose".to_string(),
                 "--diff-file".to_string(),
                 diff_file.to_string_lossy().into_owned(),
                 "--fail-uncovered-branches".to_string(),
@@ -259,7 +241,7 @@ fn uncovered_branch_budget_passes_for_branch_capable_fixtures() {
 
         assert_eq!(output.status.code(), Some(0), "fixture={}", fixture.id());
         let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-        assert!(stdout.contains("Rule fail-uncovered-branches: PASS"));
+        assert!(stdout.contains("PASS  Branches:"));
     }
 }
 
@@ -274,7 +256,6 @@ fn uncovered_branch_budget_fails_for_branch_capable_fixtures() {
             &worktree,
             fixture,
             &[
-                "--verbose".to_string(),
                 "--diff-file".to_string(),
                 diff_file.to_string_lossy().into_owned(),
                 "--fail-uncovered-branches".to_string(),
@@ -284,7 +265,7 @@ fn uncovered_branch_budget_fails_for_branch_capable_fixtures() {
 
         assert_eq!(output.status.code(), Some(1), "fixture={}", fixture.id());
         let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-        assert!(stdout.contains("Rule fail-uncovered-branches: FAIL"));
+        assert!(stdout.contains("FAIL  Branches:"));
     }
 }
 
@@ -324,7 +305,6 @@ fn region_threshold_passes_for_all_pass_fixtures() {
             &worktree,
             fixture,
             &[
-                "--verbose".to_string(),
                 "--diff-file".to_string(),
                 diff_file.to_string_lossy().into_owned(),
                 "--fail-under-regions".to_string(),
@@ -334,7 +314,7 @@ fn region_threshold_passes_for_all_pass_fixtures() {
 
         assert_eq!(output.status.code(), Some(0), "fixture={}", fixture.id());
         let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-        assert!(stdout.contains("Rule fail-under-regions: PASS"));
+        assert!(stdout.contains("PASS  Regions:"));
     }
 }
 
@@ -349,7 +329,6 @@ fn function_threshold_fails_when_below_threshold() {
             &worktree,
             fixture,
             &[
-                "--verbose".to_string(),
                 "--diff-file".to_string(),
                 diff_file.to_string_lossy().into_owned(),
                 "--fail-under-functions".to_string(),
@@ -359,8 +338,7 @@ fn function_threshold_fails_when_below_threshold() {
 
         assert_eq!(output.status.code(), Some(1), "fixture={}", fixture.id());
         let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-        assert!(stdout.contains("Rule fail-under-functions: FAIL"));
-        assert!(stdout.contains("Function Coverage:"));
+        assert!(stdout.contains("FAIL  Functions:"));
     }
 }
 
@@ -375,7 +353,6 @@ fn function_threshold_passes_for_all_pass_fixtures() {
             &worktree,
             fixture,
             &[
-                "--verbose".to_string(),
                 "--diff-file".to_string(),
                 diff_file.to_string_lossy().into_owned(),
                 "--fail-under-functions".to_string(),
@@ -385,7 +362,7 @@ fn function_threshold_passes_for_all_pass_fixtures() {
 
         assert_eq!(output.status.code(), Some(0), "fixture={}", fixture.id());
         let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-        assert!(stdout.contains("Rule fail-under-functions: PASS"));
+        assert!(stdout.contains("PASS  Functions:"));
     }
 }
 
@@ -400,7 +377,6 @@ fn uncovered_function_budget_fails_when_exceeded() {
             &worktree,
             fixture,
             &[
-                "--verbose".to_string(),
                 "--diff-file".to_string(),
                 diff_file.to_string_lossy().into_owned(),
                 "--fail-uncovered-functions".to_string(),
@@ -410,7 +386,7 @@ fn uncovered_function_budget_fails_when_exceeded() {
 
         assert_eq!(output.status.code(), Some(1), "fixture={}", fixture.id());
         let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-        assert!(stdout.contains("Rule fail-uncovered-functions: FAIL"));
+        assert!(stdout.contains("FAIL  Functions:"));
     }
 }
 
@@ -425,7 +401,6 @@ fn named_function_threshold_fails_when_below_threshold() {
             &worktree,
             fixture,
             &[
-                "--verbose".to_string(),
                 "--diff-file".to_string(),
                 diff_file.to_string_lossy().into_owned(),
                 "--fail-under-named-functions".to_string(),
@@ -435,8 +410,7 @@ fn named_function_threshold_fails_when_below_threshold() {
 
         assert_eq!(output.status.code(), Some(1), "fixture={}", fixture.id());
         let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-        assert!(stdout.contains("Rule fail-under-named-functions: FAIL"));
-        assert!(stdout.contains("Named Function Coverage:"));
+        assert!(stdout.contains("FAIL  Named Functions:"));
     }
 }
 
@@ -451,7 +425,6 @@ fn uncovered_named_function_budget_fails_when_exceeded() {
             &worktree,
             fixture,
             &[
-                "--verbose".to_string(),
                 "--diff-file".to_string(),
                 diff_file.to_string_lossy().into_owned(),
                 "--fail-uncovered-named-functions".to_string(),
@@ -461,7 +434,7 @@ fn uncovered_named_function_budget_fails_when_exceeded() {
 
         assert_eq!(output.status.code(), Some(1), "fixture={}", fixture.id());
         let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-        assert!(stdout.contains("Rule fail-uncovered-named-functions: FAIL"));
+        assert!(stdout.contains("FAIL  Named Functions:"));
     }
 }
 
@@ -476,7 +449,6 @@ fn named_function_threshold_passes_for_all_pass_fixtures() {
             &worktree,
             fixture,
             &[
-                "--verbose".to_string(),
                 "--diff-file".to_string(),
                 diff_file.to_string_lossy().into_owned(),
                 "--fail-under-named-functions".to_string(),
@@ -486,6 +458,6 @@ fn named_function_threshold_passes_for_all_pass_fixtures() {
 
         assert_eq!(output.status.code(), Some(0), "fixture={}", fixture.id());
         let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-        assert!(stdout.contains("Rule fail-under-named-functions: PASS"));
+        assert!(stdout.contains("PASS  Named Functions:"));
     }
 }

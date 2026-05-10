@@ -1,164 +1,12 @@
 use std::collections::BTreeMap;
 
 use crate::model::{
-    CheckResult, ComputedMetric, GateEvaluation, GateMetricEvidence, GateRule, MetricKind,
-    RuleOutcome, SourceSpan, Verbosity,
+    CheckResult, ComputedMetric, GateEvaluation, GateRule, MetricKind, RuleOutcome, SourceSpan,
 };
 use crate::render::title_case;
 
 #[must_use]
-pub fn render(result: &CheckResult, diff_description: &str, verbosity: Verbosity) -> String {
-    match verbosity {
-        Verbosity::Verbose => render_verbose(result, diff_description),
-        Verbosity::Normal => render_minimal(result, diff_description),
-    }
-}
-
-fn render_verbose(result: &CheckResult, diff_description: &str) -> String {
-    let mut out = String::new();
-    out.push_str("-------------\n");
-    out.push_str(&format!(
-        "Diff Coverage: {}\n",
-        if result.passed { "PASS" } else { "FAIL" }
-    ));
-    out.push_str(&format!("Diff: {diff_description}\n"));
-    out.push_str("-------------\n");
-
-    let multiple_gates = result.gates.len() > 1;
-    if multiple_gates && !result.gate_metrics.is_empty() {
-        for (index, gate) in result.gates.iter().enumerate() {
-            if let Some(label) = scope_label(gate, multiple_gates) {
-                out.push_str(&format!("Gate: {label}\n"));
-            }
-            let metrics = gate_metrics_for(result, index);
-            render_metric_file_details(&mut out, metrics);
-            render_changed_metric_totals(&mut out, metrics);
-            render_rule_outcomes(&mut out, gate);
-            out.push_str("-------------\n");
-        }
-    } else {
-        render_metric_file_details(&mut out, &result.changed_metrics);
-        out.push_str("-------------\n");
-        render_changed_metric_totals(&mut out, &result.changed_metrics);
-        for gate in &result.gates {
-            if let Some(label) = scope_label(gate, multiple_gates) {
-                out.push_str(&format!("Gate: {label}\n"));
-            }
-            render_rule_outcomes(&mut out, gate);
-            out.push_str("-------------\n");
-        }
-    }
-
-    if !result.overall_metrics.is_empty() {
-        out.push_str("Overall Coverage\n");
-        out.push_str("-------------\n");
-        for metric in &result.overall_metrics {
-            out.push_str(&format!(
-                "{:<15} {:>7.2}% ({}/{})\n",
-                format!("{}:", title_case(metric.metric.as_str())),
-                metric.percent,
-                metric.covered,
-                metric.total
-            ));
-        }
-        out.push_str("-------------\n");
-    }
-
-    if out.ends_with("-------------\n") {
-        out.truncate(out.len() - 1);
-    }
-
-    out
-}
-
-fn render_metric_file_details(out: &mut String, metrics: &[ComputedMetric]) {
-    for metric in metrics {
-        let spans: Vec<&SourceSpan> = metric
-            .uncovered_changed_opportunities
-            .iter()
-            .map(|opportunity| &opportunity.span)
-            .collect();
-        let grouped = group_spans(&spans);
-        for (path, totals) in &metric.changed_totals_by_file {
-            let path_display = path.display().to_string();
-            let percent = if totals.total == 0 {
-                100.0
-            } else {
-                (totals.covered as f64 / totals.total as f64) * 100.0
-            };
-            if let Some(spans) = grouped.get(&path_display) {
-                out.push_str(&format!(
-                    "{path_display} ({percent:.2}%): uncovered changed {} spans {}\n",
-                    metric.metric.as_str(),
-                    spans.join(", ")
-                ));
-            } else {
-                out.push_str(&format!(
-                    "{path_display} ({percent:.2}%) [{}]\n",
-                    metric.metric.as_str()
-                ));
-            }
-        }
-    }
-}
-
-fn render_changed_metric_totals(out: &mut String, metrics: &[ComputedMetric]) {
-    for metric in metrics {
-        out.push_str(&format!(
-            "Changed {}: {}\n",
-            metric.metric.label(),
-            metric.total
-        ));
-        out.push_str(&format!(
-            "Covered {}: {}\n",
-            metric.metric.label(),
-            metric.covered
-        ));
-        out.push_str(&format!(
-            "{} Coverage: {}\n",
-            title_case(metric.metric.as_str()),
-            format_percent(metric.percent, metric.total)
-        ));
-    }
-}
-
-fn render_rule_outcomes(out: &mut String, gate: &GateEvaluation) {
-    for outcome in &gate.rules {
-        let status = if outcome.passed { "PASS" } else { "FAIL" };
-        match &outcome.rule {
-            GateRule::Percent {
-                metric: _,
-                minimum_percent,
-            } => {
-                let comparator = if outcome.passed { "≥" } else { "≱" };
-                out.push_str(&format!(
-                    "Rule {}: {} ({} {} {:.2}%)\n",
-                    outcome.rule.label(),
-                    status,
-                    format_percent(outcome.observed_percent, outcome.observed_total_count),
-                    comparator,
-                    minimum_percent
-                ));
-            }
-            GateRule::UncoveredCount {
-                metric: _,
-                maximum_count,
-            } => {
-                let comparator = if outcome.passed { "≤" } else { "≰" };
-                out.push_str(&format!(
-                    "Rule {}: {} ({} {} {})\n",
-                    outcome.rule.label(),
-                    status,
-                    outcome.observed_uncovered_count,
-                    comparator,
-                    maximum_count
-                ));
-            }
-        }
-    }
-}
-
-fn render_minimal(result: &CheckResult, diff_description: &str) -> String {
+pub fn render(result: &CheckResult, diff_description: &str) -> String {
     let mut out = String::new();
 
     if !result.passed {
@@ -180,20 +28,13 @@ fn render_minimal(result: &CheckResult, diff_description: &str) -> String {
 
 fn render_failures(result: &CheckResult) -> String {
     let mut out = String::new();
-    if result.gate_metrics.is_empty() {
-        let failed_metrics = result
-            .gates
-            .iter()
-            .flat_map(|gate| &gate.rules)
-            .filter_map(|outcome| (!outcome.passed).then_some(outcome.rule.metric()))
-            .collect::<Vec<_>>();
-        render_failure_metrics(&mut out, &result.changed_metrics, &failed_metrics);
-    } else {
-        for (evidence, failed_metrics) in failed_gate_metrics(result) {
-            render_failure_metrics(&mut out, &evidence.metrics, &failed_metrics);
-        }
-    }
-
+    let failed_metrics = result
+        .gates
+        .iter()
+        .flat_map(|gate| &gate.rules)
+        .filter_map(|outcome| (!outcome.passed).then_some(outcome.rule.metric()))
+        .collect::<Vec<_>>();
+    render_failure_metrics(&mut out, &result.changed_metrics, &failed_metrics);
     out
 }
 
@@ -217,31 +58,6 @@ fn render_failure_metrics(
         }
         out.push('\n');
     }
-}
-
-fn gate_metrics_for(result: &CheckResult, index: usize) -> &[ComputedMetric] {
-    result
-        .gate_metrics
-        .get(index)
-        .map(|evidence| evidence.metrics.as_slice())
-        .unwrap_or(&result.changed_metrics)
-}
-
-fn failed_gate_metrics<'a>(
-    result: &'a CheckResult,
-) -> impl Iterator<Item = (&'a GateMetricEvidence, Vec<MetricKind>)> + 'a {
-    result
-        .gate_metrics
-        .iter()
-        .zip(&result.gates)
-        .filter_map(|(evidence, gate)| {
-            let failed_metrics = gate
-                .rules
-                .iter()
-                .filter_map(|outcome| (!outcome.passed).then_some(outcome.rule.metric()))
-                .collect::<Vec<_>>();
-            (!failed_metrics.is_empty()).then_some((evidence, failed_metrics))
-        })
 }
 
 fn render_rule_summary(outcome: &RuleOutcome, scope_label: Option<&str>) -> String {
@@ -379,20 +195,6 @@ fn group_file_spans(spans: &[SourceSpan]) -> Vec<String> {
         .collect()
 }
 
-fn group_spans(spans: &[&SourceSpan]) -> BTreeMap<String, Vec<String>> {
-    let mut grouped: BTreeMap<String, Vec<SourceSpan>> = BTreeMap::new();
-    for span in spans {
-        grouped
-            .entry(span.path.display().to_string())
-            .or_default()
-            .push((*span).clone());
-    }
-    grouped
-        .into_iter()
-        .map(|(path, spans)| (path, group_file_spans(&spans)))
-        .collect()
-}
-
 fn summary_label(gate: &GateEvaluation, multiple_scopes: bool) -> Option<String> {
     if let Some(label) = &gate.label {
         return Some(label.clone());
@@ -400,18 +202,6 @@ fn summary_label(gate: &GateEvaluation, multiple_scopes: bool) -> Option<String>
 
     if multiple_scopes {
         return Some("default".to_string());
-    }
-
-    None
-}
-
-fn scope_label(gate: &GateEvaluation, multiple_scopes: bool) -> Option<&str> {
-    if let Some(label) = gate.label.as_deref() {
-        return Some(label);
-    }
-
-    if multiple_scopes {
-        return Some("default");
     }
 
     None

@@ -14,7 +14,7 @@ use std::collections::BTreeSet;
 use crate::{
     config::{Config, ConfiguredGate},
     diff::DiffSource,
-    model::{ChangedFile, CheckResult, ComputedMetric, GateMetricEvidence, MetricKind},
+    model::{ChangedFile, CheckResult, ComputedMetric, MetricKind},
 };
 
 pub fn run(config: Config) -> Result<i32> {
@@ -23,7 +23,6 @@ pub fn run(config: Config) -> Result<i32> {
         diff_source,
         gates,
         markdown_output,
-        verbose,
     } = config;
     let coverage_report = &coverage_report;
     let diff_source = &diff_source;
@@ -49,7 +48,6 @@ pub fn run(config: Config) -> Result<i32> {
 
     let gate_inputs = assign_changed_files(&report, &diff, gates)?;
     let mut gate_evaluations = Vec::new();
-    let mut gate_metrics = Vec::new();
 
     for gate_input in &gate_inputs {
         let mut metrics = Vec::new();
@@ -78,31 +76,22 @@ pub fn run(config: Config) -> Result<i32> {
 
         let evaluation = gate::evaluate(
             gate_input.gate.label.clone(),
-            metrics.clone(),
+            metrics,
             &gate_input.gate.rules,
         )?;
-        gate_metrics.push(GateMetricEvidence { metrics });
         gate_evaluations.push(evaluation);
     }
     let gate_evaluations = gate_evaluations;
-    let gate_metrics = gate_metrics;
     let changed_metrics = compute_run_changed_metrics(&report, &diff)?;
 
     let check_result = CheckResult {
         passed: gate_evaluations.iter().all(|gate| gate.passed),
         gates: gate_evaluations,
-        gate_metrics,
         changed_metrics,
         overall_metrics,
     };
 
-    let verbosity = if verbose {
-        crate::model::Verbosity::Verbose
-    } else {
-        crate::model::Verbosity::Normal
-    };
-
-    let console = render::console::render(&check_result, &diff_source.describe(), verbosity);
+    let console = render::console::render(&check_result, &diff_source.describe());
     println!("{console}");
 
     if let Some(path) = markdown_output {

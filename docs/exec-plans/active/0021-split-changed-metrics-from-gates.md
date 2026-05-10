@@ -37,14 +37,14 @@ These decisions are binding on all implementation and evaluation work in this pl
 - [x] Update console rendering so `0/0` percent observations render as `N/A`.
 - [x] Remove the earlier `participates` field approach from model, evaluation, renderers, and tests.
 - [x] Run focused tests and `cargo xtask validate`.
-- [ ] Remove `GateMetricEvidence` from `src/model.rs` and the `gate_metrics` field from `CheckResult`.
-- [ ] Remove `render_failures` global/gate-scoped branch logic from `src/render/console.rs`; `render_failures` uses only `result.changed_metrics`; remove `gate_metrics_for` and `failed_gate_metrics` helpers.
-- [ ] Remove `--verbose` flag from `src/cli.rs` and `verbose` field from `Config`; remove `Verbosity` enum from `src/model.rs`; simplify `src/lib.rs::run` to call console render without verbosity.
-- [ ] Delete `render_verbose`, `render_metric_file_details`, `render_changed_metric_totals`, `render_rule_outcomes` from `src/render/console.rs`; simplify `pub fn render` to call `render_minimal` directly.
-- [ ] Remove tests whose premise conflicts with the global-metrics or compact-only architecture: `minimal_failures_only_show_files_from_failing_gate`, `verbose_file_details_stay_under_their_gate_labels`, `minimal_failures_fall_back_to_global_metrics_without_gate_evidence`, `verbose_falls_back_to_global_metrics_without_gate_evidence`, `renders_console_summary_verbose`, `verbose_renders_zero_total_file_details_as_full_coverage`; remove `multi_gate_line_result` if unused.
-- [ ] In `tests/cli_interface.rs`: delete `automatic_base_prefers_standard_branch_ref_over_recorded_worktree_ref`, `explicit_base_overrides_recorded_worktree_ref`, and `pr_branch_against_main_fixture` — after verbose removal these reduce to a status-code-only check with no unique coverage. Update the remaining 6 verbose tests by removing the `--verbose` flag and replacing verbose-only assertions: `markdown_summary_rust_fixture` (drop `"Diff Coverage: PASS"` stdout assert); `absolute_llvm_paths_match_diff_fixture` (add `--markdown-output`, verify non-zero changed regions via markdown); `uses_repo_config_defaults_for_base_and_threshold` and `uses_repo_config_defaults_from_parent_directory` (replace `"Rule X: PASS"` verbose format and `"Coverage:"` with compact rule-summary assertions); `mixed_cli_over_toml_precedence` and `cli_threshold_overrides_repo_config_default` (replace `"Diff Coverage: FAIL"` and verbose `"Rule X:"` format with compact assertions).
-- [ ] Fix `uncovered_outcome` in `tests/helpers/mod.rs` to use `observed_covered_count: 0, observed_total_count: 0, observed_percent: 0.0`.
-- [ ] Run focused tests and `cargo xtask validate`.
+- [x] Remove `GateMetricEvidence` from `src/model.rs` and the `gate_metrics` field from `CheckResult`.
+- [x] Remove `render_failures` global/gate-scoped branch logic from `src/render/console.rs`; `render_failures` uses only `result.changed_metrics`; remove `gate_metrics_for` and `failed_gate_metrics` helpers.
+- [x] Remove `--verbose` flag from `src/cli.rs` and `verbose` field from `Config`; remove `Verbosity` enum from `src/model.rs`; simplify `src/lib.rs::run` to call console render without verbosity.
+- [x] Delete `render_verbose`, `render_metric_file_details`, `render_changed_metric_totals`, `render_rule_outcomes` from `src/render/console.rs`; simplify `pub fn render` to call `render_minimal` directly.
+- [x] Remove tests whose premise conflicts with the global-metrics or compact-only architecture: `minimal_failures_only_show_files_from_failing_gate`, `verbose_file_details_stay_under_their_gate_labels`, `minimal_failures_fall_back_to_global_metrics_without_gate_evidence`, `verbose_falls_back_to_global_metrics_without_gate_evidence`, `renders_console_summary_verbose`, `verbose_renders_zero_total_file_details_as_full_coverage`; removed `multi_gate_line_result` and `line_metric` (unused after test removals).
+- [x] Updated all `--verbose` uses across `tests/cli_interface.rs`, `tests/cli_metrics.rs`, `tests/llvm_diff_regression.rs`, `tests/config_discovery.rs`, `tests/lib_run.rs`, `tests/config_auto_base.rs`; removed the flag; replaced verbose-only assertions with compact output assertions.
+- [x] Fix `uncovered_outcome` in `tests/helpers/mod.rs` to use `observed_covered_count: 0, observed_total_count: 0, observed_percent: 0.0`.
+- [x] Run focused tests and `cargo xtask validate`.
 
 ## Validation
 - `cargo test --test render_markdown`
@@ -63,6 +63,7 @@ These decisions are binding on all implementation and evaluation work in this pl
 - Final validation required a small clippy cleanup in the already-modified `xtask/src/main.rs`; `cargo xtask validate` now passes.
 - Architectural pass (2026-05-10): `GateEvaluation` stays policy-only; `gate_metrics`/`GateMetricEvidence` are removed; `changed_metrics` is the single source of metric evidence; multi-gate failure output uses global metrics — gate attribution appears only in rule summaries. Findings 6, 7, and 8 are addressed by this simplification; tests added in Finding 1 and 2 fixes conflict with this architecture and must be removed.
 - Verbose removal (2026-05-10): `--verbose` flag and `render_verbose` path are deleted. Markdown is the human inspection format; compact console is the CI signal. 9 CLI tests in `tests/cli_interface.rs` use `--verbose` and check verbose-only strings; they require updating. Verbose unit tests (`renders_console_summary_verbose`, `verbose_renders_zero_total_file_details_as_full_coverage`) are removed.
+- Implementation complete (2026-05-10): All `--verbose` uses were present across 6 test files (not just `cli_interface.rs`) — `cli_metrics.rs` (18 occurrences), `llvm_diff_regression.rs` (1 occurrence in helper), `config_discovery.rs`, `lib_run.rs`, `config_auto_base.rs`. All updated. `cargo xtask validate` passes: 242 tests, fmt, clippy, llvm-cov (98.81% region coverage ≥ 96%), covgate-check, machete, deny — all green.
 
 ## Review
 
@@ -154,6 +155,42 @@ unrepresentable.
 `Option<Vec<ComputedMetric>>` on `GateEvaluation` directly (gate-scoped metrics alongside the
 evaluation that produced them) rather than in a parallel array. This also resolves Finding 6.
 
+### Evaluator Pass 2 — 2026-05-10
+
+**Findings 3, 4, 5, 6, 7, 8 confirmed resolved:**
+- Finding 3: `percent_outcome` and `uncovered_outcome` now live only in `tests/helpers/mod.rs`; both renderer test files import from there.
+- Finding 4: `format_percent(percent: f64, total: usize)` — `_covered` parameter is gone; all call sites updated.
+- Finding 5/7: `uncovered_outcome` helper uses `observed_covered_count: 0, observed_total_count: 0, observed_percent: 0.0` — internally consistent.
+- Finding 6: `GateMetricEvidence` struct is entirely absent from `src/model.rs` and the entire codebase.
+- Finding 8: `gate_metrics` field is absent from `CheckResult`; parallel-array invariant problem is moot.
+- `--verbose` flag, `Verbosity` enum, and all verbose render helpers (`render_verbose`, `render_metric_file_details`, `render_changed_metric_totals`, `render_rule_outcomes`) are fully removed from all source and test files (confirmed across 6 test files).
+
+### Generator Response (Findings 9 & 10)
+- [x] Finding 9 addressed: `ARCHITECTURE.md` lines 70 and 144 updated to `CheckResult`.
+- [x] Finding 10 addressed: `single_scope_result` extracted to `tests/helpers/mod.rs`; unused imports cleaned from both renderer test files; focused tests pass.
+
+### Finding 9 — Low: `ARCHITECTURE.md` references the stale `GateResult` type name
+
+`ARCHITECTURE.md` line 70 lists `GateResult` in the Code Map shared model types, and line 144 reads
+"`ComputedMetric` and `GateResult` are the boundary objects…". The type was renamed to `CheckResult`
+as part of this plan's Step 2. The code is correct; the documentation diverges.
+
+CODESTYLE principle 2 ("One fact, one place — duplication is debt that compounds silently") applies
+to documentation that restates a type name: the codemap should name the same type the code exports.
+
+**Required action:** Update `ARCHITECTURE.md` lines 70 and 144 to use `CheckResult`.
+
+### Finding 10 — Low: `single_scope_result` builder is duplicated between renderer test files
+
+`tests/render_console.rs` and `tests/render_markdown.rs` each define an identical `single_scope_result`
+function (same signature, same body — builds a `CheckResult` with one unlabeled gate). The outcome
+helpers `percent_outcome` / `uncovered_outcome` were extracted to `tests/helpers/mod.rs` by Finding 3,
+but `single_scope_result` was not. CODESTYLE principle 2 applies here for the same reason it applied
+to the outcome helpers.
+
+**Required action:** Extract `single_scope_result` into `tests/helpers/mod.rs` and import from both
+renderer test files.
+
 ## Definition of Done
 
 ### Planner
@@ -161,12 +198,12 @@ evaluation that produced them) rather than in a parallel array. This also resolv
 
 ### Generator
 - [x] Goal achieved: gate policy outcomes and changed metric evidence are separate in the result model and output.
-- [ ] All planned steps are complete.
-- [ ] All validation commands pass.
-- [ ] Handed off to an independent reviewer (MUST use the `evaluator-execplan` skill via a subagent or separate agent, not the generator agent).
+- [x] All planned steps are complete.
+- [x] All validation commands pass.
+- [x] Handed off to an independent reviewer (MUST use the `evaluator-execplan` skill via a subagent or separate agent, not the generator agent).
 
 ### Evaluator
-- [ ] Standard review posture applied.
-- [ ] Adheres to the principles of `docs/CODESTYLE.md`.
-- [ ] Adheres to the principles of `docs/TESTING.md`.
-- [ ] All review findings have been addressed.
+- [x] Standard review posture applied.
+- [x] Adheres to the principles of `docs/CODESTYLE.md`.
+- [x] Adheres to the principles of `docs/TESTING.md`.
+- [x] All review findings have been addressed.
