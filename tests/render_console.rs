@@ -1,5 +1,5 @@
 use covgate::model::{
-    ComputedMetric, CoverageOpportunity, FileTotals, GateResult, GateRule, GateScopeResult,
+    CheckResult, ComputedMetric, CoverageOpportunity, FileTotals, GateEvaluation, GateRule,
     MetricKind, OpportunityKind, RuleOutcome, SourceSpan, Verbosity,
 };
 use covgate::render::console::render;
@@ -9,16 +9,56 @@ fn single_scope_result(
     metrics: Vec<ComputedMetric>,
     rules: Vec<RuleOutcome>,
     passed: bool,
-) -> GateResult {
-    GateResult {
-        scopes: vec![GateScopeResult {
+) -> CheckResult {
+    CheckResult {
+        gates: vec![GateEvaluation {
             label: None,
-            metrics: metrics.clone(),
             rules,
             passed,
         }],
+        changed_metrics: metrics.clone(),
         overall_metrics: metrics,
         passed,
+    }
+}
+
+fn percent_outcome(
+    metric: MetricKind,
+    minimum_percent: f64,
+    passed: bool,
+    observed_percent: f64,
+    covered: usize,
+    total: usize,
+) -> RuleOutcome {
+    RuleOutcome {
+        rule: GateRule::Percent {
+            metric,
+            minimum_percent,
+        },
+        passed,
+        observed_percent,
+        observed_covered_count: covered,
+        observed_total_count: total,
+        observed_uncovered_count: total.saturating_sub(covered),
+    }
+}
+
+fn uncovered_outcome(
+    metric: MetricKind,
+    maximum_count: usize,
+    passed: bool,
+    observed_uncovered_count: usize,
+) -> RuleOutcome {
+    RuleOutcome {
+        rule: GateRule::UncoveredCount {
+            metric,
+            maximum_count,
+        },
+        passed,
+        observed_percent: 100.0,
+        observed_covered_count: 0,
+        observed_total_count: 0,
+        observed_uncovered_count,
     }
 }
 
@@ -52,22 +92,40 @@ fn renders_console_summary_minimal() {
             )]),
             totals_by_file: BTreeMap::new(),
         }],
-        vec![RuleOutcome {
-            rule: GateRule::Percent {
-                metric: MetricKind::Region,
-                minimum_percent: 90.0,
-            },
-            passed: false,
-            observed_percent: 50.0,
-            observed_uncovered_count: 1,
-        }],
+        vec![percent_outcome(MetricKind::Region, 90.0, false, 50.0, 1, 2)],
         false,
     );
 
     let rendered = render(&result, "origin/main...HEAD", Verbosity::Normal);
     assert!(!rendered.contains("Diff Coverage: FAIL"));
     assert!(rendered.contains("src/lib.rs (50.00% region)"));
-    assert!(rendered.contains("FAIL  Regions:      50.00%         (1/2)  ≱ 90.00%"));
+    assert!(rendered.contains("FAIL  Regions:"));
+    assert!(rendered.contains("50.00%"));
+    assert!(rendered.contains("(1/2)"));
+    assert!(rendered.contains("≱ 90.00%"));
+}
+
+#[test]
+fn renders_zero_total_percent_rules_as_na() {
+    let result = single_scope_result(
+        vec![ComputedMetric {
+            metric: MetricKind::Line,
+            covered: 0,
+            total: 0,
+            percent: 100.0,
+            uncovered_changed_opportunities: Vec::new(),
+            changed_totals_by_file: BTreeMap::new(),
+            totals_by_file: BTreeMap::new(),
+        }],
+        vec![percent_outcome(MetricKind::Line, 80.0, true, 100.0, 0, 0)],
+        true,
+    );
+
+    let rendered = render(&result, "origin/main...HEAD", Verbosity::Normal);
+    assert!(rendered.contains("PASS  Lines:"));
+    assert!(rendered.contains("N/A"));
+    assert!(rendered.contains("(0/0)"));
+    assert!(!rendered.contains("100.00%"));
 }
 
 #[test]
@@ -100,15 +158,7 @@ fn renders_console_summary_verbose() {
             )]),
             totals_by_file: BTreeMap::new(),
         }],
-        vec![RuleOutcome {
-            rule: GateRule::Percent {
-                metric: MetricKind::Region,
-                minimum_percent: 90.0,
-            },
-            passed: false,
-            observed_percent: 50.0,
-            observed_uncovered_count: 1,
-        }],
+        vec![percent_outcome(MetricKind::Region, 90.0, false, 50.0, 1, 2)],
         false,
     );
 
@@ -163,15 +213,14 @@ fn groups_duplicate_spans_with_counts() {
             )]),
             totals_by_file: BTreeMap::new(),
         }],
-        vec![RuleOutcome {
-            rule: GateRule::Percent {
-                metric: MetricKind::Region,
-                minimum_percent: 90.0,
-            },
-            passed: false,
-            observed_percent: 33.33,
-            observed_uncovered_count: 2,
-        }],
+        vec![percent_outcome(
+            MetricKind::Region,
+            90.0,
+            false,
+            33.33,
+            1,
+            3,
+        )],
         false,
     );
 
@@ -224,15 +273,14 @@ fn sorts_spans_numerically() {
             )]),
             totals_by_file: BTreeMap::new(),
         }],
-        vec![RuleOutcome {
-            rule: GateRule::Percent {
-                metric: MetricKind::Region,
-                minimum_percent: 90.0,
-            },
-            passed: false,
-            observed_percent: 33.33,
-            observed_uncovered_count: 2,
-        }],
+        vec![percent_outcome(
+            MetricKind::Region,
+            90.0,
+            false,
+            33.33,
+            1,
+            3,
+        )],
         false,
     );
 
@@ -267,15 +315,7 @@ fn omits_non_gated_metrics_from_minimal_output() {
                 totals_by_file: BTreeMap::new(),
             },
         ],
-        vec![RuleOutcome {
-            rule: GateRule::Percent {
-                metric: MetricKind::Region,
-                minimum_percent: 90.0,
-            },
-            passed: false,
-            observed_percent: 50.0,
-            observed_uncovered_count: 1,
-        }],
+        vec![percent_outcome(MetricKind::Region, 90.0, false, 50.0, 1, 2)],
         false,
     );
 
@@ -308,24 +348,8 @@ fn aligns_comparators_vertically() {
             },
         ],
         vec![
-            RuleOutcome {
-                rule: GateRule::Percent {
-                    metric: MetricKind::Region,
-                    minimum_percent: 90.0,
-                },
-                passed: false,
-                observed_percent: 10.0,
-                observed_uncovered_count: 900,
-            },
-            RuleOutcome {
-                rule: GateRule::UncoveredCount {
-                    metric: MetricKind::Function,
-                    maximum_count: 0,
-                },
-                passed: true,
-                observed_percent: 100.0,
-                observed_uncovered_count: 0,
-            },
+            percent_outcome(MetricKind::Region, 90.0, false, 10.0, 100, 1000),
+            uncovered_outcome(MetricKind::Function, 0, true, 0),
         ],
         false,
     );

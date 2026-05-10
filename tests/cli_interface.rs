@@ -586,7 +586,8 @@ fn markdown_summary_rust_fixture() {
     assert!(markdown.contains("## Covgate"));
     assert!(markdown.contains("### Diff Coverage"));
     assert!(markdown.contains("| Result | Rule | Observed | Configured |"));
-    assert!(markdown.contains("| ✅PASS | `fail-under-regions` | 100.00% | ≥ 90.00% |"));
+    assert!(markdown.contains("| ✅PASS | `fail-under-regions` | 100.00% ("));
+    assert!(markdown.contains(") | ≥ 90.00% |"));
     assert!(markdown.contains(
         "| File | Covered Changed Regions | Changed Regions | Coverage | Missed Changed Spans |"
     ));
@@ -687,12 +688,53 @@ fn path_scoped_gates_markdown_adds_gate_column() {
     assert_eq!(output.status.code(), Some(1));
     let markdown = fs::read_to_string(markdown_output).expect("markdown should be readable");
     assert!(markdown.contains("| Gate | Result | Rule | Observed | Configured |"));
-    assert!(markdown.contains("| `js-ui` | ✅PASS | `fail-under-lines` | 80.00% | ≥ 70.00% |"));
-    assert!(markdown.contains("| `default` | ❌FAIL | `fail-under-lines` | 33.33% | ≥ 40.00% |"));
+    assert!(
+        markdown.contains("| `js-ui` | ✅PASS | `fail-under-lines` | 80.00% (4/5) | ≥ 70.00% |")
+    );
+    assert!(
+        markdown.contains("| `default` | ❌FAIL | `fail-under-lines` | 33.33% (2/6) | ≥ 40.00% |")
+    );
     assert!(markdown.contains(
-        "| Gate | File | Covered Changed Lines | Changed Lines | Coverage | Missed Changed Spans |"
+        "| File | Covered Changed Lines | Changed Lines | Coverage | Missed Changed Spans |"
     ));
-    assert!(markdown.contains("| **default Total** |  | **2** | **6** | **33.33% 🔴** |  |"));
+    assert!(!markdown.contains("| Gate | File |"));
+    assert!(!markdown.contains("default Total"));
+}
+
+#[test]
+fn path_scoped_gates_markdown_labels_single_named_fallback() {
+    let fixture = vitest_path_scoped_gates_fixture();
+    let (temp, worktree, diff_file) = setup_path_scoped_fixture();
+    let markdown_output = temp.path().join("summary.md");
+    fs::write(
+        worktree.join("covgate.toml"),
+        "[[gates]]\nname = \"ui\"\ninclude = [\"**/*.jsx\"]\nfail-under-lines = 80\nfail-under-regions = 80\n\n[[gates]]\nname = \"logic\"\nfail-under-lines = 30\n",
+    )
+    .expect("config should be written");
+
+    let output = run_covgate(
+        &worktree,
+        fixture,
+        &[
+            "--diff-file".to_string(),
+            diff_file.to_string_lossy().into_owned(),
+            "--markdown-output".to_string(),
+            markdown_output.to_string_lossy().into_owned(),
+        ],
+    );
+
+    assert_eq!(output.status.code(), Some(0));
+    let markdown = fs::read_to_string(markdown_output).expect("markdown should be readable");
+    assert!(markdown.contains("| Gate | Result | Rule | Observed | Configured |"));
+    assert!(markdown.contains("| `ui` | ✅PASS | `fail-under-lines` | N/A (0/0) | ≥ 80.00% |"));
+    assert!(markdown.contains("| `ui` | ✅PASS | `fail-under-regions` | N/A (0/0) | ≥ 80.00% |"));
+    assert!(markdown.contains("| `logic` | ✅PASS | `fail-under-lines` |"));
+    assert!(markdown.contains("| ≥ 30.00% |"));
+    assert!(markdown.contains(
+        "| File | Covered Changed Lines | Changed Lines | Coverage | Missed Changed Spans |"
+    ));
+    assert!(!markdown.contains("| Gate | File |"));
+    assert!(!markdown.contains("logic Total"));
 }
 
 #[test]
@@ -1051,7 +1093,10 @@ fn minimal_pass_output_is_token_efficient() {
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
 
     // Should contain the summary line
-    assert!(stdout.contains("PASS  Regions:     100.00%         (3/3)  ≥ 90.00%"));
+    assert!(stdout.contains("PASS  Regions:"));
+    assert!(stdout.contains("100.00%"));
+    assert!(stdout.contains("(3/3)"));
+    assert!(stdout.contains("≥ 90.00%"));
 
     // Should NOT contain the "Diff Coverage: PASS" header (from the verbose output)
     assert!(!stdout.contains("Diff Coverage: PASS"));
@@ -1077,10 +1122,11 @@ fn minimal_fail_output_is_focused() {
 
     assert_eq!(output.status.code(), Some(1));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-    println!("DEBUG STDOUT:\n{stdout}");
-
     // Should contain the summary line with FAIL
-    assert!(stdout.contains("FAIL  Regions:       0.00%         (0/3)  ≱ 100.00%"));
+    assert!(stdout.contains("FAIL  Regions:"));
+    assert!(stdout.contains("0.00%"));
+    assert!(stdout.contains("(0/3)"));
+    assert!(stdout.contains("≱ 100.00%"));
 
     // Should show the failing file
     assert!(stdout.contains("src/lib.rs"));

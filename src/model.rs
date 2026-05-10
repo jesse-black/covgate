@@ -101,6 +101,8 @@ pub struct RuleOutcome {
     pub rule: GateRule,
     pub passed: bool,
     pub observed_percent: f64,
+    pub observed_covered_count: usize,
+    pub observed_total_count: usize,
     pub observed_uncovered_count: usize,
 }
 
@@ -238,17 +240,17 @@ pub struct ComputedMetric {
 
 #[derive(Debug, Clone, PartialEq)]
 #[must_use]
-pub struct GateScopeResult {
+pub struct GateEvaluation {
     pub label: Option<String>,
-    pub metrics: Vec<ComputedMetric>,
     pub rules: Vec<RuleOutcome>,
     pub passed: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 #[must_use]
-pub struct GateResult {
-    pub scopes: Vec<GateScopeResult>,
+pub struct CheckResult {
+    pub gates: Vec<GateEvaluation>,
+    pub changed_metrics: Vec<ComputedMetric>,
     pub overall_metrics: Vec<ComputedMetric>,
     pub passed: bool,
 }
