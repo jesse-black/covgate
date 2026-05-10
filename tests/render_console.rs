@@ -50,7 +50,7 @@ fn renders_console_summary_minimal() {
     let rendered = render(&result, "origin/main...HEAD");
     assert!(!rendered.contains("Diff Coverage: FAIL"));
     assert!(rendered.contains("src/lib.rs (50.00% region)"));
-    assert!(rendered.contains("FAIL  Regions:"));
+    assert!(rendered.contains("FAIL Regions:"));
     assert!(rendered.contains("50.00%"));
     assert!(rendered.contains("(1/2)"));
     assert!(rendered.contains("≱ 90.00%"));
@@ -78,7 +78,7 @@ fn renders_zero_total_percent_rules_as_na() {
     };
 
     let rendered = render(&result, "origin/main...HEAD");
-    assert!(rendered.contains("PASS  Lines:"));
+    assert!(rendered.contains("PASS Lines:"));
     assert!(rendered.contains("N/A"));
     assert!(rendered.contains("(0/0)"));
     assert!(!rendered.contains("100.00%"));
@@ -256,58 +256,106 @@ fn omits_non_gated_metrics_from_minimal_output() {
 }
 
 #[test]
-fn aligns_comparators_vertically() {
+fn percent_rule_renders_compact_unaligned() {
     let result = CheckResult {
         gates: vec![GateEvaluation {
             label: None,
-            rules: vec![
-                percent_outcome(MetricKind::Region, 90.0, false, 10.0, 100, 1000),
-                uncovered_outcome(MetricKind::Function, 0, true, 0),
-            ],
-            passed: false,
+            rules: vec![percent_outcome(MetricKind::Region, 90.0, true, 100.0, 3, 3)],
+            passed: true,
         }],
-        changed_metrics: vec![
-            ComputedMetric {
-                metric: MetricKind::Region,
-                covered: 100,
-                total: 1000,
-                percent: 10.0,
-                uncovered_changed_opportunities: Vec::new(),
-                changed_totals_by_file: BTreeMap::new(),
-                totals_by_file: BTreeMap::new(),
-            },
-            ComputedMetric {
-                metric: MetricKind::Function,
-                covered: 1,
-                total: 1,
-                percent: 100.0,
-                uncovered_changed_opportunities: Vec::new(),
-                changed_totals_by_file: BTreeMap::new(),
-                totals_by_file: BTreeMap::new(),
-            },
-        ],
+        changed_metrics: vec![ComputedMetric {
+            metric: MetricKind::Region,
+            covered: 3,
+            total: 3,
+            percent: 100.0,
+            uncovered_changed_opportunities: Vec::new(),
+            changed_totals_by_file: BTreeMap::new(),
+            totals_by_file: BTreeMap::new(),
+        }],
         overall_metrics: Vec::new(),
-        passed: false,
+        passed: true,
     };
 
-    let rendered = render(&result, "diff");
-    let lines: Vec<_> = rendered
+    let rendered = render(&result, "origin/main...HEAD");
+    let summary_line = rendered
         .lines()
-        .filter(|line| line.contains("PASS") || line.contains("FAIL"))
-        .collect();
-    assert_eq!(lines.len(), 2);
+        .find(|line| line.contains("PASS"))
+        .expect("summary line");
+    assert_eq!(summary_line, "PASS Regions: 100.00% (3/3) ≥ 90.00%");
+}
 
-    let pos1 = lines[0]
-        .chars()
-        .position(|ch| ch == '≱' || ch == '≥')
-        .expect("first comparator");
-    let pos2 = lines[1]
-        .chars()
-        .position(|ch| ch == '≤' || ch == '≰')
-        .expect("second comparator");
+#[test]
+fn uncovered_count_rule_renders_observed_count_not_percent() {
+    let result = CheckResult {
+        gates: vec![GateEvaluation {
+            label: None,
+            rules: vec![uncovered_outcome(MetricKind::Function, 5, true, 2)],
+            passed: true,
+        }],
+        changed_metrics: vec![ComputedMetric {
+            metric: MetricKind::Function,
+            covered: 8,
+            total: 10,
+            percent: 80.0,
+            uncovered_changed_opportunities: Vec::new(),
+            changed_totals_by_file: BTreeMap::new(),
+            totals_by_file: BTreeMap::new(),
+        }],
+        overall_metrics: Vec::new(),
+        passed: true,
+    };
+
+    let rendered = render(&result, "origin/main...HEAD");
+    let summary_line = rendered
+        .lines()
+        .find(|line| line.contains("PASS"))
+        .expect("summary line");
+    assert!(
+        summary_line.contains("2 uncovered"),
+        "should contain '2 uncovered', got: {summary_line}"
+    );
+    assert!(
+        summary_line.contains("≤ 5"),
+        "should contain '≤ 5', got: {summary_line}"
+    );
+    assert!(
+        !summary_line.contains('%'),
+        "should NOT contain percent, got: {summary_line}"
+    );
+    assert!(
+        !summary_line.contains("(8/10)"),
+        "should NOT contain covered/total, got: {summary_line}"
+    );
+}
+
+#[test]
+fn scoped_label_renders_compact_without_padding() {
+    let result = CheckResult {
+        gates: vec![GateEvaluation {
+            label: Some("frontend".to_string()),
+            rules: vec![percent_outcome(MetricKind::Line, 90.0, true, 100.0, 5, 5)],
+            passed: true,
+        }],
+        changed_metrics: vec![ComputedMetric {
+            metric: MetricKind::Line,
+            covered: 5,
+            total: 5,
+            percent: 100.0,
+            uncovered_changed_opportunities: Vec::new(),
+            changed_totals_by_file: BTreeMap::new(),
+            totals_by_file: BTreeMap::new(),
+        }],
+        overall_metrics: Vec::new(),
+        passed: true,
+    };
+
+    let rendered = render(&result, "origin/main...HEAD");
+    let summary_line = rendered
+        .lines()
+        .find(|line| line.contains("PASS"))
+        .expect("summary line");
     assert_eq!(
-        pos1, pos2,
-        "Comparators should be at the same horizontal position.\nLine 1: {}\nLine 2: {}",
-        lines[0], lines[1]
+        summary_line,
+        "[frontend] PASS Lines: 100.00% (5/5) ≥ 90.00%"
     );
 }

@@ -64,19 +64,19 @@ fn render_rule_summary(outcome: &RuleOutcome, scope_label: Option<&str>) -> Stri
     let status = if outcome.passed { "PASS" } else { "FAIL" };
     let metric_label = title_case(outcome.rule.metric().label());
 
-    let (rule_str, observed, counts) = match &outcome.rule {
+    let summary = match &outcome.rule {
         GateRule::Percent {
             metric: _,
             minimum_percent,
         } => {
             let comparator = if outcome.passed { "≥" } else { "≱" };
-            (
-                format!("  {} {:.2}%", comparator, minimum_percent),
-                format_percent(outcome.observed_percent, outcome.observed_total_count),
-                format!(
-                    "({}/{})",
-                    outcome.observed_covered_count, outcome.observed_total_count
-                ),
+            let observed = format_percent(outcome.observed_percent, outcome.observed_total_count);
+            let counts = format!(
+                "({}/{})",
+                outcome.observed_covered_count, outcome.observed_total_count
+            );
+            format!(
+                "{status} {metric_label}: {observed} {counts} {comparator} {minimum_percent:.2}%"
             )
         }
         GateRule::UncoveredCount {
@@ -84,24 +84,12 @@ fn render_rule_summary(outcome: &RuleOutcome, scope_label: Option<&str>) -> Stri
             maximum_count,
         } => {
             let comparator = if outcome.passed { "≤" } else { "≰" };
-            (
-                format!("  {} {}", comparator, maximum_count),
-                outcome.observed_uncovered_count.to_string(),
-                String::new(),
+            format!(
+                "{status} {metric_label}: {} uncovered {comparator} {maximum_count}",
+                outcome.observed_uncovered_count
             )
         }
     };
-
-    let summary = format!(
-        "{}  {:<11} {:>7} {:>13}{:<11}",
-        status,
-        format!("{}:", metric_label),
-        observed,
-        counts,
-        rule_str
-    )
-    .trim_end()
-    .to_string();
 
     if let Some(scope_label) = scope_label {
         format!("[{scope_label}] {summary}")
