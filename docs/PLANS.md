@@ -40,13 +40,19 @@ To print the next sequence number:
 
 ## Personas and Hard Boundaries
 
-The ExecPlan lifecycle is built on three distinct, immutable personas. These boundaries are enforced to ensure architectural integrity and independent verification.
+- **Planner:** Shapes intent and acceptance criteria.
+- **Generator:** Implements and keeps the plan current.
+- **Evaluator:** Reviews only — strictly read-only regarding code.
 
-- **Planner:** Shapes the intent and acceptance criteria.
-- **Generator:** Implements the solution and keeps the plan current.
-- **Evaluator:** Independently reviews the implementation against the plan and standards. **The Evaluator persona is strictly read-only regarding code.**
+Planner and Evaluator MUST NOT modify implementation code. Hand required changes back to a Generator.
 
-If an agent is acting in the **Planner** or **Evaluator** persona, it MUST NOT use tools to modify implementation code. Any required code changes identified by these personas must be handed back to a **Generator**.
+## Review Loop
+
+Generator → Evaluator → Generator (findings) → Evaluator → … → clean pass.
+
+- The Evaluator checks off DoD items only in a pass with no unresolved findings.
+- The Generator spawns a fresh Evaluator subagent after addressing findings.
+- The loop ends only when an Evaluator subagent completes a clean pass.
 
 ## Template
 
