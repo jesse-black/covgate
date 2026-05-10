@@ -1,3 +1,7 @@
+---
+description: "Completed ExecPlan for adding function and method coverage thresholds to covgate; read when tracing the origin of the functions metric, --fail-under-functions gate behavior, or the cross-format callable metric design."
+---
+
 # Covgate function and method thresholds
 
 Save this in-progress ExecPlan at `docs/exec-plans/active/0005-covgate-function-thresholds.md` while the work is being designed or implemented in this repository.

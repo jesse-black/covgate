@@ -1,3 +1,7 @@
+---
+description: "Completed ExecPlan for adding covgate record-base and switching agent bootstrap scripts from origin/main fetches to recorded worktree base refs; read when tracing the record-base command origin, base-ref recording semantics, or the same-branch vs new-branch bootstrap behavior."
+---
+
 # Add `covgate record-base` and switch agent bootstrap scripts from `origin/main` fetches to recorded worktree base refs
 
 Save the canonical completed ExecPlan in `docs/exec-plans/completed/0008-covgate-record-base-agent-workflows.md`. This work is complete; keep any future follow-up changes in a new active ExecPlan rather than moving this file back.

@@ -1,3 +1,7 @@
+---
+description: "Draft design doc for Swift LLVM coverage support in covgate; read when adding Swift coverage parsing, investigating Swift LLVM fixture behavior, or planning Swift-specific LLVM normalization work."
+---
+
 # Swift LLVM Coverage Support
 
 **Status:** Draft (Migrated from abandoned ExecPlan `covgate-cpp-swift-llvm-fixture-confidence.md`)

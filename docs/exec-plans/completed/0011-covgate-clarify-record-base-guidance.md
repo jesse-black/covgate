@@ -1,3 +1,7 @@
+---
+description: "Completed ExecPlan for clarifying when covgate record-base is required and making normal checkout the default workflow; read when understanding record-base guidance, the decision to make record-base optional in normal CI, or README workflow updates around base-ref handling."
+---
+
 # Clarify when `covgate record-base` is required and make the normal checkout workflow the default guidance
 
 Save the canonical completed ExecPlan in `docs/exec-plans/completed/0011-covgate-clarify-record-base-guidance.md`. This work is complete; keep any future follow-up changes in a new active ExecPlan rather than moving this file back.

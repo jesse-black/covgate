@@ -1,3 +1,7 @@
+---
+description: "Top-level architecture codemap and invariants for covgate; read when understanding system boundaries, implementation modules, coverage/diff/gate data flow, or where to start for parser, metric, gate, CLI, rendering, and testing changes."
+---
+
 # Architecture
 
 This document describes the high-level architecture of `covgate`.
@@ -172,7 +176,7 @@ If you are new to the codebase, read in this order:
 
 If you are investigating LLVM summary mismatches specifically, start with:
 
-- `docs/reference/llvm-export-semantics-investigation.md`
-- `docs/reference/function-coverage-debugging.md`
+- `docs/investigations/llvm-export-semantics-investigation.md`
+- `docs/investigations/function-coverage-debugging.md`
 - `tests/llvm_real_parity.rs`
 - `tests/llvm_diff_regression.rs`

@@ -1,3 +1,7 @@
+---
+description: "Completed ExecPlan for closing out the Coverlet function-summary investigation with a documented raw-method decision; read when tracing the decision to use raw Coverlet method counts, the ReportGenerator filtering investigation, or the Jenkins coverage-model comparison."
+---
+
 # Close out Coverlet function-summary investigation with a documented raw-method decision
 
 Save this completed ExecPlan in `docs/exec-plans/completed/0014-covgate-coverlet-function-summary-investigation.md`.
@@ -44,7 +48,7 @@ The repository decision is:
 
 ## Artifacts
 
-- Reference record: `docs/reference/coverlet-method-summary-semantics.md`
+- Reference record: `docs/investigations/coverlet-method-summary-semantics.md`
 - Related parser: `src/coverage/coverlet_json.rs`
 
 ## Closeout

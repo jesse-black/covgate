@@ -1,3 +1,7 @@
+---
+description: "Completed ExecPlan for adding crates.io package metadata and a tagged release workflow with checksums and provenance; read when tracing the release workflow design, binary release artifact policy, or the GitHub release automation origin."
+---
+
 # Add crates.io package metadata and a tagged release workflow with checksums and provenance
 
 The canonical completed copy of this ExecPlan lives at `docs/exec-plans/completed/0010-covgate-crates-io-metadata-and-release-workflow.md`. Keep any follow-up release-channel work in a new active ExecPlan rather than moving this file back.

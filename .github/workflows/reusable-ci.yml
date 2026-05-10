@@ -36,6 +36,16 @@ jobs:
       - name: Dependency hygiene
         run: cargo machete
 
+  documentation-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: taiki-e/install-action@4eac87a84609e7a285bcfd82df34e948017a9fcb # main
+        with:
+          tool: docgarden@0.1.0-rc2
+      - name: Documentation lint
+        run: docgarden lint docs --color never
+
   dependency-policy:
     runs-on: ubuntu-latest
     steps:

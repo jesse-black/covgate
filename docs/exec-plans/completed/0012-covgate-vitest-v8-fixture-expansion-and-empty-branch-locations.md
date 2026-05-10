@@ -1,3 +1,7 @@
+---
+description: "Completed ExecPlan for expanding the Vitest v8 fixture to reproduce empty branch locations and making the Istanbul parser tolerate them; read when understanding Vitest v8 branch parsing edge cases, empty branch location handling, or Istanbul parser robustness work."
+---
+
 # Expand the Vitest v8 repro fixture until it reproduces empty branch locations, then make the Istanbul parser tolerate them
 
 The canonical completed copy of this ExecPlan lives at `docs/exec-plans/completed/0012-covgate-vitest-v8-fixture-expansion-and-empty-branch-locations.md`. It was implemented from the in-progress copy that originally lived under `docs/exec-plans/active/`.

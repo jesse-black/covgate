@@ -1,3 +1,7 @@
+---
+description: "Design doc for Coverlet method-to-function normalization; read when investigating Coverlet function metric behavior, understanding how .NET method records become covgate function opportunities, or debugging method span or covered-state logic."
+---
+
 # Coverlet method-to-function normalization in `covgate`
 
 This document defines how `covgate` converts Coverlet-native method records into the public `functions` metric.

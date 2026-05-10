@@ -1,3 +1,7 @@
+---
+description: "Design doc for path-scoped gates; read when understanding how file-path glob patterns scope gate rules, how zero-opportunity files render N/A, or how the compact console output and gate row behavior works for configured gates."
+---
+
 # Design Doc: Path-Scoped Gates for File-Type Policy
 
 ## Context & Problem Statement
@@ -84,7 +88,7 @@ fail-under-lines = 90
 - `include` and `exclude` use gitignore-style matching through the `ignore` crate.
 - Patterns match normalized repo-relative paths, the same shape `covgate` already uses internally after coverage path normalization. Example: `src/profileCard.tsx`.
 - Scope matching should also respect repository ignore rules through the same `ignore` crate machinery, so ignored files do not match scoped gates unless a gate pattern explicitly re-includes them.
-- A scoped gate participates only when at least one changed file in the current diff matches it.
+- All configured gates render rule rows in output; a gate shows `N/A (0/0)` for any metric with zero changed opportunities in its scope.
 - Rules inside a scoped gate evaluate only coverage opportunities whose file path matches that gate.
 - A changed file may match at most one scoped gate. If a file matches multiple scoped gates, configuration loading should fail with an error that names the overlapping gates and the file path.
 - If a fallback gate exists, it applies only to changed files that match no scoped gate.
@@ -106,7 +110,7 @@ Each target reuses the existing gate flow:
 
 Important behavior:
 
-- Percent rules keep the current zero-total semantics: if a participating scope has zero changed opportunities for a configured metric, the observed percent is `100.0`.
+- Percent rules with zero changed opportunities for a configured metric render `N/A (0/0)` rather than a numeric percent.
 - Uncovered-count rules keep the current zero-total semantics: zero uncovered opportunities passes a `<= N` rule.
 - Unsupported metrics remain errors. For example, a scope that configures `fail-under-regions` against an Istanbul-only report should fail with a scope-aware version of the current “metric not supported by the loaded report” error.
 
@@ -121,62 +125,58 @@ If `name` is present, use it. If `name` is absent, derive a stable label:
 - scoped gate: join the `include` patterns, or render as `gate #N` if that is too long
 - fallback gate: render as `default`
 
-Example minimal output:
+Example compact console output:
 
 ```text
-PASS  [js-logic] Lines:      100.00% (12/12) >= 95.00%
-PASS  [js-logic] Branches:    90.00% (9/10)  >= 90.00%
-FAIL  [js-ui]    Lines:       75.00% (3/4)   >= 80.00%
-PASS  [js-ui]    Branches:   100.00% (2/2)   >= 70.00%
+[js-logic] PASS Lines: 100.00% (12/12) ≥ 95.00%
+[js-logic] PASS Branches: 90.00% (9/10) ≥ 90.00%
+[js-ui] FAIL Lines: 75.00% (3/4) ≥ 80.00%
+[js-ui] PASS Branches: 100.00% (2/2) ≥ 70.00%
 ```
 
 Unnamed fallback gate when multiple gates participate:
 
 ```text
-PASS  [default] Lines:      95.00% (19/20) >= 90.00%
-PASS  [default] Branches:   80.00% (8/10)  >= 80.00%
+[default] PASS Lines: 95.00% (19/20) ≥ 90.00%
+[default] PASS Branches: 80.00% (8/10) ≥ 80.00%
 ```
 
-Unnamed fallback gate when it is the only participating gate:
+Unnamed fallback gate when it is the only participating gate (no bracket prefix):
 
 ```text
-PASS  Lines:      95.00% (19/20) >= 90.00%
-PASS  Branches:   80.00% (8/10)  >= 80.00%
+PASS Lines: 95.00% (19/20) ≥ 90.00%
+PASS Branches: 80.00% (8/10) ≥ 80.00%
 ```
 
-In verbose mode, group output by gate.
+Console output is compact only; there is no verbose mode.
 
-Markdown should keep the existing table-based structure.
-
-When multiple gates participate, add a `Gate` column to the existing Markdown tables:
+Markdown uses a `Gate` column in the diff coverage summary table when labeled gates are configured:
 
 ```md
 ### Diff Coverage
 
 | Gate | Result | Rule | Observed | Configured |
 | --- | --- | --- | ---: | ---: |
-| `js-logic` | ✅PASS | `fail-under-lines` | 100.00% | ≥ 95.00% |
-| `js-logic` | ✅PASS | `fail-under-branches` | 90.00% | ≥ 90.00% |
-| `js-ui` | ❌FAIL | `fail-under-lines` | 75.00% | ≥ 80.00% |
-| `js-ui` | ✅PASS | `fail-under-branches` | 100.00% | ≥ 70.00% |
+| `js-logic` | ✅PASS | `fail-under-lines` | 100.00% (12/12) | ≥ 95.00% |
+| `js-logic` | ✅PASS | `fail-under-branches` | 90.00% (9/10) | ≥ 90.00% |
+| `js-ui` | ❌FAIL | `fail-under-lines` | 75.00% (3/4) | ≥ 80.00% |
+| `js-ui` | ✅PASS | `fail-under-branches` | 100.00% (2/2) | ≥ 70.00% |
 ```
 
-Per-metric tables should follow the same pattern:
+Per-metric changed file tables do not include a `Gate` column; they show global changed metrics across all gates:
 
 ```md
 #### Line
 
-| Gate | File | Covered Changed Lines | Changed Lines | Coverage | Missed Changed Spans |
-| --- | --- | ---: | ---: | ---: | --- |
-| `js-logic` | `src/math.ts` | 12 | 12 | 100.00% 🟢 |  |
-| `js-ui` | `src/profileCard.tsx` | 3 | 4 | 75.00% 🟡 | `42-44` |
-| **js-logic Total** |  | **12** | **12** | **100.00% 🟢** |  |
-| **js-ui Total** |  | **3** | **4** | **75.00% 🟡** |  |
+| File | Covered Changed Lines | Changed Lines | Coverage | Missed Changed Spans |
+| --- | ---: | ---: | ---: | --- |
+| `src/math.ts` | 12 | 12 | 100.00% 🟢 |  |
+| `src/profileCard.tsx` | 3 | 4 | 75.00% 🟡 | `42-44` |
 ```
 
 If an unnamed fallback gate participates alongside named gates, render it as `default` in the `Gate` column.
 
-If the unnamed fallback gate is the only participating gate, keep the current Markdown shape with no `Gate` column.
+If the unnamed fallback gate is the only participating gate, keep the existing Markdown shape with no `Gate` column.
 
 ---
 

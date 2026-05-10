@@ -1,3 +1,7 @@
+---
+description: "Completed ExecPlan for adding Istanbul native JSON support with a Vitest v8 fixture; read when tracing the origin of Istanbul/Vitest parser support, coverage-final.json parsing, or the initial JavaScript/TypeScript diff-gate integration."
+---
+
 # Covgate Istanbul native JSON support with a Vite/Vitest v8 fixture
 
 This ExecPlan is complete and archived in `docs/exec-plans/completed/0006-covgate-vitest-istanbul-native-json-fixture.md` for historical traceability.

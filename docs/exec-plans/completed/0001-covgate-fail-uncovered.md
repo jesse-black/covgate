@@ -1,3 +1,7 @@
+---
+description: "Completed ExecPlan for adding uncovered-count gates (--fail-uncovered-regions, --fail-uncovered-lines, etc.) to covgate; read when tracing the origin of uncovered-count gate behavior, understanding max-uncovered budget gates, or reviewing the initial fail-uncovered implementation."
+---
+
 # Covgate fail-uncovered gates
 
 This ExecPlan is complete and archived in `docs/exec-plans/completed/0001-covgate-fail-uncovered.md` for historical traceability.

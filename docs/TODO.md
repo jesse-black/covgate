@@ -1,3 +1,7 @@
+---
+description: "Follow-up tasks and cleanup items; read when looking for deferred implementation work, small backlog items, or candidate topics to promote into a future ExecPlan."
+---
+
 # TODO
 
 This file tracks follow-up cleanup ideas that came up during planning but are not currently part of an active exec plan.

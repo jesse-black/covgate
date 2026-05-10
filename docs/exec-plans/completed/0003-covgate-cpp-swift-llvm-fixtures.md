@@ -1,3 +1,7 @@
+---
+description: "Completed ExecPlan for adding C/C++ and Swift LLVM coverage fixtures; read when understanding the initial C/C++ and Swift parser fixture setup or tracing fixture-backed regression coverage for non-Rust LLVM sources."
+---
+
 # Add C/C++ and Swift LLVM coverage fixtures
 
 Save this in-progress ExecPlan at `docs/exec-plans/active/0003-covgate-cpp-swift-llvm-fixtures.md` while the work is being designed or implemented in this repository.
