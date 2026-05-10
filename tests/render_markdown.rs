@@ -5,7 +5,7 @@ use covgate::model::{
     SourceSpan,
 };
 use covgate::render::markdown::render;
-use helpers::{percent_outcome, single_scope_result, uncovered_outcome};
+use helpers::{percent_outcome, uncovered_outcome};
 use std::{collections::BTreeMap, path::PathBuf};
 
 fn multi_scope_result(
@@ -69,43 +69,49 @@ fn renders_gate_column_for_single_labeled_scope() {
 
 #[test]
 fn renders_markdown_tables() {
-    let result = single_scope_result(
-        vec![ComputedMetric {
-            metric: MetricKind::Region,
-            covered: 1,
-            total: 2,
-            percent: 50.0,
-            uncovered_changed_opportunities: vec![covgate::model::CoverageOpportunity {
-                kind: OpportunityKind::Region,
-                span: SourceSpan {
-                    path: PathBuf::from("src/lib.rs"),
-                    start_line: 5,
-                    end_line: 6,
-                    start_col: None,
-                    end_col: None,
-                },
-                covered: false,
-                is_named_function: None,
-                named_function_identity: None,
-            }],
-            changed_totals_by_file: BTreeMap::from([(
-                PathBuf::from("src/lib.rs"),
-                FileTotals {
-                    covered: 1,
-                    total: 2,
-                },
-            )]),
-            totals_by_file: BTreeMap::from([(
-                PathBuf::from("src/lib.rs"),
-                FileTotals {
-                    covered: 3,
-                    total: 4,
-                },
-            )]),
+    let metric = ComputedMetric {
+        metric: MetricKind::Region,
+        covered: 1,
+        total: 2,
+        percent: 50.0,
+        uncovered_changed_opportunities: vec![covgate::model::CoverageOpportunity {
+            kind: OpportunityKind::Region,
+            span: SourceSpan {
+                path: PathBuf::from("src/lib.rs"),
+                start_line: 5,
+                end_line: 6,
+                start_col: None,
+                end_col: None,
+            },
+            covered: false,
+            is_named_function: None,
+            named_function_identity: None,
         }],
-        vec![percent_outcome(MetricKind::Region, 90.0, false, 50.0, 1, 2)],
-        false,
-    );
+        changed_totals_by_file: BTreeMap::from([(
+            PathBuf::from("src/lib.rs"),
+            FileTotals {
+                covered: 1,
+                total: 2,
+            },
+        )]),
+        totals_by_file: BTreeMap::from([(
+            PathBuf::from("src/lib.rs"),
+            FileTotals {
+                covered: 3,
+                total: 4,
+            },
+        )]),
+    };
+    let result = CheckResult {
+        gates: vec![GateEvaluation {
+            label: None,
+            rules: vec![percent_outcome(MetricKind::Region, 90.0, false, 50.0, 1, 2)],
+            passed: false,
+        }],
+        changed_metrics: vec![metric.clone()],
+        overall_metrics: vec![metric],
+        passed: false,
+    };
 
     let rendered = render(&result, "origin/main...HEAD");
     assert!(rendered.contains("| Result | Rule | Observed | Configured |"));
@@ -124,54 +130,60 @@ fn renders_markdown_tables() {
 
 #[test]
 fn renders_all_nonzero_metrics_in_markdown_summary() {
-    let result = single_scope_result(
-        vec![
-            ComputedMetric {
-                metric: MetricKind::Region,
-                covered: 1,
-                total: 2,
-                percent: 50.0,
-                uncovered_changed_opportunities: Vec::new(),
-                changed_totals_by_file: BTreeMap::from([(
-                    PathBuf::from("src/lib.rs"),
-                    FileTotals {
-                        covered: 1,
-                        total: 2,
-                    },
-                )]),
-                totals_by_file: BTreeMap::from([(
-                    PathBuf::from("src/lib.rs"),
-                    FileTotals {
-                        covered: 3,
-                        total: 4,
-                    },
-                )]),
-            },
-            ComputedMetric {
-                metric: MetricKind::Line,
-                covered: 2,
-                total: 2,
-                percent: 100.0,
-                uncovered_changed_opportunities: Vec::new(),
-                changed_totals_by_file: BTreeMap::from([(
-                    PathBuf::from("src/lib.rs"),
-                    FileTotals {
-                        covered: 2,
-                        total: 2,
-                    },
-                )]),
-                totals_by_file: BTreeMap::from([(
-                    PathBuf::from("src/lib.rs"),
-                    FileTotals {
-                        covered: 5,
-                        total: 5,
-                    },
-                )]),
-            },
-        ],
-        vec![percent_outcome(MetricKind::Region, 90.0, false, 50.0, 1, 2)],
-        false,
-    );
+    let metrics = vec![
+        ComputedMetric {
+            metric: MetricKind::Region,
+            covered: 1,
+            total: 2,
+            percent: 50.0,
+            uncovered_changed_opportunities: Vec::new(),
+            changed_totals_by_file: BTreeMap::from([(
+                PathBuf::from("src/lib.rs"),
+                FileTotals {
+                    covered: 1,
+                    total: 2,
+                },
+            )]),
+            totals_by_file: BTreeMap::from([(
+                PathBuf::from("src/lib.rs"),
+                FileTotals {
+                    covered: 3,
+                    total: 4,
+                },
+            )]),
+        },
+        ComputedMetric {
+            metric: MetricKind::Line,
+            covered: 2,
+            total: 2,
+            percent: 100.0,
+            uncovered_changed_opportunities: Vec::new(),
+            changed_totals_by_file: BTreeMap::from([(
+                PathBuf::from("src/lib.rs"),
+                FileTotals {
+                    covered: 2,
+                    total: 2,
+                },
+            )]),
+            totals_by_file: BTreeMap::from([(
+                PathBuf::from("src/lib.rs"),
+                FileTotals {
+                    covered: 5,
+                    total: 5,
+                },
+            )]),
+        },
+    ];
+    let result = CheckResult {
+        gates: vec![GateEvaluation {
+            label: None,
+            rules: vec![percent_outcome(MetricKind::Region, 90.0, false, 50.0, 1, 2)],
+            passed: false,
+        }],
+        changed_metrics: metrics.clone(),
+        overall_metrics: metrics,
+        passed: false,
+    };
 
     let rendered = render(&result, "origin/main...HEAD");
     assert!(rendered.contains("#### Region"));
@@ -318,8 +330,16 @@ fn renders_global_unlabeled_overall_coverage_for_multi_scope_results() {
 
 #[test]
 fn renders_rule_status_with_unicode_icons() {
-    let result = single_scope_result(
-        vec![ComputedMetric {
+    let result = CheckResult {
+        gates: vec![GateEvaluation {
+            label: None,
+            rules: vec![
+                percent_outcome(MetricKind::Region, 90.0, true, 100.0, 2, 2),
+                uncovered_outcome(MetricKind::Region, 0, false, 1),
+            ],
+            passed: false,
+        }],
+        changed_metrics: vec![ComputedMetric {
             metric: MetricKind::Region,
             covered: 2,
             total: 2,
@@ -334,12 +354,9 @@ fn renders_rule_status_with_unicode_icons() {
             )]),
             totals_by_file: BTreeMap::new(),
         }],
-        vec![
-            percent_outcome(MetricKind::Region, 90.0, true, 100.0, 2, 2),
-            uncovered_outcome(MetricKind::Region, 0, false, 1),
-        ],
-        false,
-    );
+        overall_metrics: Vec::new(),
+        passed: false,
+    };
 
     let rendered = render(&result, "origin/main...HEAD");
     assert!(rendered.contains("| ✅PASS | `fail-under-regions` | 100.00% (2/2) | ≥ 90.00% |"));
@@ -348,8 +365,13 @@ fn renders_rule_status_with_unicode_icons() {
 
 #[test]
 fn renders_zero_total_percent_rules_as_na_with_counts() {
-    let result = single_scope_result(
-        vec![ComputedMetric {
+    let result = CheckResult {
+        gates: vec![GateEvaluation {
+            label: None,
+            rules: vec![percent_outcome(MetricKind::Line, 80.0, true, 100.0, 0, 0)],
+            passed: true,
+        }],
+        changed_metrics: vec![ComputedMetric {
             metric: MetricKind::Line,
             covered: 0,
             total: 0,
@@ -358,9 +380,9 @@ fn renders_zero_total_percent_rules_as_na_with_counts() {
             changed_totals_by_file: BTreeMap::new(),
             totals_by_file: BTreeMap::new(),
         }],
-        vec![percent_outcome(MetricKind::Line, 80.0, true, 100.0, 0, 0)],
-        true,
-    );
+        overall_metrics: Vec::new(),
+        passed: true,
+    };
 
     let rendered = render(&result, "origin/main...HEAD");
     assert!(rendered.contains("| ✅PASS | `fail-under-lines` | N/A (0/0) | ≥ 80.00% |"));
@@ -369,63 +391,69 @@ fn renders_zero_total_percent_rules_as_na_with_counts() {
 
 #[test]
 fn renders_coverage_with_threshold_circles() {
-    let result = single_scope_result(
-        vec![ComputedMetric {
-            metric: MetricKind::Region,
-            covered: 1,
-            total: 3,
-            percent: 33.33,
-            uncovered_changed_opportunities: Vec::new(),
-            changed_totals_by_file: BTreeMap::from([
-                (
-                    PathBuf::from("src/red.rs"),
-                    FileTotals {
-                        covered: 0,
-                        total: 3,
-                    },
-                ),
-                (
-                    PathBuf::from("src/yellow.rs"),
-                    FileTotals {
-                        covered: 1,
-                        total: 2,
-                    },
-                ),
-                (
-                    PathBuf::from("src/green.rs"),
-                    FileTotals {
-                        covered: 4,
-                        total: 4,
-                    },
-                ),
-            ]),
-            totals_by_file: BTreeMap::from([
-                (
-                    PathBuf::from("src/red.rs"),
-                    FileTotals {
-                        covered: 2,
-                        total: 5,
-                    },
-                ),
-                (
-                    PathBuf::from("src/yellow.rs"),
-                    FileTotals {
-                        covered: 3,
-                        total: 4,
-                    },
-                ),
-                (
-                    PathBuf::from("src/green.rs"),
-                    FileTotals {
-                        covered: 5,
-                        total: 5,
-                    },
-                ),
-            ]),
+    let metric = ComputedMetric {
+        metric: MetricKind::Region,
+        covered: 1,
+        total: 3,
+        percent: 33.33,
+        uncovered_changed_opportunities: Vec::new(),
+        changed_totals_by_file: BTreeMap::from([
+            (
+                PathBuf::from("src/red.rs"),
+                FileTotals {
+                    covered: 0,
+                    total: 3,
+                },
+            ),
+            (
+                PathBuf::from("src/yellow.rs"),
+                FileTotals {
+                    covered: 1,
+                    total: 2,
+                },
+            ),
+            (
+                PathBuf::from("src/green.rs"),
+                FileTotals {
+                    covered: 4,
+                    total: 4,
+                },
+            ),
+        ]),
+        totals_by_file: BTreeMap::from([
+            (
+                PathBuf::from("src/red.rs"),
+                FileTotals {
+                    covered: 2,
+                    total: 5,
+                },
+            ),
+            (
+                PathBuf::from("src/yellow.rs"),
+                FileTotals {
+                    covered: 3,
+                    total: 4,
+                },
+            ),
+            (
+                PathBuf::from("src/green.rs"),
+                FileTotals {
+                    covered: 5,
+                    total: 5,
+                },
+            ),
+        ]),
+    };
+    let result = CheckResult {
+        gates: vec![GateEvaluation {
+            label: None,
+            rules: Vec::new(),
+            passed: true,
         }],
-        vec![],
-        true,
-    );
+        changed_metrics: vec![metric.clone()],
+        overall_metrics: vec![metric],
+        passed: true,
+    };
 
     let rendered = render(&result, "origin/main...HEAD");
     assert!(rendered.contains("| `src/red.rs` | 0 | 3 | 0.00% 🔴 |"));
@@ -438,8 +466,20 @@ fn renders_coverage_with_threshold_circles() {
 
 #[test]
 fn groups_duplicate_spans_with_counts() {
-    let result = single_scope_result(
-        vec![ComputedMetric {
+    let result = CheckResult {
+        gates: vec![GateEvaluation {
+            label: None,
+            rules: vec![percent_outcome(
+                MetricKind::Region,
+                90.0,
+                false,
+                33.33,
+                1,
+                3,
+            )],
+            passed: false,
+        }],
+        changed_metrics: vec![ComputedMetric {
             metric: MetricKind::Region,
             covered: 1,
             total: 3,
@@ -481,16 +521,9 @@ fn groups_duplicate_spans_with_counts() {
             )]),
             totals_by_file: BTreeMap::new(),
         }],
-        vec![percent_outcome(
-            MetricKind::Region,
-            90.0,
-            false,
-            33.33,
-            1,
-            3,
-        )],
-        false,
-    );
+        overall_metrics: Vec::new(),
+        passed: false,
+    };
 
     let rendered = render(&result, "origin/main...HEAD");
     assert!(rendered.contains("`5-6(2)`"));
@@ -498,8 +531,20 @@ fn groups_duplicate_spans_with_counts() {
 
 #[test]
 fn sorts_spans_numerically() {
-    let result = single_scope_result(
-        vec![ComputedMetric {
+    let result = CheckResult {
+        gates: vec![GateEvaluation {
+            label: None,
+            rules: vec![percent_outcome(
+                MetricKind::Region,
+                90.0,
+                false,
+                33.33,
+                1,
+                3,
+            )],
+            passed: false,
+        }],
+        changed_metrics: vec![ComputedMetric {
             metric: MetricKind::Region,
             covered: 1,
             total: 3,
@@ -541,16 +586,9 @@ fn sorts_spans_numerically() {
             )]),
             totals_by_file: BTreeMap::new(),
         }],
-        vec![percent_outcome(
-            MetricKind::Region,
-            90.0,
-            false,
-            33.33,
-            1,
-            3,
-        )],
-        false,
-    );
+        overall_metrics: Vec::new(),
+        passed: false,
+    };
 
     let rendered = render(&result, "origin/main...HEAD");
     let row = rendered

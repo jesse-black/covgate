@@ -1,23 +1,4 @@
-use covgate::model::{
-    CheckResult, ComputedMetric, GateEvaluation, GateRule, MetricKind, RuleOutcome,
-};
-
-pub fn single_scope_result(
-    metrics: Vec<ComputedMetric>,
-    rules: Vec<RuleOutcome>,
-    passed: bool,
-) -> CheckResult {
-    CheckResult {
-        gates: vec![GateEvaluation {
-            label: None,
-            rules,
-            passed,
-        }],
-        changed_metrics: metrics.clone(),
-        overall_metrics: metrics,
-        passed,
-    }
-}
+use covgate::model::{GateRule, MetricKind, RuleOutcome};
 
 pub fn percent_outcome(
     metric: MetricKind,

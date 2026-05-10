@@ -1,16 +1,22 @@
 mod helpers;
 
 use covgate::model::{
-    ComputedMetric, CoverageOpportunity, FileTotals, MetricKind, OpportunityKind, SourceSpan,
+    CheckResult, ComputedMetric, CoverageOpportunity, FileTotals, GateEvaluation, MetricKind,
+    OpportunityKind, SourceSpan,
 };
 use covgate::render::console::render;
-use helpers::{percent_outcome, single_scope_result, uncovered_outcome};
+use helpers::{percent_outcome, uncovered_outcome};
 use std::{collections::BTreeMap, path::PathBuf};
 
 #[test]
 fn renders_console_summary_minimal() {
-    let result = single_scope_result(
-        vec![ComputedMetric {
+    let result = CheckResult {
+        gates: vec![GateEvaluation {
+            label: None,
+            rules: vec![percent_outcome(MetricKind::Region, 90.0, false, 50.0, 1, 2)],
+            passed: false,
+        }],
+        changed_metrics: vec![ComputedMetric {
             metric: MetricKind::Region,
             covered: 1,
             total: 2,
@@ -37,9 +43,9 @@ fn renders_console_summary_minimal() {
             )]),
             totals_by_file: BTreeMap::new(),
         }],
-        vec![percent_outcome(MetricKind::Region, 90.0, false, 50.0, 1, 2)],
-        false,
-    );
+        overall_metrics: Vec::new(),
+        passed: false,
+    };
 
     let rendered = render(&result, "origin/main...HEAD");
     assert!(!rendered.contains("Diff Coverage: FAIL"));
@@ -52,8 +58,13 @@ fn renders_console_summary_minimal() {
 
 #[test]
 fn renders_zero_total_percent_rules_as_na() {
-    let result = single_scope_result(
-        vec![ComputedMetric {
+    let result = CheckResult {
+        gates: vec![GateEvaluation {
+            label: None,
+            rules: vec![percent_outcome(MetricKind::Line, 80.0, true, 100.0, 0, 0)],
+            passed: true,
+        }],
+        changed_metrics: vec![ComputedMetric {
             metric: MetricKind::Line,
             covered: 0,
             total: 0,
@@ -62,9 +73,9 @@ fn renders_zero_total_percent_rules_as_na() {
             changed_totals_by_file: BTreeMap::new(),
             totals_by_file: BTreeMap::new(),
         }],
-        vec![percent_outcome(MetricKind::Line, 80.0, true, 100.0, 0, 0)],
-        true,
-    );
+        overall_metrics: Vec::new(),
+        passed: true,
+    };
 
     let rendered = render(&result, "origin/main...HEAD");
     assert!(rendered.contains("PASS  Lines:"));
@@ -75,8 +86,20 @@ fn renders_zero_total_percent_rules_as_na() {
 
 #[test]
 fn groups_duplicate_spans_with_counts() {
-    let result = single_scope_result(
-        vec![ComputedMetric {
+    let result = CheckResult {
+        gates: vec![GateEvaluation {
+            label: None,
+            rules: vec![percent_outcome(
+                MetricKind::Region,
+                90.0,
+                false,
+                33.33,
+                1,
+                3,
+            )],
+            passed: false,
+        }],
+        changed_metrics: vec![ComputedMetric {
             metric: MetricKind::Region,
             covered: 1,
             total: 3,
@@ -118,16 +141,9 @@ fn groups_duplicate_spans_with_counts() {
             )]),
             totals_by_file: BTreeMap::new(),
         }],
-        vec![percent_outcome(
-            MetricKind::Region,
-            90.0,
-            false,
-            33.33,
-            1,
-            3,
-        )],
-        false,
-    );
+        overall_metrics: Vec::new(),
+        passed: false,
+    };
 
     let rendered = render(&result, "origin/main...HEAD");
     assert!(rendered.contains("5-6(2)"));
@@ -135,8 +151,20 @@ fn groups_duplicate_spans_with_counts() {
 
 #[test]
 fn sorts_spans_numerically() {
-    let result = single_scope_result(
-        vec![ComputedMetric {
+    let result = CheckResult {
+        gates: vec![GateEvaluation {
+            label: None,
+            rules: vec![percent_outcome(
+                MetricKind::Region,
+                90.0,
+                false,
+                33.33,
+                1,
+                3,
+            )],
+            passed: false,
+        }],
+        changed_metrics: vec![ComputedMetric {
             metric: MetricKind::Region,
             covered: 1,
             total: 3,
@@ -178,16 +206,9 @@ fn sorts_spans_numerically() {
             )]),
             totals_by_file: BTreeMap::new(),
         }],
-        vec![percent_outcome(
-            MetricKind::Region,
-            90.0,
-            false,
-            33.33,
-            1,
-            3,
-        )],
-        false,
-    );
+        overall_metrics: Vec::new(),
+        passed: false,
+    };
 
     let rendered = render(&result, "origin/main...HEAD");
     let spans_row = rendered
@@ -199,8 +220,13 @@ fn sorts_spans_numerically() {
 
 #[test]
 fn omits_non_gated_metrics_from_minimal_output() {
-    let result = single_scope_result(
-        vec![
+    let result = CheckResult {
+        gates: vec![GateEvaluation {
+            label: None,
+            rules: vec![percent_outcome(MetricKind::Region, 90.0, false, 50.0, 1, 2)],
+            passed: false,
+        }],
+        changed_metrics: vec![
             ComputedMetric {
                 metric: MetricKind::Region,
                 covered: 1,
@@ -220,9 +246,9 @@ fn omits_non_gated_metrics_from_minimal_output() {
                 totals_by_file: BTreeMap::new(),
             },
         ],
-        vec![percent_outcome(MetricKind::Region, 90.0, false, 50.0, 1, 2)],
-        false,
-    );
+        overall_metrics: Vec::new(),
+        passed: false,
+    };
 
     let rendered = render(&result, "origin/main...HEAD");
     assert!(rendered.contains("Regions:"));
@@ -231,8 +257,16 @@ fn omits_non_gated_metrics_from_minimal_output() {
 
 #[test]
 fn aligns_comparators_vertically() {
-    let result = single_scope_result(
-        vec![
+    let result = CheckResult {
+        gates: vec![GateEvaluation {
+            label: None,
+            rules: vec![
+                percent_outcome(MetricKind::Region, 90.0, false, 10.0, 100, 1000),
+                uncovered_outcome(MetricKind::Function, 0, true, 0),
+            ],
+            passed: false,
+        }],
+        changed_metrics: vec![
             ComputedMetric {
                 metric: MetricKind::Region,
                 covered: 100,
@@ -252,12 +286,9 @@ fn aligns_comparators_vertically() {
                 totals_by_file: BTreeMap::new(),
             },
         ],
-        vec![
-            percent_outcome(MetricKind::Region, 90.0, false, 10.0, 100, 1000),
-            uncovered_outcome(MetricKind::Function, 0, true, 0),
-        ],
-        false,
-    );
+        overall_metrics: Vec::new(),
+        passed: false,
+    };
 
     let rendered = render(&result, "diff");
     let lines: Vec<_> = rendered
