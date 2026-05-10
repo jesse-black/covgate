@@ -21,10 +21,7 @@ fn main() -> Result<()> {
             let force = args.next().as_deref() == Some("--force");
             llvm_cov_task(force)
         }
-        "covgate" => {
-            let verbose = args.any(|a| a == "--verbose");
-            covgate_task(verbose)
-        }
+        "covgate" => covgate_task(),
         "release-version" => {
             let Some(version) = args.next() else {
                 bail!("usage: cargo xtask release-version <semver>");
@@ -1030,7 +1027,7 @@ fn llvm_cov_task(force: bool) -> Result<()> {
     run_llvm_cov(&coverage_path)
 }
 
-fn covgate_task(verbose: bool) -> Result<()> {
+fn covgate_task() -> Result<()> {
     let coverage_path = stable_coverage_path();
     if !coverage_is_fresh(&coverage_path) {
         run_llvm_cov(&coverage_path)?;
@@ -1038,11 +1035,10 @@ fn covgate_task(verbose: bool) -> Result<()> {
     let coverage_json_str = coverage_path
         .to_str()
         .context("coverage output path contained non-utf8 characters")?;
-    let mut covgate_args = vec!["run", "--bin", "covgate", "--", "check", coverage_json_str];
-    if verbose {
-        covgate_args.push("--verbose");
-    }
-    run("cargo", &covgate_args)
+    run(
+        "cargo",
+        &["run", "--bin", "covgate", "--", "check", coverage_json_str],
+    )
 }
 
 fn chrono_like_timestamp() -> u128 {
@@ -1241,4 +1237,5 @@ edition = "2024"
             "unexpected error: {error:#}"
         );
     }
+
 }
