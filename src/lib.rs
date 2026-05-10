@@ -14,7 +14,7 @@ use std::collections::BTreeSet;
 use crate::{
     config::{Config, ConfiguredGate},
     diff::DiffSource,
-    model::{ChangedFile, GateResult, MetricKind},
+    model::{ChangedFile, CheckResult, ComputedMetric, MetricKind},
 };
 
 pub fn run(config: Config) -> Result<i32> {
@@ -23,7 +23,6 @@ pub fn run(config: Config) -> Result<i32> {
         diff_source,
         gates,
         markdown_output,
-        verbose,
     } = config;
     let coverage_report = &coverage_report;
     let diff_source = &diff_source;
@@ -48,9 +47,9 @@ pub fn run(config: Config) -> Result<i32> {
     let overall_metrics = overall_metrics;
 
     let gate_inputs = assign_changed_files(&report, &diff, gates)?;
-    let mut scopes = Vec::new();
+    let mut gate_evaluations = Vec::new();
 
-    for gate_input in gate_inputs {
+    for gate_input in &gate_inputs {
         let mut metrics = Vec::new();
         let mut requested_metrics = gate_input
             .gate
@@ -61,65 +60,87 @@ pub fn run(config: Config) -> Result<i32> {
         requested_metrics.sort();
         requested_metrics.dedup();
 
-        let available_metrics = report
-            .totals_by_file
-            .iter()
-            .filter(|(metric, totals)| {
-                !requested_metrics.contains(metric)
-                    && totals.iter().any(|(path, file_totals)| {
-                        gate_input.paths.contains(path) && file_totals.total > 0
-                    })
-            })
-            .map(|(metric, _)| *metric)
-            .collect::<Vec<_>>();
-        requested_metrics.extend(available_metrics);
-
         for metric_kind in requested_metrics {
-            let metric = metrics::compute_changed_metric(
+            let metric = match metrics::compute_changed_metric(
                 &report,
                 &gate_input.changed_files,
                 &gate_input.paths,
                 metric_kind,
-            )?;
+            ) {
+                Ok(metric) => metric,
+                Err(_) if !gate_input.has_assigned_changes => empty_changed_metric(metric_kind),
+                Err(error) => return Err(error),
+            };
             metrics.push(metric);
         }
 
-        let scope = gate::evaluate(
+        let evaluation = gate::evaluate(
             gate_input.gate.label.clone(),
             metrics,
             &gate_input.gate.rules,
         )?;
-        scopes.push(scope);
+        gate_evaluations.push(evaluation);
     }
-    let scopes = scopes;
+    let gate_evaluations = gate_evaluations;
+    let changed_metrics = compute_run_changed_metrics(&report, &diff)?;
 
-    let gate_result = GateResult {
-        passed: scopes.iter().all(|scope| scope.passed),
-        scopes,
+    let check_result = CheckResult {
+        passed: gate_evaluations.iter().all(|gate| gate.passed),
+        gates: gate_evaluations,
+        changed_metrics,
         overall_metrics,
     };
 
-    let verbosity = if verbose {
-        crate::model::Verbosity::Verbose
-    } else {
-        crate::model::Verbosity::Normal
-    };
-
-    let console = render::console::render(&gate_result, &diff_source.describe(), verbosity);
+    let console = render::console::render(&check_result, &diff_source.describe());
     println!("{console}");
 
     if let Some(path) = markdown_output {
-        let markdown = render::markdown::render(&gate_result, &diff_source.describe());
+        let markdown = render::markdown::render(&check_result, &diff_source.describe());
         std::fs::write(path, markdown)?;
     }
 
-    Ok(if gate_result.passed { 0 } else { 1 })
+    Ok(if check_result.passed { 0 } else { 1 })
+}
+
+fn compute_run_changed_metrics(
+    report: &crate::model::CoverageReport,
+    diff: &[ChangedFile],
+) -> Result<Vec<ComputedMetric>> {
+    let included_paths = supported_files(report);
+    let mut metrics = Vec::new();
+    for metric_kind in report.totals_by_file.iter().filter_map(|(metric, totals)| {
+        totals
+            .values()
+            .any(|file_totals| file_totals.total > 0)
+            .then_some(*metric)
+    }) {
+        metrics.push(metrics::compute_changed_metric(
+            report,
+            diff,
+            &included_paths,
+            metric_kind,
+        )?);
+    }
+    Ok(metrics)
+}
+
+fn empty_changed_metric(metric: MetricKind) -> ComputedMetric {
+    ComputedMetric {
+        metric,
+        covered: 0,
+        total: 0,
+        percent: 100.0,
+        uncovered_changed_opportunities: Vec::new(),
+        changed_totals_by_file: std::collections::BTreeMap::new(),
+        totals_by_file: std::collections::BTreeMap::new(),
+    }
 }
 
 struct GateRunInput<'a> {
     gate: &'a ConfiguredGate,
     changed_files: Vec<ChangedFile>,
     paths: BTreeSet<std::path::PathBuf>,
+    has_assigned_changes: bool,
 }
 
 fn assign_changed_files<'a>(
@@ -127,15 +148,7 @@ fn assign_changed_files<'a>(
     diff: &[ChangedFile],
     gates: &'a [ConfiguredGate],
 ) -> Result<Vec<GateRunInput<'a>>> {
-    let supported_files = report
-        .totals_by_file
-        .values()
-        .flat_map(|totals| {
-            totals
-                .iter()
-                .filter_map(|(path, totals)| (totals.total > 0).then_some(path.clone()))
-        })
-        .collect::<BTreeSet<_>>();
+    let supported_files = supported_files(report);
     let mut scoped_inputs = gates
         .iter()
         .filter(|gate| !gate.is_fallback())
@@ -143,6 +156,7 @@ fn assign_changed_files<'a>(
             gate,
             changed_files: Vec::new(),
             paths: BTreeSet::new(),
+            has_assigned_changes: false,
         })
         .collect::<Vec<_>>();
     let has_scoped_gates = !scoped_inputs.is_empty();
@@ -193,28 +207,42 @@ fn assign_changed_files<'a>(
         }
     }
 
-    let mut participating = scoped_inputs
-        .into_iter()
-        .filter(|input| !input.changed_files.is_empty())
-        .collect::<Vec<_>>();
+    for input in &mut scoped_inputs {
+        input.has_assigned_changes = !input.changed_files.is_empty();
+    }
 
-    if let Some(gate) = fallback_gate
-        && (!fallback_changed_files.is_empty() || participating.is_empty())
-    {
+    let mut participating = scoped_inputs;
+    let any_scoped_has_changes = participating.iter().any(|input| input.has_assigned_changes);
+
+    if let Some(gate) = fallback_gate {
+        let has_assigned_changes = !fallback_changed_files.is_empty();
         participating.push(GateRunInput {
             gate,
             paths: if !has_scoped_gates
-                || (fallback_changed_files.is_empty() && participating.is_empty())
+                || (fallback_changed_files.is_empty() && !any_scoped_has_changes)
             {
                 supported_files
             } else {
                 fallback_paths
             },
             changed_files: fallback_changed_files,
+            has_assigned_changes,
         });
     }
 
     Ok(participating)
+}
+
+fn supported_files(report: &crate::model::CoverageReport) -> BTreeSet<std::path::PathBuf> {
+    report
+        .totals_by_file
+        .values()
+        .flat_map(|totals| {
+            totals
+                .iter()
+                .filter_map(|(path, totals)| (totals.total > 0).then_some(path.clone()))
+        })
+        .collect()
 }
 
 fn load_changed_lines_with_warnings(source: &DiffSource) -> Result<Vec<ChangedFile>> {

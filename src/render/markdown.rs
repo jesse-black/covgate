@@ -1,42 +1,43 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::model::{ComputedMetric, GateResult, GateScopeResult, MetricKind, SpanKey};
+use crate::model::{CheckResult, ComputedMetric, GateEvaluation, MetricKind, SpanKey};
 use crate::render::title_case;
 
 #[must_use]
-pub fn render(result: &GateResult, _diff_description: &str) -> String {
+pub fn render(result: &CheckResult, _diff_description: &str) -> String {
     let mut out = String::new();
-    let multiple_scopes = result.scopes.len() > 1;
+    let show_gate_column = result.gates.len() > 1
+        || result
+            .gates
+            .first()
+            .is_some_and(|gate| gate.label.is_some());
 
     out.push_str("## Covgate\n\n");
     out.push_str("### Diff Coverage\n\n");
-    if multiple_scopes {
+    if show_gate_column {
         out.push_str("| Gate | Result | Rule | Observed | Configured |\n");
         out.push_str("| --- | --- | --- | ---: | ---: |\n");
-        for scope in &result.scopes {
-            let gate_label = scope_label(scope, true);
-            for outcome in &scope.rules {
+        for gate in &result.gates {
+            let gate_label = scope_label(gate, show_gate_column);
+            for outcome in &gate.rules {
                 write_rule_row(&mut out, Some(gate_label.as_str()), outcome);
             }
         }
-    } else if let Some(scope) = result.scopes.first() {
+    } else if let Some(gate) = result.gates.first() {
         out.push_str("| Result | Rule | Observed | Configured |\n");
         out.push_str("| --- | --- | ---: | ---: |\n");
-        for outcome in &scope.rules {
+        for outcome in &gate.rules {
             write_rule_row(&mut out, None, outcome);
         }
     }
     out.push('\n');
 
-    for metric_kind in metric_kinds(result) {
+    for metric_kind in metric_kinds(&result.changed_metrics) {
         out.push_str(&format!("#### {}\n\n", title_case(metric_kind.as_str())));
-        if multiple_scopes {
-            render_changed_metric_table_multi_scope(&mut out, result, metric_kind);
-        } else if let Some(scope) = result.scopes.first()
-            && let Some(metric) = scope
-                .metrics
-                .iter()
-                .find(|metric| metric.metric == metric_kind)
+        if let Some(metric) = result
+            .changed_metrics
+            .iter()
+            .find(|metric| metric.metric == metric_kind)
         {
             render_changed_metric_table_single_scope(&mut out, metric);
         }
@@ -62,18 +63,18 @@ fn write_rule_row(out: &mut String, gate_label: Option<&str>, outcome: &crate::m
         } => {
             if let Some(gate_label) = gate_label {
                 out.push_str(&format!(
-                    "| `{gate_label}` | {} | `{}` | {:.2}% | ≥ {:.2}% |\n",
+                    "| `{gate_label}` | {} | `{}` | {} | ≥ {:.2}% |\n",
                     status,
                     outcome.rule.label(),
-                    outcome.observed_percent,
+                    format_observed_percent(outcome),
                     minimum_percent
                 ));
             } else {
                 out.push_str(&format!(
-                    "| {} | `{}` | {:.2}% | ≥ {:.2}% |\n",
+                    "| {} | `{}` | {} | ≥ {:.2}% |\n",
                     status,
                     outcome.rule.label(),
-                    outcome.observed_percent,
+                    format_observed_percent(outcome),
                     minimum_percent
                 ));
             }
@@ -132,50 +133,6 @@ fn render_changed_metric_table_single_scope(out: &mut String, metric: &ComputedM
     ));
 }
 
-fn render_changed_metric_table_multi_scope(
-    out: &mut String,
-    result: &GateResult,
-    metric_kind: MetricKind,
-) {
-    let metric_label = title_case(metric_kind.label());
-    out.push_str(&format!(
-        "| Gate | File | Covered Changed {metric_label} | Changed {metric_label} | Coverage | Missed Changed Spans |\n"
-    ));
-    out.push_str("| --- | --- | ---: | ---: | ---: | --- |\n");
-    for scope in &result.scopes {
-        let Some(metric) = scope
-            .metrics
-            .iter()
-            .find(|metric| metric.metric == metric_kind)
-        else {
-            continue;
-        };
-        let gate_label = scope_label(scope, true);
-        let missed_by_file = missed_by_file(metric);
-        for (path, totals) in &metric.changed_totals_by_file {
-            let percent = percent(totals.covered, totals.total);
-            let missed = format_missed_spans(missed_by_file.get(&path.display().to_string()));
-            out.push_str(&format!(
-                "| `{gate_label}` | `{}` | {} | {} | {:.2}% {} | {} |\n",
-                path.display(),
-                totals.covered,
-                totals.total,
-                percent,
-                coverage_circle(percent),
-                missed
-            ));
-        }
-        out.push_str(&format!(
-            "| **{} Total** |  | **{}** | **{}** | **{:.2}% {}** |  |\n",
-            gate_label,
-            metric.covered,
-            metric.total,
-            metric.percent,
-            coverage_circle(metric.percent)
-        ));
-    }
-}
-
 fn render_overall_metric_table_single_scope(out: &mut String, metric: &ComputedMetric) {
     let metric_label = title_case(metric.metric.label());
     out.push_str(&format!(
@@ -217,12 +174,10 @@ fn render_overall_metric_table_single_scope(out: &mut String, metric: &ComputedM
     ));
 }
 
-fn metric_kinds(result: &GateResult) -> Vec<MetricKind> {
+fn metric_kinds(metrics: &[ComputedMetric]) -> Vec<MetricKind> {
     let mut kinds = BTreeSet::new();
-    for scope in &result.scopes {
-        for metric in &scope.metrics {
-            kinds.insert(metric.metric);
-        }
+    for metric in metrics {
+        kinds.insert(metric.metric);
     }
     kinds.into_iter().collect()
 }
@@ -267,8 +222,8 @@ fn percent(covered: usize, total: usize) -> f64 {
     }
 }
 
-fn scope_label(scope: &GateScopeResult, multiple_scopes: bool) -> String {
-    if let Some(label) = &scope.label {
+fn scope_label(gate: &GateEvaluation, multiple_scopes: bool) -> String {
+    if let Some(label) = &gate.label {
         return label.clone();
     }
 
@@ -277,6 +232,18 @@ fn scope_label(scope: &GateScopeResult, multiple_scopes: bool) -> String {
     }
 
     String::new()
+}
+
+fn format_observed_percent(outcome: &crate::model::RuleOutcome) -> String {
+    let counts = format!(
+        "({}/{})",
+        outcome.observed_covered_count, outcome.observed_total_count
+    );
+    if outcome.observed_total_count == 0 {
+        format!("N/A {counts}")
+    } else {
+        format!("{:.2}% {counts}", outcome.observed_percent)
+    }
 }
 
 fn coverage_circle(percent: f64) -> &'static str {

@@ -1,12 +1,12 @@
 use anyhow::Result;
 
-use crate::model::{ComputedMetric, GateRule, GateScopeResult, RuleOutcome};
+use crate::model::{ComputedMetric, GateEvaluation, GateRule, RuleOutcome};
 
 pub fn evaluate(
     label: Option<String>,
     metrics: Vec<ComputedMetric>,
     rules: &[GateRule],
-) -> Result<GateScopeResult> {
+) -> Result<GateEvaluation> {
     let mut outcomes = Vec::new();
     let mut all_passed = true;
 
@@ -43,13 +43,14 @@ pub fn evaluate(
             rule: rule.clone(),
             passed: rule_passed,
             observed_percent: metric.percent,
+            observed_covered_count: metric.covered,
+            observed_total_count: metric.total,
             observed_uncovered_count: metric.uncovered_changed_opportunities.len(),
         });
     }
 
-    Ok(GateScopeResult {
+    Ok(GateEvaluation {
         label,
-        metrics,
         rules: outcomes,
         passed: all_passed,
     })

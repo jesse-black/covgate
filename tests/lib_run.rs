@@ -32,7 +32,6 @@ fn git_base_args(coverage_report: std::path::PathBuf) -> Args {
         fail_uncovered_functions: None,
         fail_uncovered_named_functions: None,
         markdown_output: None,
-        verbose: false,
     }
 }
 
@@ -62,7 +61,6 @@ fn run_with_diff_file_executes_without_untracked_warning_lookup() {
         fail_uncovered_functions: None,
         fail_uncovered_named_functions: None,
         markdown_output: None,
-        verbose: false,
     })
     .expect("config should resolve");
 

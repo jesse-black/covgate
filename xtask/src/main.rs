@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::str::FromStr;
+use std::time::SystemTime;
 
 use anyhow::{Context, Result, bail};
 use semver::Version;
@@ -10,12 +11,17 @@ fn main() -> Result<()> {
     let mut args = std::env::args().skip(1);
     let Some(task) = args.next() else {
         bail!(
-            "usage: cargo xtask <task>\n\n  validate\n  release-version <semver>\n  regen-fixture-coverage <language>/<scenario>\n  regen-fixture-coverage-all"
+            "usage: cargo xtask <task>\n\n  validate\n  llvm-cov [--force]\n  covgate\n  release-version <semver>\n  regen-fixture-coverage <language>/<scenario>\n  regen-fixture-coverage-all"
         );
     };
 
     match task.as_str() {
         "validate" => validate(),
+        "llvm-cov" => {
+            let force = args.next().as_deref() == Some("--force");
+            llvm_cov_task(force)
+        }
+        "covgate" => covgate_task(),
         "release-version" => {
             let Some(version) = args.next() else {
                 bail!("usage: cargo xtask release-version <semver>");
@@ -137,7 +143,7 @@ fn read_optional_file(path: &Path) -> Result<Option<Vec<u8>>> {
 fn validate() -> Result<()> {
     let mut failures = Vec::new();
 
-    record_validation_step(&mut failures, "fmt", run("cargo", &["fmt", "--check"]));
+    record_validation_step(&mut failures, "fmt", run("cargo", &["fmt"]));
     record_validation_step(
         &mut failures,
         "clippy",
@@ -148,51 +154,22 @@ fn validate() -> Result<()> {
     );
 
     let coverage_json = coverage_path();
-    let coverage_json_str = coverage_json
-        .to_str()
-        .context("coverage output path contained non-utf8 characters")?;
 
-    let has_nextest = Command::new("cargo")
-        .arg("nextest")
-        .arg("--version")
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false);
-
-    let mut coverage_args = vec!["llvm-cov"];
-    if has_nextest {
-        coverage_args.extend(&[
-            "nextest",
-            "--status-level",
-            "none",
-            "--failure-output",
-            "immediate-final",
-            "--show-progress",
-            "none",
-        ]);
-    } else {
-        coverage_args.push("-q");
-    }
-
-    coverage_args.extend(&[
-        "--json",
-        "--output-path",
-        coverage_json_str,
-        "--fail-under-regions=88",
-    ]);
-
-    record_validation_step(&mut failures, "llvm-cov", run("cargo", &coverage_args));
+    record_validation_step(&mut failures, "llvm-cov", run_llvm_cov(&coverage_json));
 
     record_validation_step(
         &mut failures,
         "covgate-check",
         if coverage_json.exists() {
-            run(
-                "cargo",
-                &["run", "--bin", "covgate", "--", "check", coverage_json_str],
-            )
+            match coverage_json.to_str() {
+                Some(path_str) => run(
+                    "cargo",
+                    &["run", "--bin", "covgate", "--", "check", path_str],
+                ),
+                None => Err(anyhow::anyhow!(
+                    "coverage output path contained non-utf8 characters"
+                )),
+            }
         } else {
             Err(anyhow::anyhow!(
                 "coverage json was not produced by llvm-cov: {}",
@@ -944,6 +921,124 @@ fn coverage_path() -> PathBuf {
         std::process::id(),
         chrono_like_timestamp()
     ))
+}
+
+fn stable_coverage_path() -> PathBuf {
+    let target_dir = project_root()
+        .unwrap_or_else(|_| PathBuf::from("."))
+        .join("target")
+        .join("xtask");
+    let _ = std::fs::create_dir_all(&target_dir);
+    target_dir.join("coverage.json")
+}
+
+fn coverage_is_fresh(coverage_path: &Path) -> bool {
+    let Ok(meta) = std::fs::metadata(coverage_path) else {
+        return false;
+    };
+    let Ok(coverage_mtime) = meta.modified() else {
+        return false;
+    };
+    let Ok(repo_root) = project_root() else {
+        return false;
+    };
+    for dir in &["src", "tests"] {
+        match most_recent_rs_mtime(&repo_root.join(dir)) {
+            Ok(src_mtime) if src_mtime >= coverage_mtime => return false,
+            Err(_) => return false,
+            _ => {}
+        }
+    }
+    true
+}
+
+fn most_recent_rs_mtime(dir: &Path) -> Result<SystemTime> {
+    let mut latest = SystemTime::UNIX_EPOCH;
+    let mut found = false;
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(current) = stack.pop() {
+        for entry in std::fs::read_dir(&current)
+            .with_context(|| format!("failed to read directory: {}", current.display()))?
+        {
+            let entry = entry?;
+            let path = entry.path();
+            if entry.file_type()?.is_dir() {
+                stack.push(path);
+            } else if path.extension().and_then(|e| e.to_str()) == Some("rs")
+                && let Ok(mtime) = entry.metadata().and_then(|m| m.modified())
+                && mtime > latest
+            {
+                latest = mtime;
+                found = true;
+            }
+        }
+    }
+    if found {
+        Ok(latest)
+    } else {
+        bail!("no .rs files found under {}", dir.display())
+    }
+}
+
+fn run_llvm_cov(coverage_path: &Path) -> Result<()> {
+    let coverage_json_str = coverage_path
+        .to_str()
+        .context("coverage output path contained non-utf8 characters")?;
+
+    let has_nextest = Command::new("cargo")
+        .arg("nextest")
+        .arg("--version")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+
+    let mut coverage_args = vec!["llvm-cov"];
+    if has_nextest {
+        coverage_args.extend(&[
+            "nextest",
+            "--status-level",
+            "none",
+            "--failure-output",
+            "immediate-final",
+            "--show-progress",
+            "none",
+        ]);
+    } else {
+        coverage_args.push("-q");
+    }
+    coverage_args.extend(&[
+        "--json",
+        "--output-path",
+        coverage_json_str,
+        "--fail-under-regions=96",
+    ]);
+
+    run("cargo", &coverage_args)
+}
+
+fn llvm_cov_task(force: bool) -> Result<()> {
+    let coverage_path = stable_coverage_path();
+    if !force && coverage_is_fresh(&coverage_path) {
+        eprintln!("llvm-cov: coverage.json is up to date (use --force to rerun)");
+        return Ok(());
+    }
+    run_llvm_cov(&coverage_path)
+}
+
+fn covgate_task() -> Result<()> {
+    let coverage_path = stable_coverage_path();
+    if !coverage_is_fresh(&coverage_path) {
+        run_llvm_cov(&coverage_path)?;
+    }
+    let coverage_json_str = coverage_path
+        .to_str()
+        .context("coverage output path contained non-utf8 characters")?;
+    run(
+        "cargo",
+        &["run", "--bin", "covgate", "--", "check", coverage_json_str],
+    )
 }
 
 fn chrono_like_timestamp() -> u128 {

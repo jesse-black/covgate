@@ -17,3 +17,7 @@ fi
 if ! command -v covgate >/dev/null 2>&1; then
   cargo install covgate --locked
 fi
+
+if ! command -v docgarden >/dev/null 2>&1; then
+  cargo install docgarden@0.1.0-rc0 --locked
+fi

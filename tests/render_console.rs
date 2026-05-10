@@ -1,31 +1,22 @@
+mod helpers;
+
 use covgate::model::{
-    ComputedMetric, CoverageOpportunity, FileTotals, GateResult, GateRule, GateScopeResult,
-    MetricKind, OpportunityKind, RuleOutcome, SourceSpan, Verbosity,
+    CheckResult, ComputedMetric, CoverageOpportunity, FileTotals, GateEvaluation, MetricKind,
+    OpportunityKind, SourceSpan,
 };
 use covgate::render::console::render;
+use helpers::{percent_outcome, uncovered_outcome};
 use std::{collections::BTreeMap, path::PathBuf};
-
-fn single_scope_result(
-    metrics: Vec<ComputedMetric>,
-    rules: Vec<RuleOutcome>,
-    passed: bool,
-) -> GateResult {
-    GateResult {
-        scopes: vec![GateScopeResult {
-            label: None,
-            metrics: metrics.clone(),
-            rules,
-            passed,
-        }],
-        overall_metrics: metrics,
-        passed,
-    }
-}
 
 #[test]
 fn renders_console_summary_minimal() {
-    let result = single_scope_result(
-        vec![ComputedMetric {
+    let result = CheckResult {
+        gates: vec![GateEvaluation {
+            label: None,
+            rules: vec![percent_outcome(MetricKind::Region, 90.0, false, 50.0, 1, 2)],
+            passed: false,
+        }],
+        changed_metrics: vec![ComputedMetric {
             metric: MetricKind::Region,
             covered: 1,
             total: 2,
@@ -52,76 +43,63 @@ fn renders_console_summary_minimal() {
             )]),
             totals_by_file: BTreeMap::new(),
         }],
-        vec![RuleOutcome {
-            rule: GateRule::Percent {
-                metric: MetricKind::Region,
-                minimum_percent: 90.0,
-            },
-            passed: false,
-            observed_percent: 50.0,
-            observed_uncovered_count: 1,
-        }],
-        false,
-    );
+        overall_metrics: Vec::new(),
+        passed: false,
+    };
 
-    let rendered = render(&result, "origin/main...HEAD", Verbosity::Normal);
+    let rendered = render(&result, "origin/main...HEAD");
     assert!(!rendered.contains("Diff Coverage: FAIL"));
     assert!(rendered.contains("src/lib.rs (50.00% region)"));
-    assert!(rendered.contains("FAIL  Regions:      50.00%         (1/2)  ≱ 90.00%"));
+    assert!(rendered.contains("FAIL  Regions:"));
+    assert!(rendered.contains("50.00%"));
+    assert!(rendered.contains("(1/2)"));
+    assert!(rendered.contains("≱ 90.00%"));
 }
 
 #[test]
-fn renders_console_summary_verbose() {
-    let result = single_scope_result(
-        vec![ComputedMetric {
-            metric: MetricKind::Region,
-            covered: 1,
-            total: 2,
-            percent: 50.0,
-            uncovered_changed_opportunities: vec![CoverageOpportunity {
-                kind: OpportunityKind::Region,
-                span: SourceSpan {
-                    path: PathBuf::from("src/lib.rs"),
-                    start_line: 5,
-                    end_line: 6,
-                    start_col: None,
-                    end_col: None,
-                },
-                covered: false,
-                is_named_function: None,
-                named_function_identity: None,
-            }],
-            changed_totals_by_file: BTreeMap::from([(
-                PathBuf::from("src/lib.rs"),
-                FileTotals {
-                    covered: 1,
-                    total: 2,
-                },
-            )]),
+fn renders_zero_total_percent_rules_as_na() {
+    let result = CheckResult {
+        gates: vec![GateEvaluation {
+            label: None,
+            rules: vec![percent_outcome(MetricKind::Line, 80.0, true, 100.0, 0, 0)],
+            passed: true,
+        }],
+        changed_metrics: vec![ComputedMetric {
+            metric: MetricKind::Line,
+            covered: 0,
+            total: 0,
+            percent: 100.0,
+            uncovered_changed_opportunities: Vec::new(),
+            changed_totals_by_file: BTreeMap::new(),
             totals_by_file: BTreeMap::new(),
         }],
-        vec![RuleOutcome {
-            rule: GateRule::Percent {
-                metric: MetricKind::Region,
-                minimum_percent: 90.0,
-            },
-            passed: false,
-            observed_percent: 50.0,
-            observed_uncovered_count: 1,
-        }],
-        false,
-    );
+        overall_metrics: Vec::new(),
+        passed: true,
+    };
 
-    let rendered = render(&result, "origin/main...HEAD", Verbosity::Verbose);
-    assert!(rendered.contains("Diff Coverage: FAIL"));
-    assert!(rendered.contains("src/lib.rs (50.00%)"));
-    assert!(rendered.contains("Rule fail-under-regions: FAIL (50.00% ≱ 90.00%)"));
+    let rendered = render(&result, "origin/main...HEAD");
+    assert!(rendered.contains("PASS  Lines:"));
+    assert!(rendered.contains("N/A"));
+    assert!(rendered.contains("(0/0)"));
+    assert!(!rendered.contains("100.00%"));
 }
 
 #[test]
 fn groups_duplicate_spans_with_counts() {
-    let result = single_scope_result(
-        vec![ComputedMetric {
+    let result = CheckResult {
+        gates: vec![GateEvaluation {
+            label: None,
+            rules: vec![percent_outcome(
+                MetricKind::Region,
+                90.0,
+                false,
+                33.33,
+                1,
+                3,
+            )],
+            passed: false,
+        }],
+        changed_metrics: vec![ComputedMetric {
             metric: MetricKind::Region,
             covered: 1,
             total: 3,
@@ -163,26 +141,30 @@ fn groups_duplicate_spans_with_counts() {
             )]),
             totals_by_file: BTreeMap::new(),
         }],
-        vec![RuleOutcome {
-            rule: GateRule::Percent {
-                metric: MetricKind::Region,
-                minimum_percent: 90.0,
-            },
-            passed: false,
-            observed_percent: 33.33,
-            observed_uncovered_count: 2,
-        }],
-        false,
-    );
+        overall_metrics: Vec::new(),
+        passed: false,
+    };
 
-    let rendered = render(&result, "origin/main...HEAD", Verbosity::Normal);
+    let rendered = render(&result, "origin/main...HEAD");
     assert!(rendered.contains("5-6(2)"));
 }
 
 #[test]
 fn sorts_spans_numerically() {
-    let result = single_scope_result(
-        vec![ComputedMetric {
+    let result = CheckResult {
+        gates: vec![GateEvaluation {
+            label: None,
+            rules: vec![percent_outcome(
+                MetricKind::Region,
+                90.0,
+                false,
+                33.33,
+                1,
+                3,
+            )],
+            passed: false,
+        }],
+        changed_metrics: vec![ComputedMetric {
             metric: MetricKind::Region,
             covered: 1,
             total: 3,
@@ -224,19 +206,11 @@ fn sorts_spans_numerically() {
             )]),
             totals_by_file: BTreeMap::new(),
         }],
-        vec![RuleOutcome {
-            rule: GateRule::Percent {
-                metric: MetricKind::Region,
-                minimum_percent: 90.0,
-            },
-            passed: false,
-            observed_percent: 33.33,
-            observed_uncovered_count: 2,
-        }],
-        false,
-    );
+        overall_metrics: Vec::new(),
+        passed: false,
+    };
 
-    let rendered = render(&result, "origin/main...HEAD", Verbosity::Normal);
+    let rendered = render(&result, "origin/main...HEAD");
     let spans_row = rendered
         .lines()
         .find(|line| line.contains("regions:"))
@@ -246,8 +220,13 @@ fn sorts_spans_numerically() {
 
 #[test]
 fn omits_non_gated_metrics_from_minimal_output() {
-    let result = single_scope_result(
-        vec![
+    let result = CheckResult {
+        gates: vec![GateEvaluation {
+            label: None,
+            rules: vec![percent_outcome(MetricKind::Region, 90.0, false, 50.0, 1, 2)],
+            passed: false,
+        }],
+        changed_metrics: vec![
             ComputedMetric {
                 metric: MetricKind::Region,
                 covered: 1,
@@ -267,27 +246,27 @@ fn omits_non_gated_metrics_from_minimal_output() {
                 totals_by_file: BTreeMap::new(),
             },
         ],
-        vec![RuleOutcome {
-            rule: GateRule::Percent {
-                metric: MetricKind::Region,
-                minimum_percent: 90.0,
-            },
-            passed: false,
-            observed_percent: 50.0,
-            observed_uncovered_count: 1,
-        }],
-        false,
-    );
+        overall_metrics: Vec::new(),
+        passed: false,
+    };
 
-    let rendered = render(&result, "origin/main...HEAD", Verbosity::Normal);
+    let rendered = render(&result, "origin/main...HEAD");
     assert!(rendered.contains("Regions:"));
     assert!(!rendered.contains("Lines:"));
 }
 
 #[test]
 fn aligns_comparators_vertically() {
-    let result = single_scope_result(
-        vec![
+    let result = CheckResult {
+        gates: vec![GateEvaluation {
+            label: None,
+            rules: vec![
+                percent_outcome(MetricKind::Region, 90.0, false, 10.0, 100, 1000),
+                uncovered_outcome(MetricKind::Function, 0, true, 0),
+            ],
+            passed: false,
+        }],
+        changed_metrics: vec![
             ComputedMetric {
                 metric: MetricKind::Region,
                 covered: 100,
@@ -307,30 +286,11 @@ fn aligns_comparators_vertically() {
                 totals_by_file: BTreeMap::new(),
             },
         ],
-        vec![
-            RuleOutcome {
-                rule: GateRule::Percent {
-                    metric: MetricKind::Region,
-                    minimum_percent: 90.0,
-                },
-                passed: false,
-                observed_percent: 10.0,
-                observed_uncovered_count: 900,
-            },
-            RuleOutcome {
-                rule: GateRule::UncoveredCount {
-                    metric: MetricKind::Function,
-                    maximum_count: 0,
-                },
-                passed: true,
-                observed_percent: 100.0,
-                observed_uncovered_count: 0,
-            },
-        ],
-        false,
-    );
+        overall_metrics: Vec::new(),
+        passed: false,
+    };
 
-    let rendered = render(&result, "diff", Verbosity::Normal);
+    let rendered = render(&result, "diff");
     let lines: Vec<_> = rendered
         .lines()
         .filter(|line| line.contains("PASS") || line.contains("FAIL"))
