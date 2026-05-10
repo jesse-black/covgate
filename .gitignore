@@ -2,4 +2,3 @@
 .codex
 local.nix
 settings.local.json
-coverage.json
