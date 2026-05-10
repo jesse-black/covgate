@@ -14,6 +14,8 @@ Four principles, ordered by how often they bite at review. The process sections 
 
 4. **Fixtures are grounded in real toolchain output.** Fixture coverage JSON must come from native toolchains via `cargo xtask regen-fixture-coverage`. A fixture that was hand-edited to make a test pass no longer represents a real-world scenario; it represents the author's assumption about what the toolchain would produce, which may be wrong in exactly the ways that matter.
 
+5. **Tests earn their place through their assertions.** A test's value is what it can falsify: if its assertions would pass for any correct execution — not specifically because the behavior it names is working — the test does not justify its maintenance cost. When a code change strips a test's discriminating assertions away, the right response is to strengthen the assertion, consolidate the test into an existing fixture matrix, or delete it — not to preserve the setup as dead weight.
+
 ## Rules in practice
 
 ### Place tests where their access needs dictate
