@@ -27,20 +27,24 @@ mod tests {
         let diff_file = temp.path().join("empty.diff");
         let markdown_output = temp.path().join("summary.md");
         fs::write(&diff_file, "").expect("empty diff should be written");
+        let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let worktree = tempfile::Builder::new()
+            .prefix("covgate-real-parity-")
+            .tempdir_in(&repo_root)
+            .expect("temp worktree dir should exist inside repo");
+        fs::write(
+            worktree.path().join("covgate.toml"),
+            "[[gates]]\nfail-under-regions = 0\nfail-under-lines = 0\nfail-under-functions = 0\n",
+        )
+        .expect("config should be written");
 
         let output = run_covgate_raw(
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).as_path(),
+            worktree.path(),
             &[
                 "check".to_string(),
                 coverage_report.to_string_lossy().into_owned(),
                 "--diff-file".to_string(),
                 diff_file.to_string_lossy().into_owned(),
-                "--fail-under-regions".to_string(),
-                "0".to_string(),
-                "--fail-under-lines".to_string(),
-                "0".to_string(),
-                "--fail-under-functions".to_string(),
-                "0".to_string(),
                 "--markdown-output".to_string(),
                 markdown_output.to_string_lossy().into_owned(),
             ],

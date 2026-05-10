@@ -150,10 +150,6 @@ covgate check coverage.json
 
 The Codex Cloud environment settings maintenance script should include `covgate record-base` so coverage checks can validate the task reliably. Jules does not have a maintenance-script setting, so instructions for Jules should require running `covgate record-base` before every task.
 
-### CLI Reference
-
-Every threshold in `covgate.toml` has a corresponding CLI flag for one-off use. Run `covgate --help` for the full list.
-
 ## GitHub Actions
 
 Generate JSON coverage, run `covgate`, and seamlessly write the results to your PR summary. 

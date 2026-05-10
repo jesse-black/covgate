@@ -117,22 +117,28 @@ fn synthetic_diff(path: &str, start_line: u32, added_lines: u32) -> String {
     )
 }
 
-fn run_real_fixture_gate(diff_text: &str, args: &[&str]) -> std::process::Output {
-    let temp = tempdir().expect("tempdir should exist");
+fn run_real_fixture_gate(diff_text: &str, config_text: &str) -> std::process::Output {
+    let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let temp = tempfile::Builder::new()
+        .prefix("covgate-real-fixture-")
+        .tempdir_in(&repo_root)
+        .expect("temp worktree dir should exist inside repo");
     let diff_file = temp.path().join("scenario.diff");
     std::fs::write(&diff_file, diff_text).expect("diff file should be written");
-    let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    std::fs::write(temp.path().join("covgate.toml"), config_text)
+        .expect("config should be written");
     let coverage_json = temp.path().join("covgate-self-full-rebased.json");
     write_rebased_real_llvm_fixture(&coverage_json);
 
-    let mut covgate_args = vec![
-        "check".to_string(),
-        coverage_json.to_string_lossy().into_owned(),
-        "--diff-file".to_string(),
-        diff_file.to_string_lossy().into_owned(),
-    ];
-    covgate_args.extend(args.iter().map(|arg| (*arg).to_string()));
-    run_covgate_raw(&repo_root, &covgate_args)
+    run_covgate_raw(
+        temp.path(),
+        &[
+            "check".to_string(),
+            coverage_json.to_string_lossy().into_owned(),
+            "--diff-file".to_string(),
+            diff_file.to_string_lossy().into_owned(),
+        ],
+    )
 }
 
 #[test]
@@ -342,18 +348,11 @@ fn real_fixture_render_markdown_range_tracks_exact_changed_llvm_opportunities() 
 }
 
 #[test]
-fn real_fixture_config_second_range_cli_gates_fail_and_pass_as_expected() {
+fn real_fixture_config_second_range_gates_fail_and_pass_as_expected() {
     let diff_text = synthetic_diff("src/config.rs", 108, 40);
     let output = run_real_fixture_gate(
         &diff_text,
-        &[
-            "--fail-under-lines",
-            "80",
-            "--fail-under-regions",
-            "75",
-            "--fail-uncovered-functions",
-            "0",
-        ],
+        "[[gates]]\nfail-under-lines = 80\nfail-under-regions = 75\nfail-uncovered-functions = 0\n",
     );
 
     assert_eq!(output.status.code(), Some(1));
@@ -364,18 +363,11 @@ fn real_fixture_config_second_range_cli_gates_fail_and_pass_as_expected() {
 }
 
 #[test]
-fn real_fixture_coverlet_json_range_cli_gates_pass_as_expected() {
+fn real_fixture_coverlet_json_range_gates_pass_as_expected() {
     let diff_text = synthetic_diff("src/coverage/coverlet_json.rs", 1, 120);
     let output = run_real_fixture_gate(
         &diff_text,
-        &[
-            "--fail-under-lines",
-            "98",
-            "--fail-uncovered-regions",
-            "2",
-            "--fail-under-functions",
-            "100",
-        ],
+        "[[gates]]\nfail-under-lines = 98\nfail-uncovered-regions = 2\nfail-under-functions = 100\n",
     );
 
     assert_eq!(output.status.code(), Some(0));
@@ -386,18 +378,11 @@ fn real_fixture_coverlet_json_range_cli_gates_pass_as_expected() {
 }
 
 #[test]
-fn real_fixture_render_markdown_range_cli_uncovered_line_budget_fails_as_expected() {
+fn real_fixture_render_markdown_range_uncovered_line_budget_fails_as_expected() {
     let diff_text = synthetic_diff("src/render/markdown.rs", 1, 120);
     let output = run_real_fixture_gate(
         &diff_text,
-        &[
-            "--fail-uncovered-lines",
-            "10",
-            "--fail-under-regions",
-            "94",
-            "--fail-under-functions",
-            "100",
-        ],
+        "[[gates]]\nfail-uncovered-lines = 10\nfail-under-regions = 94\nfail-under-functions = 100\n",
     );
 
     assert_eq!(output.status.code(), Some(1));

@@ -53,21 +53,16 @@ fn config_uses_recorded_base_when_base_is_omitted() {
     run_git(repo, &["branch", "-M", "task/config-auto-base"]);
 
     record_base_ref().expect("record-base should succeed");
+    fs::write(
+        repo.join("covgate.toml"),
+        "[[gates]]\nfail-under-regions = 1\n",
+    )
+    .expect("config should write");
 
     let cfg = Config::try_from(Args {
         coverage_report: "coverage.json".into(),
         base: None,
         diff_file: None,
-        fail_under_regions: Some(1.0),
-        fail_under_lines: None,
-        fail_under_branches: None,
-        fail_under_functions: None,
-        fail_under_named_functions: None,
-        fail_uncovered_regions: None,
-        fail_uncovered_lines: None,
-        fail_uncovered_branches: None,
-        fail_uncovered_functions: None,
-        fail_uncovered_named_functions: None,
         markdown_output: None,
     })
     .expect("config should resolve");
