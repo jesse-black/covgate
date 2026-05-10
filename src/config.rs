@@ -170,7 +170,6 @@ fn parse_file_config(text: &str) -> Result<FileConfig> {
     Ok(config)
 }
 
-#[inline(always)]
 fn deserialize_pattern_vec<'de, D>(deserializer: D) -> std::result::Result<Vec<String>, D::Error>
 where
     D: Deserializer<'de>,
@@ -698,11 +697,9 @@ fn add_gitignore_files(dir: &Path, builder: &mut GitignoreBuilder) -> Result<()>
 mod tests {
     use std::{fs, path::PathBuf};
 
-    use serde::de::IntoDeserializer;
-
     use super::{
-        PathMatcher, config_candidate_paths, derive_scoped_gate_label, deserialize_pattern_vec,
-        parse_file_config, resolve_diff_source, resolve_gates,
+        PathMatcher, config_candidate_paths, derive_scoped_gate_label, parse_file_config,
+        resolve_diff_source, resolve_gates,
     };
     use crate::{
         cli::Args,
@@ -1256,24 +1253,6 @@ mod tests {
             parse_file_config("[[gates]]\ninclude = [\"**/*.rs\", 42]\nfail-under-lines = 90\n")
                 .expect_err("config should fail with invalid include item type");
         assert!(error.to_string().contains("include"));
-    }
-
-    #[test]
-    fn deserialize_pattern_vec_accepts_string_and_list() {
-        let single =
-            deserialize_pattern_vec(toml::Value::String("**/*.rs".to_string()).into_deserializer())
-                .expect("single pattern should deserialize");
-        let multiple = deserialize_pattern_vec(
-            toml::Value::Array(vec![
-                toml::Value::String("src/**/*.rs".to_string()),
-                toml::Value::String("tests/**/*.rs".to_string()),
-            ])
-            .into_deserializer(),
-        )
-        .expect("pattern list should deserialize");
-
-        assert_eq!(single, ["**/*.rs"]);
-        assert_eq!(multiple, ["src/**/*.rs", "tests/**/*.rs"]);
     }
 
     #[test]

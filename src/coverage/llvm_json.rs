@@ -294,11 +294,6 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
     })
 }
 
-#[cfg(test)]
-fn is_llvm_function_named(key: &FunctionKey) -> bool {
-    llvm_named_function_identity(key).is_some()
-}
-
 fn llvm_named_function_identity(key: &FunctionKey) -> Option<String> {
     match key {
         FunctionKey::Span {
@@ -640,8 +635,8 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     use super::{
-        FunctionKey, is_llvm_function_named, llvm_named_function_identity,
-        normalize_llvm_function_name, normalize_path, strip_generic_arguments,
+        FunctionKey, llvm_named_function_identity, normalize_llvm_function_name, normalize_path,
+        strip_generic_arguments,
     };
 
     #[test]
@@ -722,8 +717,8 @@ mod tests {
             })
             .collect();
 
-        assert!(is_llvm_function_named(&keys[0]));
-        assert!(!is_llvm_function_named(&keys[1]));
+        assert!(llvm_named_function_identity(&keys[0]).is_some());
+        assert!(llvm_named_function_identity(&keys[1]).is_none());
 
         let span_key = FunctionKey::Span {
             start_line: 1,
@@ -731,7 +726,7 @@ mod tests {
             end_line: 1,
             end_col: 1,
         };
-        assert!(!is_llvm_function_named(&span_key));
+        assert!(llvm_named_function_identity(&span_key).is_none());
     }
 
     #[test]
