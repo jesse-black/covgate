@@ -53,6 +53,7 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
                     },
                     covered: is_covered,
                     is_named_function: None,
+                    named_function_identity: None,
                 });
             }
             line_totals_by_file.insert(path.clone(), FileTotals { covered, total });
@@ -113,6 +114,7 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
                     },
                     covered: record.covered,
                     is_named_function: None,
+                    named_function_identity: None,
                 });
             }
             branch_totals_by_file.insert(path.clone(), FileTotals { covered, total });
@@ -129,6 +131,7 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
                 end_col: function_map.loc.end.column.unwrap_or(0),
                 covered,
                 is_named,
+                named_function_identity: is_named.then(|| function_id.clone()),
             });
         }
 
@@ -160,6 +163,7 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
                     },
                     covered: function.covered,
                     is_named_function: Some(function.is_named),
+                    named_function_identity: function.named_function_identity,
                 });
             }
             function_totals_by_file.insert(path.clone(), FileTotals { covered, total });
@@ -289,6 +293,7 @@ struct FunctionRecord {
     end_col: u32,
     covered: bool,
     is_named: bool,
+    named_function_identity: Option<String>,
 }
 
 #[derive(Debug)]

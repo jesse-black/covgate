@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(./scripts/next-plan-number.sh)"
+      "Bash(./scripts/next-plan-number.sh)",
+      "Bash(git -C /workspaces/covgate diff *)"
     ]
   }
 }

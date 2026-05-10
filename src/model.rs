@@ -197,6 +197,7 @@ pub struct CoverageOpportunity {
     pub span: SourceSpan,
     pub covered: bool,
     pub is_named_function: Option<bool>,
+    pub named_function_identity: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

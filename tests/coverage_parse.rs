@@ -1394,6 +1394,153 @@ fn keeps_rust_functions_with_different_crate_hashes_as_one_name_based_record() {
 }
 
 #[test]
+fn llvm_named_function_template_instantiations_collapse() {
+    use covgate::coverage::parse_with_repo_root;
+    use std::path::{Path, PathBuf};
+
+    let input = r#"{
+      "data": [
+        {
+          "files": [
+            {
+              "filename": "src/lib.rs",
+              "segments": [[10,1,1,true,true,false], [22,1,0,true,true,false]],
+              "branches": []
+            }
+          ],
+          "functions": [
+            {
+              "name": "covgate::metrics::parse::<u32>",
+              "filenames": ["src/lib.rs"],
+              "count": 1,
+              "regions": [[10,1,12,1,1,0,0,0]]
+            },
+            {
+              "name": "covgate::metrics::parse::<alloc::string::String>",
+              "filenames": ["src/lib.rs"],
+              "count": 0,
+              "regions": [[20,1,22,1,0,0,0,0]]
+            }
+          ]
+        }
+      ],
+      "type": "llvm.core.json.export",
+      "version": "2.0.1"
+    }"#;
+
+    let report = parse_with_repo_root(input, Path::new("/workspace/covgate"))
+        .expect("llvm export should parse");
+    let path = PathBuf::from("src/lib.rs");
+    let function_totals = report
+        .totals_by_file
+        .get(&covgate::model::MetricKind::Function)
+        .and_then(|t| t.get(&path))
+        .expect("function totals should exist");
+    assert_eq!(function_totals.total, 2);
+    assert_eq!(function_totals.covered, 1);
+
+    let named_function_totals = report
+        .totals_by_file
+        .get(&covgate::model::MetricKind::NamedFunction)
+        .and_then(|t| t.get(&path))
+        .expect("named function totals should exist");
+    assert_eq!(named_function_totals.total, 1);
+    assert_eq!(named_function_totals.covered, 1);
+}
+
+#[test]
+fn llvm_named_function_template_instantiations_are_uncovered_when_all_variants_are_uncovered() {
+    use covgate::coverage::parse_with_repo_root;
+    use std::path::{Path, PathBuf};
+
+    let input = r#"{
+      "data": [
+        {
+          "files": [
+            {
+              "filename": "src/lib.rs",
+              "segments": [[10,1,0,true,true,false], [22,1,0,true,true,false]],
+              "branches": []
+            }
+          ],
+          "functions": [
+            {
+              "name": "covgate::metrics::parse::<u32>",
+              "filenames": ["src/lib.rs"],
+              "count": 0,
+              "regions": [[10,1,12,1,0,0,0,0]]
+            },
+            {
+              "name": "covgate::metrics::parse::<alloc::string::String>",
+              "filenames": ["src/lib.rs"],
+              "count": 0,
+              "regions": [[20,1,22,1,0,0,0,0]]
+            }
+          ]
+        }
+      ],
+      "type": "llvm.core.json.export",
+      "version": "2.0.1"
+    }"#;
+
+    let report = parse_with_repo_root(input, Path::new("/workspace/covgate"))
+        .expect("llvm export should parse");
+    let named_function_totals = report
+        .totals_by_file
+        .get(&covgate::model::MetricKind::NamedFunction)
+        .and_then(|t| t.get(&PathBuf::from("src/lib.rs")))
+        .expect("named function totals should exist");
+    assert_eq!(named_function_totals.total, 1);
+    assert_eq!(named_function_totals.covered, 0);
+}
+
+#[test]
+fn llvm_named_function_qualified_trait_impls_do_not_collapse_as_templates() {
+    use covgate::coverage::parse_with_repo_root;
+    use std::path::{Path, PathBuf};
+
+    let input = r#"{
+      "data": [
+        {
+          "files": [
+            {
+              "filename": "src/lib.rs",
+              "segments": [[10,1,1,true,true,false], [22,1,0,true,true,false]],
+              "branches": []
+            }
+          ],
+          "functions": [
+            {
+              "name": "<covgate::metrics::Parser as core::fmt::Debug>::fmt",
+              "filenames": ["src/lib.rs"],
+              "count": 1,
+              "regions": [[10,1,12,1,1,0,0,0]]
+            },
+            {
+              "name": "<covgate::metrics::Formatter as core::fmt::Debug>::fmt",
+              "filenames": ["src/lib.rs"],
+              "count": 0,
+              "regions": [[20,1,22,1,0,0,0,0]]
+            }
+          ]
+        }
+      ],
+      "type": "llvm.core.json.export",
+      "version": "2.0.1"
+    }"#;
+
+    let report = parse_with_repo_root(input, Path::new("/workspace/covgate"))
+        .expect("llvm export should parse");
+    let named_function_totals = report
+        .totals_by_file
+        .get(&covgate::model::MetricKind::NamedFunction)
+        .and_then(|t| t.get(&PathBuf::from("src/lib.rs")))
+        .expect("named function totals should exist");
+    assert_eq!(named_function_totals.total, 2);
+    assert_eq!(named_function_totals.covered, 1);
+}
+
+#[test]
 fn prefers_longest_suffix_for_function_file_mapping() {
     use covgate::coverage::parse_with_repo_root;
     use std::path::{Path, PathBuf};

@@ -112,6 +112,7 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
                     },
                     covered: region.covered,
                     is_named_function: None,
+                    named_function_identity: None,
                 });
             }
 
@@ -144,6 +145,7 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
                     },
                     covered: line.covered,
                     is_named_function: None,
+                    named_function_identity: None,
                 });
             }
 
@@ -176,6 +178,7 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
                     },
                     covered: branch.covered,
                     is_named_function: None,
+                    named_function_identity: None,
                 });
             }
 
@@ -192,8 +195,7 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
             if let Some(function_records) = function_records_by_file.remove(&path) {
                 let mut function_covered = 0usize;
                 let function_total = function_records.len();
-                let mut named_function_covered = 0usize;
-                let mut named_function_total = 0usize;
+                let mut named_function_records: BTreeMap<String, bool> = BTreeMap::new();
 
                 for (key, covered) in function_records {
                     let (start_line, start_col, end_line, end_col) = match &key {
@@ -211,15 +213,16 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
                             end_col,
                         } => (*start_line, *start_col, *end_line, *end_col),
                     };
-                    let is_named = is_llvm_function_named(&key);
+                    let named_function_identity = llvm_named_function_identity(&key);
+                    let is_named = named_function_identity.is_some();
                     if covered {
                         function_covered += 1;
-                        if is_named {
-                            named_function_covered += 1;
-                        }
                     }
-                    if is_named {
-                        named_function_total += 1;
+                    if let Some(identity) = &named_function_identity {
+                        named_function_records
+                            .entry(identity.clone())
+                            .and_modify(|existing| *existing = *existing || covered)
+                            .or_insert(covered);
                     }
 
                     opportunities.push(CoverageOpportunity {
@@ -233,6 +236,7 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
                         },
                         covered,
                         is_named_function: Some(is_named),
+                        named_function_identity,
                     });
                 }
                 function_totals_by_file.insert(
@@ -242,7 +246,12 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
                         total: function_total,
                     },
                 );
-                if named_function_total > 0 {
+                if !named_function_records.is_empty() {
+                    let named_function_covered = named_function_records
+                        .values()
+                        .filter(|covered| **covered)
+                        .count();
+                    let named_function_total = named_function_records.len();
                     named_function_totals_by_file.insert(
                         path,
                         FileTotals {
@@ -285,24 +294,74 @@ pub(crate) fn parse_with_repo_root(input: &str, repo_root: &Path) -> Result<Cove
     })
 }
 
-fn is_llvm_function_named(key: &FunctionKey) -> bool {
+fn llvm_named_function_identity(key: &FunctionKey) -> Option<String> {
     match key {
         FunctionKey::Span {
             start_line: _,
             start_col: _,
             end_line: _,
             end_col: _,
-        } => false,
+        } => None,
         FunctionKey::NormalizedName {
             normalized_name,
-            start_line: _,
-            start_col: _,
-            end_line: _,
-            end_col: _,
-        } => !normalized_name
-            .split("::")
-            .any(|segment| segment.starts_with('{') && segment.ends_with('}')),
+            start_line,
+            start_col,
+            end_line,
+            end_col,
+        } => {
+            if has_anonymous_path_segment(normalized_name) {
+                return None;
+            }
+            let stripped = strip_generic_arguments(normalized_name);
+            if stripped == *normalized_name {
+                Some(format!(
+                    "{normalized_name}@{start_line}:{start_col}-{end_line}:{end_col}"
+                ))
+            } else {
+                Some(stripped)
+            }
+        }
     }
+}
+
+fn strip_generic_arguments(name: &str) -> String {
+    let mut stripped = String::new();
+    let mut strip_depth = 0u32;
+    for ch in name.chars() {
+        match ch {
+            '<' if strip_depth > 0 => {
+                strip_depth += 1;
+            }
+            '<' if starts_generic_arguments(&stripped) => {
+                if stripped.ends_with("::") {
+                    stripped.truncate(stripped.len() - 2);
+                }
+                strip_depth = 1;
+            }
+            '<' => stripped.push(ch),
+            '>' if strip_depth > 0 => {
+                strip_depth -= 1;
+            }
+            _ if strip_depth == 0 => stripped.push(ch),
+            _ => {}
+        }
+    }
+
+    stripped
+}
+
+fn starts_generic_arguments(prefix: &str) -> bool {
+    prefix.ends_with("::")
+        || prefix
+            .chars()
+            .next_back()
+            .is_some_and(|ch| ch.is_alphanumeric() || ch == '_' || ch == '>')
+}
+
+fn has_anonymous_path_segment(normalized_name: &str) -> bool {
+    normalized_name
+        .split("::")
+        .any(|segment| segment.starts_with('{') && segment.ends_with('}'))
 }
 
 fn normalize_path(value: &str, repo_root: &Path) -> PathBuf {
@@ -576,7 +635,8 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     use super::{
-        FunctionKey, is_llvm_function_named, normalize_llvm_function_name, normalize_path,
+        FunctionKey, llvm_named_function_identity, normalize_llvm_function_name, normalize_path,
+        strip_generic_arguments,
     };
 
     #[test]
@@ -657,8 +717,8 @@ mod tests {
             })
             .collect();
 
-        assert!(is_llvm_function_named(&keys[0]));
-        assert!(!is_llvm_function_named(&keys[1]));
+        assert!(llvm_named_function_identity(&keys[0]).is_some());
+        assert!(llvm_named_function_identity(&keys[1]).is_none());
 
         let span_key = FunctionKey::Span {
             start_line: 1,
@@ -666,7 +726,60 @@ mod tests {
             end_line: 1,
             end_col: 1,
         };
-        assert!(!is_llvm_function_named(&span_key));
+        assert!(llvm_named_function_identity(&span_key).is_none());
+    }
+
+    #[test]
+    fn derives_named_function_identity_without_template_arguments() {
+        let key = FunctionKey::NormalizedName {
+            normalized_name: "covgate::metrics::parse::<alloc::vec::Vec<u32>>".to_string(),
+            start_line: 1,
+            start_col: 1,
+            end_line: 1,
+            end_col: 1,
+        };
+
+        assert_eq!(
+            llvm_named_function_identity(&key).as_deref(),
+            Some("covgate::metrics::parse")
+        );
+        assert_eq!(
+            strip_generic_arguments("demo::Parser<int>::parse<std::string>"),
+            "demo::Parser::parse"
+        );
+        assert_eq!(
+            strip_generic_arguments("<demo::Parser as core::fmt::Debug>::fmt"),
+            "<demo::Parser as core::fmt::Debug>::fmt"
+        );
+    }
+
+    #[test]
+    fn includes_span_in_non_template_named_function_identity() {
+        let key = FunctionKey::NormalizedName {
+            normalized_name: "covgate::metrics::parse".to_string(),
+            start_line: 1,
+            start_col: 2,
+            end_line: 3,
+            end_col: 4,
+        };
+
+        assert_eq!(
+            llvm_named_function_identity(&key).as_deref(),
+            Some("covgate::metrics::parse@1:2-3:4")
+        );
+    }
+
+    #[test]
+    fn excludes_anonymous_named_function_identities() {
+        let key = FunctionKey::NormalizedName {
+            normalized_name: "covgate::metrics::parse::{closure#0}".to_string(),
+            start_line: 1,
+            start_col: 1,
+            end_line: 1,
+            end_col: 1,
+        };
+
+        assert_eq!(llvm_named_function_identity(&key), None);
     }
 
     #[test]

@@ -6,7 +6,7 @@ use std::{
 
 use anyhow::{Context, Result, bail};
 use ignore::gitignore::{Gitignore, GitignoreBuilder};
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer, de::Error as _};
 
 use crate::{
     cli::Args,
@@ -61,12 +61,19 @@ struct FileConfig {
 #[serde(rename_all = "kebab-case")]
 struct GateEntryConfig {
     name: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_pattern_vec")]
     include: Vec<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_pattern_vec")]
     exclude: Vec<String>,
     #[serde(flatten)]
     rules: GateRuleConfig,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum PatternList {
+    Single(String),
+    Multiple(Vec<String>),
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -161,6 +168,18 @@ fn parse_file_config(text: &str) -> Result<FileConfig> {
         toml::from_str::<FileConfig>(text).context("failed to parse covgate config text")?;
     validate_file_config(&config)?;
     Ok(config)
+}
+
+fn deserialize_pattern_vec<'de, D>(deserializer: D) -> std::result::Result<Vec<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let patterns = PatternList::deserialize(deserializer)
+        .map_err(|_| D::Error::custom("expected string or list of strings"))?;
+    match patterns {
+        PatternList::Single(pattern) => Ok(vec![pattern]),
+        PatternList::Multiple(patterns) => Ok(patterns),
+    }
 }
 
 fn load_file_config_from_with_repo_root(
@@ -679,8 +698,8 @@ mod tests {
     use std::{fs, path::PathBuf};
 
     use super::{
-        FileConfig, PathMatcher, config_candidate_paths, derive_scoped_gate_label,
-        parse_file_config, resolve_diff_source, resolve_gates,
+        PathMatcher, config_candidate_paths, derive_scoped_gate_label, parse_file_config,
+        resolve_diff_source, resolve_gates,
     };
     use crate::{
         cli::Args,
@@ -1138,7 +1157,7 @@ mod tests {
 
     #[test]
     fn file_config_defaults_empty_gates() {
-        let config: FileConfig = toml::from_str("").expect("empty config should parse");
+        let config = parse_file_config("").expect("empty config should parse");
         assert!(config.base.is_none());
         assert!(
             resolve_gates(
@@ -1197,6 +1216,43 @@ mod tests {
 
         assert!(error_text.contains("exclude"));
         assert!(error_text.contains("include"));
+    }
+
+    #[test]
+    fn parses_single_string_include_and_exclude() {
+        let config = parse_file_config(
+            "[[gates]]\ninclude = \"**/*.ts\"\nexclude = \"**/*.test.ts\"\nfail-under-lines = 90\n",
+        )
+        .expect("config should parse with single string include/exclude");
+
+        assert_eq!(config.gates[0].include, ["**/*.ts"]);
+        assert_eq!(config.gates[0].exclude, ["**/*.test.ts"]);
+    }
+
+    #[test]
+    fn parses_sequence_include_and_exclude() {
+        let config = parse_file_config(
+            "[[gates]]\ninclude = [\"**/*.ts\", \"**/*.js\"]\nexclude = [\"**/*.test.ts\", \"**/*.test.js\"]\nfail-under-lines = 90\n",
+        )
+        .expect("config should parse with sequence include/exclude");
+
+        assert_eq!(config.gates[0].include, ["**/*.ts", "**/*.js"]);
+        assert_eq!(config.gates[0].exclude, ["**/*.test.ts", "**/*.test.js"]);
+    }
+
+    #[test]
+    fn parse_file_config_rejects_invalid_include_type() {
+        let error = parse_file_config("[[gates]]\ninclude = 42\nfail-under-lines = 90\n")
+            .expect_err("config should fail with invalid include type");
+        assert!(format!("{error:#}").contains("include"));
+    }
+
+    #[test]
+    fn parse_file_config_rejects_invalid_include_list_item_type() {
+        let error =
+            parse_file_config("[[gates]]\ninclude = [\"**/*.rs\", 42]\nfail-under-lines = 90\n")
+                .expect_err("config should fail with invalid include item type");
+        assert!(format!("{error:#}").contains("include"));
     }
 
     #[test]
