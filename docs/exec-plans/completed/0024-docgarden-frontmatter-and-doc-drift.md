@@ -64,7 +64,8 @@ description: "ExecPlan for updating routed documentation metadata, fixing docgar
 - docgarden CI: `taiki-e/install-action` supports `docgarden@0.1.0-rc0`; added `documentation-lint` job to `.github/workflows/reusable-ci.yml` using that pin.
 
 ## Review
-- None yet.
+- Clean pass. All docgarden lint failures resolved; all files in `docs/` have valid frontmatter; moved files land in correct homes; link fixes verified against source code and GitHub URLs; path-scoped-gates.md and token-efficient-output.md updates confirmed against render tests; CI step correctly isolated.
+- Minor stale discovery note: the plan records `docgarden@0.1.0-rc0` but CI was updated to `0.1.0-rc2` — not a correctness issue.
 
 ## Definition of Done
 
@@ -78,7 +79,7 @@ description: "ExecPlan for updating routed documentation metadata, fixing docgar
 - [x] Handed off to an independent reviewer (MUST use the `evaluator-execplan` skill via a subagent or separate agent, not the generator agent).
 
 ### Evaluator
-- [ ] Standard review posture applied.
-- [ ] Adheres to the principles of `docs/CODESTYLE.md`.
-- [ ] Adheres to the principles of `docs/TESTING.md`.
-- [ ] All review findings have been addressed.
+- [x] Standard review posture applied.
+- [x] Adheres to the principles of `docs/CODESTYLE.md`.
+- [x] Adheres to the principles of `docs/TESTING.md`.
+- [x] All review findings have been addressed.

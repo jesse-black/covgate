@@ -1,3 +1,7 @@
+---
+description: "Top-level architecture codemap and invariants for covgate; read when understanding system boundaries, implementation modules, coverage/diff/gate data flow, or where to start for parser, metric, gate, CLI, rendering, and testing changes."
+---
+
 # Architecture
 
 This document describes the high-level architecture of `covgate`.
