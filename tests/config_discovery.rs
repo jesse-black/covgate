@@ -27,16 +27,6 @@ fn args_for_config_discovery() -> Args {
         coverage_report: "coverage.json".into(),
         base: None,
         diff_file: Some("scenario.diff".into()),
-        fail_under_regions: Some(90.0),
-        fail_under_lines: None,
-        fail_under_branches: None,
-        fail_under_functions: None,
-        fail_under_named_functions: None,
-        fail_uncovered_regions: None,
-        fail_uncovered_lines: None,
-        fail_uncovered_branches: None,
-        fail_uncovered_functions: None,
-        fail_uncovered_named_functions: None,
         markdown_output: None,
     }
 }
@@ -84,9 +74,13 @@ fn does_not_walk_past_repo_root_when_config_is_missing_inside_repo() {
     let _guard = CwdGuard(previous);
     std::env::set_current_dir(&nested).expect("should chdir into nested directory");
 
-    let config = Config::try_from(args_for_config_discovery()).expect("config should resolve");
+    let error =
+        Config::try_from(args_for_config_discovery()).expect_err("config should not resolve");
 
-    assert_eq!(config.markdown_output, None);
+    assert!(
+        error.to_string().contains("at least one rule is required"),
+        "error={error:?}"
+    );
 }
 
 #[test]

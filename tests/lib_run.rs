@@ -21,16 +21,6 @@ fn git_base_args(coverage_report: std::path::PathBuf) -> Args {
         coverage_report,
         base: Some("HEAD".to_string()),
         diff_file: None,
-        fail_under_regions: Some(90.0),
-        fail_under_lines: None,
-        fail_under_branches: None,
-        fail_under_functions: None,
-        fail_under_named_functions: None,
-        fail_uncovered_regions: None,
-        fail_uncovered_lines: None,
-        fail_uncovered_branches: None,
-        fail_uncovered_functions: None,
-        fail_uncovered_named_functions: None,
         markdown_output: None,
     }
 }
@@ -45,21 +35,16 @@ fn run_with_diff_file_executes_without_untracked_warning_lookup() {
     let previous = env::current_dir().expect("cwd should resolve");
     let _guard = CwdGuard(previous);
     env::set_current_dir(&worktree).expect("should chdir into worktree");
+    fs::write(
+        worktree.join("covgate.toml"),
+        "[[gates]]\nfail-under-regions = 90\n",
+    )
+    .expect("config should write");
 
     let config = Config::try_from(Args {
         coverage_report: fixture.coverage_json(),
         base: None,
         diff_file: Some(diff_file),
-        fail_under_regions: Some(90.0),
-        fail_under_lines: None,
-        fail_under_branches: None,
-        fail_under_functions: None,
-        fail_under_named_functions: None,
-        fail_uncovered_regions: None,
-        fail_uncovered_lines: None,
-        fail_uncovered_branches: None,
-        fail_uncovered_functions: None,
-        fail_uncovered_named_functions: None,
         markdown_output: None,
     })
     .expect("config should resolve");
@@ -80,6 +65,11 @@ fn run_with_git_base_checks_untracked_files_before_loading_diff() {
     let previous = env::current_dir().expect("cwd should resolve");
     let _guard = CwdGuard(previous);
     env::set_current_dir(&worktree).expect("should chdir into worktree");
+    fs::write(
+        worktree.join("covgate.toml"),
+        "[[gates]]\nfail-under-regions = 90\n",
+    )
+    .expect("config should write");
 
     let config =
         Config::try_from(git_base_args(fixture.coverage_json())).expect("config should resolve");
@@ -99,6 +89,11 @@ fn run_with_git_base_quotes_paths_in_add_command_when_needed() {
     let previous = env::current_dir().expect("cwd should resolve");
     let _guard = CwdGuard(previous);
     env::set_current_dir(&worktree).expect("should chdir into worktree");
+    fs::write(
+        worktree.join("covgate.toml"),
+        "[[gates]]\nfail-under-regions = 90\n",
+    )
+    .expect("config should write");
 
     let config =
         Config::try_from(git_base_args(fixture.coverage_json())).expect("config should resolve");
@@ -116,6 +111,11 @@ fn run_with_git_base_skips_warning_when_no_untracked_files_exist() {
     let previous = env::current_dir().expect("cwd should resolve");
     let _guard = CwdGuard(previous);
     env::set_current_dir(&worktree).expect("should chdir into worktree");
+    fs::write(
+        worktree.join("covgate.toml"),
+        "[[gates]]\nfail-under-regions = 90\n",
+    )
+    .expect("config should write");
 
     let config =
         Config::try_from(git_base_args(fixture.coverage_json())).expect("config should resolve");
@@ -132,6 +132,11 @@ fn run_with_git_base_requires_git_repo_for_coverage_path_normalization() {
     let previous = env::current_dir().expect("cwd should resolve");
     let _guard = CwdGuard(previous);
     env::set_current_dir(temp.path()).expect("should chdir into tempdir");
+    fs::write(
+        temp.path().join("covgate.toml"),
+        "[[gates]]\nfail-under-regions = 90\n",
+    )
+    .expect("config should write");
 
     let config =
         Config::try_from(git_base_args(fixture.coverage_json())).expect("config should resolve");

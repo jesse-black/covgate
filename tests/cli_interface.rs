@@ -224,10 +224,7 @@ fn check_help_describes_arguments_and_options() {
         stdout.contains("Precomputed unified diff file"),
         "stdout={stdout}"
     );
-    assert!(
-        stdout.contains("Minimum changed-region coverage percentage required to pass"),
-        "stdout={stdout}"
-    );
+    assert!(!stdout.contains("--fail-under-regions"), "stdout={stdout}");
     assert!(
         stdout.contains("Write a Markdown summary to this file"),
         "stdout={stdout}"
@@ -351,12 +348,13 @@ fn covgate_includes_dirty_worktree_changes_by_default() {
 ",
     )
     .expect("dirty file should write");
+    fs::write(
+        worktree.join("covgate.toml"),
+        "[[gates]]\nfail-under-regions = 90\n",
+    )
+    .expect("config should be written");
 
-    let output = run_covgate(
-        &worktree,
-        fixture,
-        &["--fail-under-regions".to_string(), "90".to_string()],
-    );
+    let output = run_covgate(&worktree, fixture, &[]);
 
     assert_eq!(output.status.code(), Some(0));
     let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
@@ -372,6 +370,11 @@ fn diff_file_mode_skips_dirty_worktree_guard() {
     let temp = tempdir().expect("tempdir should exist");
     let worktree = setup_fixture_worktree(temp.path(), fixture);
     let diff_file = write_worktree_diff(temp.path(), &worktree);
+    fs::write(
+        worktree.join("covgate.toml"),
+        "[[gates]]\nfail-under-regions = 90\n",
+    )
+    .expect("config should be written");
 
     let output = run_covgate_with_coverage(
         &worktree,
@@ -379,8 +382,6 @@ fn diff_file_mode_skips_dirty_worktree_guard() {
         &[
             "--diff-file".to_string(),
             diff_file.to_string_lossy().into_owned(),
-            "--fail-under-regions".to_string(),
-            "90".to_string(),
         ],
     );
 
@@ -397,6 +398,13 @@ fn git_base_mode_warns_about_untracked_files() {
     let fixture = rust_basic_pass_fixture();
     let temp = tempdir().expect("tempdir should exist");
     let worktree = setup_fixture_worktree(temp.path(), fixture);
+    fs::write(
+        worktree.join("covgate.toml"),
+        "[[gates]]\nfail-under-regions = 90\n",
+    )
+    .expect("config should be written");
+    run_git(&worktree, &["add", "covgate.toml"]);
+    run_git(&worktree, &["commit", "-m", "add covgate config"]);
 
     fs::write(
         worktree.join("new_untracked.rs"),
@@ -405,11 +413,7 @@ fn git_base_mode_warns_about_untracked_files() {
     )
     .expect("untracked file should write");
 
-    let output = run_covgate(
-        &worktree,
-        fixture,
-        &["--fail-under-regions".to_string(), "90".to_string()],
-    );
+    let output = run_covgate(&worktree, fixture, &[]);
 
     assert_eq!(output.status.code(), Some(0));
     let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
@@ -438,6 +442,11 @@ fn diff_file_mode_skips_untracked_files_warning() {
 ",
     )
     .expect("untracked file should write");
+    fs::write(
+        worktree.join("covgate.toml"),
+        "[[gates]]\nfail-under-regions = 90\n",
+    )
+    .expect("config should be written");
 
     let output = run_covgate_with_coverage(
         &worktree,
@@ -445,8 +454,6 @@ fn diff_file_mode_skips_untracked_files_warning() {
         &[
             "--diff-file".to_string(),
             diff_file.to_string_lossy().into_owned(),
-            "--fail-under-regions".to_string(),
-            "90".to_string(),
         ],
     );
 
@@ -475,14 +482,15 @@ fn automatic_base_prefers_standard_branch_ref_over_recorded_worktree_ref() {
     run_git(&worktree, &["branch", "main", "HEAD"]);
 
     copy_tree(&overlay_src, &worktree);
+    fs::write(
+        worktree.join("covgate.toml"),
+        "[[gates]]\nfail-under-regions = 90\n",
+    )
+    .expect("config should be written");
     run_git(&worktree, &["add", "."]);
     run_git(&worktree, &["commit", "-m", "feature change"]);
 
-    let output = run_covgate(
-        &worktree,
-        fixture,
-        &["--fail-under-regions".to_string(), "90".to_string()],
-    );
+    let output = run_covgate(&worktree, fixture, &[]);
 
     assert_eq!(output.status.code(), Some(0));
 }
@@ -504,18 +512,18 @@ fn explicit_base_overrides_recorded_worktree_ref() {
     run_git(&worktree, &["branch", "main", "HEAD"]);
 
     copy_tree(&overlay_src, &worktree);
+    fs::write(
+        worktree.join("covgate.toml"),
+        "[[gates]]\nfail-under-regions = 90\n",
+    )
+    .expect("config should be written");
     run_git(&worktree, &["add", "."]);
     run_git(&worktree, &["commit", "-m", "feature change"]);
 
     let output = run_covgate(
         &worktree,
         fixture,
-        &[
-            "--base".to_string(),
-            "main".to_string(),
-            "--fail-under-regions".to_string(),
-            "90".to_string(),
-        ],
+        &["--base".to_string(), "main".to_string()],
     );
 
     assert_eq!(output.status.code(), Some(0));
@@ -526,11 +534,7 @@ fn failure_text_requires_git_repo_when_run_outside_repository() {
     let fixture = rust_basic_pass_fixture();
     let temp = tempdir().expect("tempdir should exist");
 
-    let output = run_covgate_with_coverage(
-        temp.path(),
-        &fixture.coverage_json(),
-        &["--fail-under-regions".to_string(), "90".to_string()],
-    );
+    let output = run_covgate_with_coverage(temp.path(), &fixture.coverage_json(), &[]);
 
     assert_eq!(output.status.code(), Some(1));
     let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
@@ -547,6 +551,11 @@ fn markdown_summary_rust_fixture() {
     let worktree = setup_fixture_worktree(temp.path(), fixture);
     let diff_file = write_worktree_diff(temp.path(), &worktree);
     let markdown_output = temp.path().join("summary.md");
+    fs::write(
+        worktree.join("covgate.toml"),
+        "[[gates]]\nfail-under-regions = 90\n",
+    )
+    .expect("config should be written");
 
     let output = run_covgate(
         &worktree,
@@ -554,8 +563,6 @@ fn markdown_summary_rust_fixture() {
         &[
             "--diff-file".to_string(),
             diff_file.to_string_lossy().into_owned(),
-            "--fail-under-regions".to_string(),
-            "90".to_string(),
             "--markdown-output".to_string(),
             markdown_output.to_string_lossy().into_owned(),
         ],
@@ -722,35 +729,6 @@ fn path_scoped_gates_markdown_labels_single_named_fallback() {
 }
 
 #[test]
-fn path_scoped_gates_cli_thresholds_override_only_the_fallback_gate() {
-    let fixture = vitest_path_scoped_gates_fixture();
-    let (_temp, worktree, diff_file) = setup_path_scoped_fixture();
-    fs::write(
-        worktree.join("covgate.toml"),
-        "[[gates]]\nname = \"js-ui\"\ninclude = [\"**/*.tsx\"]\nfail-under-lines = 70\n\n[[gates]]\nfail-under-lines = 10\n",
-    )
-    .expect("config should be written");
-
-    let output = run_covgate(
-        &worktree,
-        fixture,
-        &[
-            "--diff-file".to_string(),
-            diff_file.to_string_lossy().into_owned(),
-            "--fail-under-lines".to_string(),
-            "40".to_string(),
-        ],
-    );
-
-    assert_eq!(output.status.code(), Some(1));
-    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-    assert!(stdout.contains("[js-ui] PASS  Lines:"), "stdout={stdout}");
-    assert!(stdout.contains("≥ 70.00%"), "stdout={stdout}");
-    assert!(stdout.contains("[default] FAIL  Lines:"), "stdout={stdout}");
-    assert!(stdout.contains("≱ 40.00%"), "stdout={stdout}");
-}
-
-#[test]
 fn path_scoped_gates_reject_overlap_on_changed_files() {
     let fixture = vitest_path_scoped_gates_fixture();
     let (_temp, worktree, diff_file) = setup_path_scoped_fixture();
@@ -820,6 +798,11 @@ fn absolute_llvm_paths_match_diff_fixture() {
     let diff_file = write_worktree_diff(temp.path(), &worktree);
     let coverage_json = temp.path().join("coverage-absolute.json");
     write_absolute_path_coverage_fixture(fixture, &worktree, &coverage_json);
+    fs::write(
+        worktree.join("covgate.toml"),
+        "[[gates]]\nfail-under-regions = 90\n",
+    )
+    .expect("config should be written");
 
     let output = run_covgate_with_coverage(
         &worktree,
@@ -827,8 +810,6 @@ fn absolute_llvm_paths_match_diff_fixture() {
         &[
             "--diff-file".to_string(),
             diff_file.to_string_lossy().into_owned(),
-            "--fail-under-regions".to_string(),
-            "90".to_string(),
         ],
     );
 
@@ -851,18 +832,18 @@ fn pr_branch_against_main_fixture() {
     run_git(&worktree, &["branch", "-M", "main"]);
     run_git(&worktree, &["checkout", "-b", "feature/pr-fixture"]);
     copy_tree(&overlay_src, &worktree);
+    fs::write(
+        worktree.join("covgate.toml"),
+        "[[gates]]\nfail-under-regions = 90\n",
+    )
+    .expect("config should be written");
     run_git(&worktree, &["add", "."]);
     run_git(&worktree, &["commit", "-m", "feature change"]);
 
     let output = run_covgate(
         &worktree,
         fixture,
-        &[
-            "--base".to_string(),
-            "main".to_string(),
-            "--fail-under-regions".to_string(),
-            "90".to_string(),
-        ],
+        &["--base".to_string(), "main".to_string()],
     );
 
     assert_eq!(output.status.code(), Some(0));
@@ -938,81 +919,6 @@ fn uses_repo_config_defaults_from_parent_directory() {
 }
 
 #[test]
-fn mixed_cli_over_toml_precedence() {
-    let fixture = rust_basic_fail_fixture();
-    let temp = tempdir().expect("tempdir should exist");
-    let fixture_root = fixture.root();
-    let repo_src = fixture_root.join("repo");
-    let overlay_src = fixture_root.join("overlay");
-    let worktree = temp.path().join("repo");
-    copy_tree(&repo_src, &worktree);
-    init_git_repo(&worktree);
-    run_git(&worktree, &["branch", "-M", "main"]);
-    run_git(&worktree, &["checkout", "-b", "feature/mixed-cli-override"]);
-
-    copy_tree(&overlay_src, &worktree);
-    run_git(&worktree, &["add", "."]);
-    run_git(&worktree, &["commit", "-m", "feature change"]);
-    fs::write(
-        worktree.join("covgate.toml"),
-        "base = \"main\"\n[[gates]]\nfail-under-regions = 0.0\nfail-uncovered-regions = 10\n",
-    )
-    .expect("config should be written");
-    run_git(&worktree, &["add", "covgate.toml"]);
-    run_git(&worktree, &["commit", "-m", "add covgate defaults"]);
-
-    let output = run_covgate(
-        &worktree,
-        fixture,
-        &["--fail-uncovered-regions".to_string(), "0".to_string()],
-    );
-
-    assert_eq!(output.status.code(), Some(1));
-    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-    assert!(stdout.contains("Diff: main...HEAD, staged and unstaged changes"));
-    assert!(stdout.contains("PASS  Regions:"), "stdout={stdout}");
-    assert!(stdout.contains("≥ 0.00%"), "stdout={stdout}");
-    assert!(stdout.contains("FAIL  Regions:"), "stdout={stdout}");
-    assert!(stdout.contains("≰ 0"), "stdout={stdout}");
-}
-
-#[test]
-fn cli_threshold_overrides_repo_config_default() {
-    let fixture = rust_basic_fail_fixture();
-    let temp = tempdir().expect("tempdir should exist");
-    let fixture_root = fixture.root();
-    let repo_src = fixture_root.join("repo");
-    let overlay_src = fixture_root.join("overlay");
-    let worktree = temp.path().join("repo");
-    copy_tree(&repo_src, &worktree);
-    init_git_repo(&worktree);
-    run_git(&worktree, &["branch", "-M", "main"]);
-    run_git(&worktree, &["checkout", "-b", "feature/cli-override"]);
-
-    copy_tree(&overlay_src, &worktree);
-    run_git(&worktree, &["add", "."]);
-    run_git(&worktree, &["commit", "-m", "feature change"]);
-    fs::write(
-        worktree.join("covgate.toml"),
-        "base = \"main\"\n[[gates]]\nfail-under-regions = 0.0\n",
-    )
-    .expect("config should be written");
-    run_git(&worktree, &["add", "covgate.toml"]);
-    run_git(&worktree, &["commit", "-m", "add covgate defaults"]);
-
-    let output = run_covgate(
-        &worktree,
-        fixture,
-        &["--fail-under-regions".to_string(), "60".to_string()],
-    );
-
-    assert_eq!(output.status.code(), Some(1));
-    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
-    assert!(stdout.contains("Diff: main...HEAD, staged and unstaged changes"));
-    assert!(stdout.contains("FAIL  Regions:"));
-}
-
-#[test]
 fn unknown_coverage_json_shape_reports_supported_formats() {
     let fixture = rust_basic_fail_fixture();
     let temp = tempdir().expect("tempdir should exist");
@@ -1021,6 +927,11 @@ fn unknown_coverage_json_shape_reports_supported_formats() {
     let invalid_coverage = temp.path().join("unknown-coverage.json");
     fs::write(&invalid_coverage, "{\"hello\":\"world\"}")
         .expect("invalid coverage fixture should be written");
+    fs::write(
+        worktree.join("covgate.toml"),
+        "[[gates]]\nfail-under-lines = 90\n",
+    )
+    .expect("config should be written");
 
     let output = run_covgate_with_coverage(
         &worktree,
@@ -1028,8 +939,6 @@ fn unknown_coverage_json_shape_reports_supported_formats() {
         &[
             "--diff-file".to_string(),
             diff_file.to_string_lossy().into_owned(),
-            "--fail-under-lines".to_string(),
-            "90".to_string(),
         ],
     );
 
@@ -1049,12 +958,13 @@ fn minimal_pass_output_is_token_efficient() {
     let fixture = rust_basic_pass_fixture();
     let temp = tempdir().expect("tempdir should exist");
     let worktree = setup_fixture_worktree(temp.path(), fixture);
+    fs::write(
+        worktree.join("covgate.toml"),
+        "[[gates]]\nfail-under-regions = 90\n",
+    )
+    .expect("config should be written");
 
-    let output = run_covgate(
-        &worktree,
-        fixture,
-        &["--fail-under-regions".to_string(), "90".to_string()],
-    );
+    let output = run_covgate(&worktree, fixture, &[]);
 
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
@@ -1080,12 +990,13 @@ fn minimal_fail_output_is_focused() {
     let fixture = rust_basic_fail_fixture();
     let temp = tempdir().expect("tempdir should exist");
     let worktree = setup_fixture_worktree(temp.path(), fixture);
+    fs::write(
+        worktree.join("covgate.toml"),
+        "[[gates]]\nfail-under-regions = 100\n",
+    )
+    .expect("config should be written");
 
-    let output = run_covgate(
-        &worktree,
-        fixture,
-        &["--fail-under-regions".to_string(), "100".to_string()],
-    );
+    let output = run_covgate(&worktree, fixture, &[]);
 
     assert_eq!(output.status.code(), Some(1));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");

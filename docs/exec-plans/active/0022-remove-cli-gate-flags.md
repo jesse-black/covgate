@@ -26,7 +26,7 @@ description: "ExecPlan for removing the ten CLI gate threshold flags from covgat
 
 ### src/cli.rs
 
-- [ ] Remove the ten gate threshold fields from `Args`:
+- [x] Remove the ten gate threshold fields from `Args`:
   - `fail_under_regions: Option<f64>`
   - `fail_under_lines: Option<f64>`
   - `fail_under_branches: Option<f64>`
@@ -41,16 +41,16 @@ description: "ExecPlan for removing the ten CLI gate threshold flags from covgat
 
 ### src/config.rs
 
-- [ ] In `TryFrom<Args> for Config`: remove the ten threshold field bindings from the exhaustive `Args { ... }` destructuring pattern (lines 96–111). The pattern currently binds them as `_`; remove all ten `fail_under_*/fail_uncovered_*: _` entries.
-- [ ] Delete `resolve_gate_rules` (lines 316–521) in its entirety: the function's only job is merging CLI thresholds with config values, a concept that no longer exists. Gate rules now come from config only.
-- [ ] Delete `has_cli_rules` (lines 553–568) in its entirety.
-- [ ] Delete `push_percent_rule` (lines 523–536) and `push_uncovered_rule` (lines 538–551): both are only called from `resolve_gate_rules`.
-- [ ] Rewrite `resolve_gates` (lines 244–314) to build `Vec<ConfiguredGate>` from `file_config` only:
+- [x] In `TryFrom<Args> for Config`: remove the ten threshold field bindings from the exhaustive `Args { ... }` destructuring pattern (lines 96–111). The pattern currently binds them as `_`; remove all ten `fail_under_*/fail_uncovered_*: _` entries.
+- [x] Delete `resolve_gate_rules` (lines 316–521) in its entirety: the function's only job is merging CLI thresholds with config values, a concept that no longer exists. Gate rules now come from config only.
+- [x] Delete `has_cli_rules` (lines 553–568) in its entirety.
+- [x] Delete `push_percent_rule` (lines 523–536) and `push_uncovered_rule` (lines 538–551): both are only called from `resolve_gate_rules`.
+- [x] Rewrite `resolve_gates` (lines 244–314) to build `Vec<ConfiguredGate>` from `file_config` only:
   - Remove the `args: &Args` parameter entirely (callers in `TryFrom<Args>` pass `&args` today).
   - Iterate `config.gates`, convert each `GateEntryConfig` directly to a `ConfiguredGate` using a new local helper `gate_rules_from_config(c: &GateRuleConfig) -> Vec<GateRule>` that reads the ten config fields directly.
   - Remove the `!has_fallback && has_cli_rules(args)` branch that synthesized a fallback gate from CLI flags.
   - Keep the validation: empty rules per gate → bail, `configured.is_empty()` → bail (update the error message to omit the mention of CLI flags: `"at least one rule is required; configure a [[gates]] entry in covgate.toml"`).
-- [ ] In the `#[cfg(test)]` block (lines 686–1259):
+- [x] In the `#[cfg(test)]` block (lines 686–1259):
   - Delete tests that exist solely to test CLI-flag-to-rule wiring:
     - `parses_region_cli_rules` (line 707) — delete.
     - `prefers_cli_over_config_defaults` (line 743) — delete.
@@ -62,36 +62,36 @@ description: "ExecPlan for removing the ten CLI gate threshold flags from covgat
 
 ### tests/cli_metrics.rs
 
-- [ ] Delete `tests/cli_metrics.rs` entirely.
+- [x] Delete `tests/cli_metrics.rs` entirely.
 
 ### tests/cli_interface.rs
 
 For each test that passes CLI gate flags, decide: **convert** (the behavior under test is the config path, flags are just scaffolding) or **delete** (the behavior under test is the CLI flag itself). Summary follows:
 
-- [ ] `covgate_includes_dirty_worktree_changes_by_default` (line 343) — **convert**: the behavior is dirty-worktree inclusion, not the flag. Replace `&["--fail-under-regions".to_string(), "90".to_string()]` with a `covgate.toml` file containing `[[gates]]\nfail-under-regions = 90\n` written to the worktree before the `run_covgate` call.
-- [ ] `diff_file_mode_skips_dirty_worktree_guard` (line 370) — **convert**: behavior is `--diff-file` mode skipping the dirty guard. Replace `--fail-under-regions` args with a `covgate.toml` containing `[[gates]]\nfail-under-regions = 90\n`. Keep `--diff-file` arg.
-- [ ] `git_base_mode_warns_about_untracked_files` (line 396) — **convert**: behavior is untracked-files warning. Replace `--fail-under-regions` with a `covgate.toml`. The `run_covgate` call does not pass `--diff-file`, so automatic base discovery applies; covgate.toml provides the gate.
-- [ ] `diff_file_mode_skips_untracked_files_warning` (line 429) — **convert**: behavior is `--diff-file` suppressing the untracked warning. Replace `--fail-under-regions` with a `covgate.toml`. Keep `--diff-file` arg.
-- [ ] `automatic_base_prefers_standard_branch_ref_over_recorded_worktree_ref` (line 462) — **convert**: behavior is base-ref precedence. Replace `--fail-under-regions` with a `covgate.toml` written before the commit that adds it.
-- [ ] `explicit_base_overrides_recorded_worktree_ref` (line 491) — **convert**: behavior is `--base` override. Replace `--fail-under-regions` with a `covgate.toml`. Keep `--base main` arg.
-- [ ] `failure_text_requires_git_repo_when_run_outside_repository` (line 525) — **convert**: behavior is git-repo-required error. Replace `--fail-under-regions` with a `covgate.toml` in the temp directory (no git repo, so the error fires before config is read; a `covgate.toml` is not required for the error to fire, but removing the flag means zero rules unless config is provided — since the error fires first, simply removing the flag from args is sufficient; verify the error still fires before config resolution).
-- [ ] `markdown_summary_rust_fixture` (line 544) — **convert**: behavior is Markdown output. Replace `--fail-under-regions 90` with a `covgate.toml` containing `[[gates]]\nfail-under-regions = 90\n`. Keep `--diff-file` and `--markdown-output` args.
-- [ ] `path_scoped_gates_cli_thresholds_override_only_the_fallback_gate` (line 725) — **delete**: behavior under test is the CLI flag overriding the fallback gate threshold. This feature is being removed; delete the test.
-- [ ] `absolute_llvm_paths_match_diff_fixture` (line 816) — **convert**: behavior is path normalization. Replace `--fail-under-regions 90` with a `covgate.toml`. Keep `--diff-file` arg.
-- [ ] `pr_branch_against_main_fixture` (line 842) — **convert**: behavior is PR branch diff against main. Replace `--fail-under-regions 90` with a `covgate.toml`. Keep `--base main` arg.
-- [ ] `mixed_cli_over_toml_precedence` (line 941) — **delete**: behavior under test is CLI flag overriding TOML threshold. This feature is being removed; delete the test.
-- [ ] `cli_threshold_overrides_repo_config_default` (line 980) — **delete**: behavior under test is CLI flag overriding repo config default. This feature is being removed; delete the test.
-- [ ] `unknown_coverage_json_shape_reports_supported_formats` (line 1016) — **convert**: behavior is unsupported-format error. Replace `--fail-under-lines 90` with a `covgate.toml`. Keep `--diff-file` arg.
-- [ ] `minimal_pass_output_is_token_efficient` (line 1048) — **convert**: behavior is minimal console output on PASS. Replace `--fail-under-regions 90` with a `covgate.toml` containing `[[gates]]\nfail-under-regions = 90\n` written to the worktree.
-- [ ] `minimal_fail_output_is_focused` (line 1079) — **convert**: behavior is minimal console output on FAIL. Replace `--fail-under-regions 100` with a `covgate.toml` containing `[[gates]]\nfail-under-regions = 100\n` written to the worktree.
+- [x] `covgate_includes_dirty_worktree_changes_by_default` (line 343) — **convert**: the behavior is dirty-worktree inclusion, not the flag. Replace `&["--fail-under-regions".to_string(), "90".to_string()]` with a `covgate.toml` file containing `[[gates]]\nfail-under-regions = 90\n` written to the worktree before the `run_covgate` call.
+- [x] `diff_file_mode_skips_dirty_worktree_guard` (line 370) — **convert**: behavior is `--diff-file` mode skipping the dirty guard. Replace `--fail-under-regions` args with a `covgate.toml` containing `[[gates]]\nfail-under-regions = 90\n`. Keep `--diff-file` arg.
+- [x] `git_base_mode_warns_about_untracked_files` (line 396) — **convert**: behavior is untracked-files warning. Replace `--fail-under-regions` with a `covgate.toml`. The `run_covgate` call does not pass `--diff-file`, so automatic base discovery applies; covgate.toml provides the gate.
+- [x] `diff_file_mode_skips_untracked_files_warning` (line 429) — **convert**: behavior is `--diff-file` suppressing the untracked warning. Replace `--fail-under-regions` with a `covgate.toml`. Keep `--diff-file` arg.
+- [x] `automatic_base_prefers_standard_branch_ref_over_recorded_worktree_ref` (line 462) — **convert**: behavior is base-ref precedence. Replace `--fail-under-regions` with a `covgate.toml` written before the commit that adds it.
+- [x] `explicit_base_overrides_recorded_worktree_ref` (line 491) — **convert**: behavior is `--base` override. Replace `--fail-under-regions` with a `covgate.toml`. Keep `--base main` arg.
+- [x] `failure_text_requires_git_repo_when_run_outside_repository` (line 525) — **convert**: behavior is git-repo-required error. Replace `--fail-under-regions` with a `covgate.toml` in the temp directory (no git repo, so the error fires before config is read; a `covgate.toml` is not required for the error to fire, but removing the flag means zero rules unless config is provided — since the error fires first, simply removing the flag from args is sufficient; verify the error still fires before config resolution).
+- [x] `markdown_summary_rust_fixture` (line 544) — **convert**: behavior is Markdown output. Replace `--fail-under-regions 90` with a `covgate.toml` containing `[[gates]]\nfail-under-regions = 90\n`. Keep `--diff-file` and `--markdown-output` args.
+- [x] `path_scoped_gates_cli_thresholds_override_only_the_fallback_gate` (line 725) — **delete**: behavior under test is the CLI flag overriding the fallback gate threshold. This feature is being removed; delete the test.
+- [x] `absolute_llvm_paths_match_diff_fixture` (line 816) — **convert**: behavior is path normalization. Replace `--fail-under-regions 90` with a `covgate.toml`. Keep `--diff-file` arg.
+- [x] `pr_branch_against_main_fixture` (line 842) — **convert**: behavior is PR branch diff against main. Replace `--fail-under-regions 90` with a `covgate.toml`. Keep `--base main` arg.
+- [x] `mixed_cli_over_toml_precedence` (line 941) — **delete**: behavior under test is CLI flag overriding TOML threshold. This feature is being removed; delete the test.
+- [x] `cli_threshold_overrides_repo_config_default` (line 980) — **delete**: behavior under test is CLI flag overriding repo config default. This feature is being removed; delete the test.
+- [x] `unknown_coverage_json_shape_reports_supported_formats` (line 1016) — **convert**: behavior is unsupported-format error. Replace `--fail-under-lines 90` with a `covgate.toml`. Keep `--diff-file` arg.
+- [x] `minimal_pass_output_is_token_efficient` (line 1048) — **convert**: behavior is minimal console output on PASS. Replace `--fail-under-regions 90` with a `covgate.toml` containing `[[gates]]\nfail-under-regions = 90\n` written to the worktree.
+- [x] `minimal_fail_output_is_focused` (line 1079) — **convert**: behavior is minimal console output on FAIL. Replace `--fail-under-regions 100` with a `covgate.toml` containing `[[gates]]\nfail-under-regions = 100\n` written to the worktree.
 
   For converted tests: use `fs::write(worktree.join("covgate.toml"), "[[gates]]\nfail-under-<metric> = <value>\n")` immediately before calling `run_covgate` (or before the commit that adds it, where needed for the diff to include the toml).
 
-- [ ] `check_help_describes_arguments_and_options` (line 210) — update the assertion `stdout.contains("Minimum changed-region coverage percentage required to pass")` to instead assert the flag is NOT present (since the flags are removed, the help should not list them). Replace with `assert!(!stdout.contains("--fail-under-regions"), ...)` or convert to assert the remaining option descriptions (`--base`, `--diff-file`, `--markdown-output`).
+- [x] `check_help_describes_arguments_and_options` (line 210) — update the assertion `stdout.contains("Minimum changed-region coverage percentage required to pass")` to instead assert the flag is NOT present (since the flags are removed, the help should not list them). Replace with `assert!(!stdout.contains("--fail-under-regions"), ...)` or convert to assert the remaining option descriptions (`--base`, `--diff-file`, `--markdown-output`).
 
 ### README.md
 
-- [ ] Remove the entire "CLI Reference" subsection (line 153–155):
+- [x] Remove the entire "CLI Reference" subsection (line 153–155):
   ```
   ### CLI Reference
 
@@ -106,10 +106,12 @@ For each test that passes CLI gate flags, decide: **convert** (the behavior unde
 - `cargo xtask validate`
 
 ## Discoveries
-- None yet.
+- `Args` struct literals in `tests/config_discovery.rs`, `tests/config_auto_base.rs`, and `tests/lib_run.rs` also need threshold fields removed after `src/cli.rs` changes.
+- `tests/llvm_diff_regression.rs`, `tests/llvm_real_parity.rs`, and `tests/support/mod.rs` also used CLI gate flags as test scaffolding and were converted to write temporary config gates.
 
 ## Review
-- None yet.
+- Clean evaluator pass on 2026-05-10. Reviewed the current worktree against this ExecPlan, `docs/CODESTYLE.md`, and `docs/TESTING.md`; no implementation findings.
+- Validation inspected during review: `cargo fmt --check`, `cargo clippy -- -D warnings`, `cargo test --test cli_interface`, `cargo test -p covgate --lib`, and `cargo xtask validate` all passed.
 
 ## Definition of Done
 
@@ -117,13 +119,13 @@ For each test that passes CLI gate flags, decide: **convert** (the behavior unde
 - [x] Plan is consistent, up to date, decision-complete, and ready to hand off.
 
 ### Generator
-- [ ] Goal achieved: all ten CLI gate threshold flags removed; `covgate.toml` is the sole gate configuration surface; workflow flags unchanged.
-- [ ] All planned steps are complete.
-- [ ] All validation commands pass.
-- [ ] Handed off to an independent reviewer (MUST use the `evaluator-execplan` skill via a subagent or separate agent, not the generator agent).
+- [x] Goal achieved: all ten CLI gate threshold flags removed; `covgate.toml` is the sole gate configuration surface; workflow flags unchanged.
+- [x] All planned steps are complete.
+- [x] All validation commands pass.
+- [x] Handed off to an independent reviewer (MUST use the `evaluator-execplan` skill via a subagent or separate agent, not the generator agent).
 
 ### Evaluator
-- [ ] Standard review posture applied.
-- [ ] Adheres to the principles of `docs/CODESTYLE.md`.
-- [ ] Adheres to the principles of `docs/TESTING.md`.
-- [ ] All review findings have been addressed.
+- [x] Standard review posture applied.
+- [x] Adheres to the principles of `docs/CODESTYLE.md`.
+- [x] Adheres to the principles of `docs/TESTING.md`.
+- [x] All review findings have been addressed.

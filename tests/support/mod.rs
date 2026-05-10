@@ -417,13 +417,18 @@ impl MetricFixtureCase {
         let worktree = setup_fixture_worktree(temp.path(), self.fixture);
         let diff_file = write_worktree_diff(temp.path(), &worktree);
         let markdown_output = temp.path().join("summary.md");
-        let metric_flag = match self.metric {
-            "branch" => "--fail-under-branches".to_string(),
-            "function" => "--fail-under-functions".to_string(),
-            "line" => "--fail-under-lines".to_string(),
-            "region" => "--fail-under-regions".to_string(),
+        let metric_config = match self.metric {
+            "branch" => "fail-under-branches",
+            "function" => "fail-under-functions",
+            "line" => "fail-under-lines",
+            "region" => "fail-under-regions",
             other => panic!("unsupported metric: {other}"),
         };
+        fs::write(
+            worktree.join("covgate.toml"),
+            format!("[[gates]]\n{metric_config} = 0\n"),
+        )
+        .expect("config should be written");
 
         let output = run_covgate(
             &worktree,
@@ -431,8 +436,6 @@ impl MetricFixtureCase {
             &[
                 "--diff-file".to_string(),
                 diff_file.to_string_lossy().into_owned(),
-                metric_flag,
-                "0".to_string(),
                 "--markdown-output".to_string(),
                 markdown_output.to_string_lossy().into_owned(),
             ],

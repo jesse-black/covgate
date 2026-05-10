@@ -38,46 +38,6 @@ pub struct Args {
     #[arg(long, conflicts_with = "base")]
     pub diff_file: Option<PathBuf>,
 
-    /// Minimum changed-region coverage percentage required to pass
-    #[arg(long, value_name = "MIN")]
-    pub fail_under_regions: Option<f64>,
-
-    /// Minimum changed-line coverage percentage required to pass
-    #[arg(long, value_name = "MIN")]
-    pub fail_under_lines: Option<f64>,
-
-    /// Minimum changed-branch coverage percentage required to pass
-    #[arg(long, value_name = "MIN")]
-    pub fail_under_branches: Option<f64>,
-
-    /// Minimum changed-function coverage percentage required to pass
-    #[arg(long, value_name = "MIN")]
-    pub fail_under_functions: Option<f64>,
-
-    /// Minimum changed-named-function coverage percentage required to pass
-    #[arg(long, value_name = "MIN")]
-    pub fail_under_named_functions: Option<f64>,
-
-    /// Maximum uncovered changed-region count allowed before failing
-    #[arg(long, value_name = "MAX")]
-    pub fail_uncovered_regions: Option<usize>,
-
-    /// Maximum uncovered changed-line count allowed before failing
-    #[arg(long, value_name = "MAX")]
-    pub fail_uncovered_lines: Option<usize>,
-
-    /// Maximum uncovered changed-branch count allowed before failing
-    #[arg(long, value_name = "MAX")]
-    pub fail_uncovered_branches: Option<usize>,
-
-    /// Maximum uncovered changed-function count allowed before failing
-    #[arg(long, value_name = "MAX")]
-    pub fail_uncovered_functions: Option<usize>,
-
-    /// Maximum uncovered changed-named-function count allowed before failing
-    #[arg(long, value_name = "MAX")]
-    pub fail_uncovered_named_functions: Option<usize>,
-
     /// Write a Markdown summary to this file
     #[arg(long)]
     pub markdown_output: Option<PathBuf>,
