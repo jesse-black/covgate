@@ -1,3 +1,7 @@
+---
+description: "Completed ExecPlan for the initial covgate CLI implementation with LLVM diff coverage checking; read when tracing the origin of the core diff-gate model, the LLVM JSON parser, or the covgate check command."
+---
+
 # Covgate
 
 Save this in-progress ExecPlan at `docs/exec-plans/active/0002-covgate.md` while the work is being designed or implemented in this repository.

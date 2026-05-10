@@ -1,3 +1,7 @@
+---
+description: "Completed ExecPlan for adding .NET Coverlet native fixture and parser support; read when tracing the origin of Coverlet JSON parsing, the method-to-function normalization approach, or the initial .NET diff-gate integration."
+---
+
 # Covgate .NET Coverlet native fixture and parser support
 
 This completed ExecPlan lives at `docs/exec-plans/completed/0004-covgate-dotnet-coverlet-native-fixture.md` because the scoped .NET Coverlet work is finished in this repository.

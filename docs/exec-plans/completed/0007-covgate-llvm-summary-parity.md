@@ -1,3 +1,7 @@
+---
+description: "Completed ExecPlan for investigating LLVM summary parity and proving covgate diff calculations; read when understanding the Rust function deduplication fix, LLVM segment semantics investigation, or the background behind tests/llvm_real_parity.rs and tests/llvm_diff_regression.rs."
+---
+
 # Investigate LLVM summary parity and prove `covgate` diff calculations
 
 Canonical completed location: `docs/exec-plans/completed/0007-covgate-llvm-summary-parity.md`.
@@ -344,7 +348,7 @@ Revision note: A temporary summary-backed adapter change was tried and then reve
 
 Revision note: Recorded the first honest calculation fix: LLVM function identity now uses normalized LLVM names rather than pure span deduplication when names are available, which resolves the function mismatch in the real repro. The remaining work is now explicitly scoped to region and line semantics.
 
-Revision note: Added live-investigation evidence that LLVM text rendering and LLVM summary totals can disagree for the same file, and linked that investigation to `docs/reference/llvm-export-semantics-investigation.md` so future work does not assume exported detail, text views, and summary counts are automatically equivalent.
+Revision note: Added live-investigation evidence that LLVM text rendering and LLVM summary totals can disagree for the same file, and linked that investigation to `docs/investigations/llvm-export-semantics-investigation.md` so future work does not assume exported detail, text views, and summary counts are automatically equivalent.
 
 Revision note: Recorded that switching line derivation from file segments to simple function-region union does not fix the remaining real repro gap, so the next step must isolate a smaller LLVM semantic pattern rather than just swapping one whole-model heuristic for another.
 

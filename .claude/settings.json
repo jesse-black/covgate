@@ -6,7 +6,8 @@
       "Bash(cargo test *)",
       "Bash(cargo build *)",
       "Bash(cargo xtask *)",
-      "Bash(cargo fmt *)"
+      "Bash(cargo fmt *)",
+      "Bash(docgarden *)"
     ]
   }
 }

@@ -1,3 +1,7 @@
+---
+description: "Design doc for a named-function metric variant that excludes anonymous and compiler-generated callables; read when investigating function coverage inflation, planning a named-function gate, or scoping changes to function opportunity counting."
+---
+
 # Design Doc: Named Function Metric
 
 ## Context & Problem Statement

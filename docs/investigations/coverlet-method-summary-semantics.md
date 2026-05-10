@@ -1,3 +1,7 @@
+---
+description: "Investigation record for Coverlet method summary semantics; read when understanding why covgate reports raw Coverlet method counts instead of ReportGenerator-filtered counts, or reviewing the decision to not apply lambda-helper filtering."
+---
+
 # Coverlet method summary semantics
 
 This document records the repository's decision and the evidence behind it for `.NET` function or method totals across:
@@ -53,7 +57,7 @@ This showed that ReportGenerator is not removing all compiler-generated methods.
 
 ## ReportGenerator-specific behavior
 
-The repository inspected ReportGenerator source in [CoberturaParser.cs](/home/jesse/git/covgate/target/ReportGenerator/src/ReportGenerator.Core/Parser/CoberturaParser.cs).
+The repository inspected ReportGenerator source in [CoberturaParser.cs](https://github.com/danielpalme/ReportGenerator/blob/main/src/ReportGenerator.Core/Parser/CoberturaParser.cs).
 
 In normal, non-raw mode, it filters methods whose normalized name still matches a lambda-helper pattern:
 
@@ -70,7 +74,7 @@ That means ReportGenerator is applying downstream, tool-specific method semantic
 
 ## Jenkins `coverage-model` findings
 
-The repository also inspected Jenkins `coverage-model` in [CoberturaParser.java](/home/jesse/git/covgate/target/coverage-model/src/main/java/edu/hm/hafner/coverage/parser/CoberturaParser.java).
+The repository also inspected Jenkins `coverage-model` in [CoberturaParser.java](https://github.com/jenkinsci/coverage-model/blob/main/src/main/java/edu/hm/hafner/coverage/parser/CoberturaParser.java).
 
 What we found:
 
@@ -93,5 +97,5 @@ If a future request wants ReportGenerator parity, that should be introduced as a
 ## Related files
 
 - `src/coverage/coverlet_json.rs`
-- `docs/reference/coverlet-method-to-function-normalization.md`
+- `docs/design-docs/coverlet-method-to-function-normalization.md`
 - `docs/exec-plans/completed/0014-covgate-coverlet-function-summary-investigation.md`

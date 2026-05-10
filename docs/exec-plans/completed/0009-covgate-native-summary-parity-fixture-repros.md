@@ -1,3 +1,7 @@
+---
+description: "Completed ExecPlan for reproducing and fixing native-summary parity drift using real tool summaries; read when understanding fixture-backed parity repros, native-summary anchoring policy, or the background behind fixture coverage-summary.json files."
+---
+
 # Reproduce and fix native-summary parity drift using real tool summaries, not helper-derived fixture math
 
 The canonical completed copy of this ExecPlan lives at `docs/exec-plans/completed/0009-covgate-native-summary-parity-fixture-repros.md`. It was implemented from the in-progress copy that originally lived under `docs/exec-plans/active/`.

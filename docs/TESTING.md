@@ -1,3 +1,7 @@
+---
+description: "Canonical testing process and quality philosophy for unit, integration, CLI, and coverage validation; read when writing tests, debugging failures, understanding fixture-backed regression coverage, or deciding how to reproduce a bug with TDD."
+---
+
 # TESTING
 
 This document defines the canonical testing process for `covgate`. Treat it as the default workflow for feature work, regression fixes, and review follow-ups.

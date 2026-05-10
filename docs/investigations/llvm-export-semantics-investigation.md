@@ -1,3 +1,7 @@
+---
+description: "Investigation record for LLVM line and region export semantics; read when investigating why covgate disagrees with LLVM line or region summary totals, understanding the multiple competing line-count views in LLVM JSON output, or planning line/region oracle confidence work."
+---
+
 # LLVM export semantics investigation in `covgate`
 
 This document records the current investigation into why `covgate` still disagrees with LLVM on line and region totals even after the Rust function-identity fix landed.

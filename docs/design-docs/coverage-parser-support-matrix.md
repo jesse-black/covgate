@@ -1,3 +1,7 @@
+---
+description: "Coverage parser support matrix for covgate; read when understanding per-format normalization concerns, investigating symbol-identity or mangling issues across LLVM, Coverlet, and Istanbul, or planning language-specific parser work."
+---
+
 # Coverage parser support matrix in `covgate`
 
 This document records parser-specific normalization concerns across the native coverage formats that `covgate` currently supports.
@@ -42,7 +46,7 @@ The main Coverlet parser concern is:
 
 - method-to-function normalization
 
-That work is documented separately in [coverlet-method-to-function-normalization.md](/home/jesse/git/covgate/docs/reference/coverlet-method-to-function-normalization.md).
+That work is documented separately in [coverlet-method-to-function-normalization.md](coverlet-method-to-function-normalization.md).
 
 ### Why Istanbul is different
 

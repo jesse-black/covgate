@@ -1,3 +1,7 @@
+---
+description: "Draft design doc for C/C++ LLVM coverage support in covgate; read when adding C/C++ coverage parsing, investigating C/C++ LLVM fixture behavior, or planning language-specific LLVM normalization work."
+---
+
 # C/C++ LLVM Coverage Support
 
 **Status:** Draft (Migrated from abandoned ExecPlan `covgate-cpp-swift-llvm-fixture-confidence.md`)

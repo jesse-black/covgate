@@ -1,3 +1,7 @@
+---
+description: "Completed ExecPlan for purifying internal tests and moving I/O coverage to integration tests; read when understanding the test boundary architecture, the split between unit tests and integration tests, or the background behind the tests/ directory structure."
+---
+
 # Purify Internal Tests And Move I/O Coverage To Integration
 
 Save the canonical completed ExecPlan in `docs/exec-plans/completed/0015-covgate-test-boundary-purification.md`.

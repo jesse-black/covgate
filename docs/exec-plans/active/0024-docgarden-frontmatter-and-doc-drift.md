@@ -24,26 +24,26 @@ description: "ExecPlan for updating routed documentation metadata, fixing docgar
 - None yet.
 
 ## Steps
-- [ ] Run `docgarden lint docs --color never` and record the exact missing-frontmatter and link-failure list in Discoveries.
-- [ ] Add a documentation check to `.github/workflows/reusable-ci.yml` that runs in reusable CI and executes `docgarden lint docs --color never`; keep it separate enough from Rust behavior checks that documentation failures are easy to identify.
-- [ ] For each Markdown file missing `description` frontmatter, spawn one subagent with a disjoint write scope for that file; instruct it to read the file and use `.agents/description-frontmatter-authoring/SKILL.md` to write positive routing frontmatter.
-- [ ] Create `docs/investigations/` and move the investigation/evidence records out of `docs/reference/`:
+- [x] Run `docgarden lint docs --color never` and record the exact missing-frontmatter and link-failure list in Discoveries.
+- [x] Add a documentation check to `.github/workflows/reusable-ci.yml` that runs in reusable CI and executes `docgarden lint docs --color never`; keep it separate enough from Rust behavior checks that documentation failures are easy to identify.
+- [x] For each Markdown file missing `description` frontmatter, spawn one subagent with a disjoint write scope for that file; instruct it to read the file and use `.agents/description-frontmatter-authoring/SKILL.md` to write positive routing frontmatter.
+- [x] Create `docs/investigations/` and move the investigation/evidence records out of `docs/reference/`:
   - `docs/reference/coverlet-method-summary-semantics.md` -> `docs/investigations/coverlet-method-summary-semantics.md`
   - `docs/reference/function-coverage-debugging.md` -> `docs/investigations/function-coverage-debugging.md`
   - `docs/reference/llvm-export-semantics-investigation.md` -> `docs/investigations/llvm-export-semantics-investigation.md`
-- [ ] Move the durable design, policy, and support docs out of `docs/reference/` into `docs/design-docs/`:
+- [x] Move the durable design, policy, and support docs out of `docs/reference/` into `docs/design-docs/`:
   - `docs/reference/coverage-parser-support-matrix.md` -> `docs/design-docs/coverage-parser-support-matrix.md`
   - `docs/reference/coverlet-method-to-function-normalization.md` -> `docs/design-docs/coverlet-method-to-function-normalization.md`
-  - `docs/reference/environment-execution-contexts.md` -> `docs/design-docs/environment-execution-contexts.md`
-  - `docs/reference/release-binary-trust-and-ci.md` -> `docs/design-docs/release-binary-trust-and-ci.md`
-- [ ] Remove `docs/reference/` after all files are moved, unless a hidden/non-Markdown file remains; do not leave a mixed-purpose folder behind.
-- [ ] Update all links and path mentions from `docs/reference/...` to the moved `docs/design-docs/...` or `docs/investigations/...` targets, including `ARCHITECTURE.md`, `docs/TOOLS.md`, current docs, and completed ExecPlans where the link target would otherwise be broken.
-- [ ] Fix unresolved links reported by `docgarden lint`; preserve useful citation text while making links repository-relative when the target is in this repo.
-- [ ] For the unresolved `CoberturaParser.cs` and `CoberturaParser.java` references in the moved Coverlet investigation, find the upstream GitHub source URLs and replace the nonexistent local absolute paths with those GitHub links.
-- [ ] Update `docs/design-docs/path-scoped-gates.md` to reflect current Plan 21 behavior: all configured gates render rule rows, zero-opportunity percent observations render `N/A (0/0)`, console output is compact-only, and changed metric tables do not include gate columns or per-gate totals.
-- [ ] Inspect `docs/design-docs/token-efficient-output.md`, `ARCHITECTURE.md`, `README.md`, `docs/TOOLS.md`, and all moved docs for current-doc drift around `--verbose`, `GateResult`, `GateScopeResult`, `gate_metrics`, `GateMetricEvidence`, per-gate changed metric evidence, and `Gate | File` changed metric tables; update only live/current docs, not historical completed plan bodies.
-- [ ] In design docs and investigations, do not preserve or add discussion of old model shapes, retired CLI flags, removed output formats, or superseded alternatives just for historical context; rewrite those sections around the current behavior and keep archival history in completed ExecPlans only.
-- [ ] Re-run `docgarden lint docs --color never` and fix remaining documentation lint failures.
+  - `docs/reference/environment-execution-contexts.md` — file did not exist; skipped per Discovery.
+  - `docs/reference/release-binary-trust-and-ci.md` — file did not exist; skipped per Discovery.
+- [x] Remove `docs/reference/` after all files are moved, unless a hidden/non-Markdown file remains; do not leave a mixed-purpose folder behind.
+- [x] Update all links and path mentions from `docs/reference/...` to the moved `docs/design-docs/...` or `docs/investigations/...` targets, including `ARCHITECTURE.md`, `docs/TOOLS.md`, current docs, and completed ExecPlans where the link target would otherwise be broken.
+- [x] Fix unresolved links reported by `docgarden lint`; preserve useful citation text while making links repository-relative when the target is in this repo.
+- [x] For the unresolved `CoberturaParser.cs` and `CoberturaParser.java` references in the moved Coverlet investigation, find the upstream GitHub source URLs and replace the nonexistent local absolute paths with those GitHub links.
+- [x] Update `docs/design-docs/path-scoped-gates.md` to reflect current Plan 21 behavior: all configured gates render rule rows, zero-opportunity percent observations render `N/A (0/0)`, console output is compact-only, and changed metric tables do not include gate columns or per-gate totals.
+- [x] Inspect `docs/design-docs/token-efficient-output.md`, `ARCHITECTURE.md`, `README.md`, `docs/TOOLS.md`, and all moved docs for current-doc drift around `--verbose`, `GateResult`, `GateScopeResult`, `gate_metrics`, `GateMetricEvidence`, per-gate changed metric evidence, and `Gate | File` changed metric tables; update only live/current docs, not historical completed plan bodies.
+- [x] In design docs and investigations, do not preserve or add discussion of old model shapes, retired CLI flags, removed output formats, or superseded alternatives just for historical context; rewrite those sections around the current behavior and keep archival history in completed ExecPlans only.
+- [x] Re-run `docgarden lint docs --color never` and fix remaining documentation lint failures.
 
 ## Validation
 - `docgarden lint docs --color never`
@@ -60,6 +60,8 @@ description: "ExecPlan for updating routed documentation metadata, fixing docgar
 - Drift sweep: live/current search hits outside plan #24 are `docs/design-docs/path-scoped-gates.md` for the stale `Gate | File` changed-metric table, `docs/design-docs/token-efficient-output.md` for current compact console behavior that appears consistent with Plan 21, `ARCHITECTURE.md` links to LLVM investigation/debugging docs that must be updated after moves, and `docs/TOOLS.md` link to environment execution contexts that must be updated after moves.
 - Reusable CI currently has `quality-check`, `dependency-hygiene`, and `dependency-policy` jobs only; no documentation lint job exists.
 - User clarification: design docs and investigations should not waste space discussing old shapes or removed features; only historical completed ExecPlans are archival and left alone apart from frontmatter or broken-link fixes.
+- Missing reference files: `docs/reference/environment-execution-contexts.md` and `docs/reference/release-binary-trust-and-ci.md` do not exist in the repository; plan steps to move them are moot. References to these files in `docs/TOOLS.md` and completed ExecPlans are already broken and should be converted to plain text where they appear in current docs (`docs/TOOLS.md`); completed ExecPlan bodies mentioning them are historical record only.
+- docgarden CI: `taiki-e/install-action` supports `docgarden@0.1.0-rc0`; added `documentation-lint` job to `.github/workflows/reusable-ci.yml` using that pin.
 
 ## Review
 - None yet.
@@ -70,10 +72,10 @@ description: "ExecPlan for updating routed documentation metadata, fixing docgar
 - [x] Plan is consistent, up to date, decision-complete, and ready to hand off.
 
 ### Generator
-- [ ] Goal achieved: documentation lint passes and current docs match Plan 21 gate-output semantics.
-- [ ] All planned steps are complete.
-- [ ] All validation commands pass.
-- [ ] Handed off to an independent reviewer (MUST use the `evaluator-execplan` skill via a subagent or separate agent, not the generator agent).
+- [x] Goal achieved: documentation lint passes and current docs match Plan 21 gate-output semantics.
+- [x] All planned steps are complete.
+- [x] All validation commands pass.
+- [x] Handed off to an independent reviewer (MUST use the `evaluator-execplan` skill via a subagent or separate agent, not the generator agent).
 
 ### Evaluator
 - [ ] Standard review posture applied.

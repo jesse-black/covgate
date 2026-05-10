@@ -1,3 +1,7 @@
+---
+description: "Completed ExecPlan for locking Istanbul line-summary behavior to native Vitest v8 semantics with fixture-backed regressions; read when understanding Istanbul line-summary counting semantics, statement-start-line deduplication behavior, or coverage-summary.json parity anchoring."
+---
+
 # Lock Istanbul line-summary behavior to native Vitest v8 semantics and realistic fixture-backed regressions
 
 This completed ExecPlan is the canonical record of the Istanbul line-summary parity work. It now lives in `docs/exec-plans/completed/0013-covgate-istanbul-line-summary-parity.md` because the fixture expansion, documentation updates, and final validation sweep are finished.

@@ -1,3 +1,7 @@
+---
+description: "Investigation record for the LLVM function deduplication discrepancy; read when understanding the rustc-demangle normalization fix, tracing the span-vs-name deduplication decision, or debugging LLVM function count mismatches."
+---
+
 # LLVM function normalization in `covgate`
 
 This document records the LLVM-specific function discrepancy uncovered during the summary parity investigation, why it happened, and how the current fix works.

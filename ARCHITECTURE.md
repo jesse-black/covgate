@@ -172,7 +172,7 @@ If you are new to the codebase, read in this order:
 
 If you are investigating LLVM summary mismatches specifically, start with:
 
-- `docs/reference/llvm-export-semantics-investigation.md`
-- `docs/reference/function-coverage-debugging.md`
+- `docs/investigations/llvm-export-semantics-investigation.md`
+- `docs/investigations/function-coverage-debugging.md`
 - `tests/llvm_real_parity.rs`
 - `tests/llvm_diff_regression.rs`
