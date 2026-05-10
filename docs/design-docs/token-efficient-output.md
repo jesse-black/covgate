@@ -66,8 +66,5 @@ PASS Functions: 0 uncovered ≤ 0
     - Range across lines: `start_line:start_col-end_line:end_col`
     - If columns are unknown (Coverlet, or any parser that can't populate them): Fall back to `line` or `start_line-end_line`.
 
-### 4. CLI Switches
-To balance efficiency and debuggability, the following flag is proposed:
-- `--verbose`: Print the comprehensive output (current behavior), including 100% covered files and a full table of results.
-- Default behavior: Token-efficient output as described above.
-
+### 4. Console Output
+Console output summarizes rule outcomes and, on failure, lists uncovered file details. Markdown is the format for detailed inspection.

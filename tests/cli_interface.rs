@@ -970,8 +970,10 @@ fn mixed_cli_over_toml_precedence() {
     assert_eq!(output.status.code(), Some(1));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
     assert!(stdout.contains("Diff: main...HEAD, staged and unstaged changes"));
-    assert!(stdout.contains("PASS  Regions:"));
-    assert!(stdout.contains("FAIL  Regions:"));
+    assert!(stdout.contains("PASS  Regions:"), "stdout={stdout}");
+    assert!(stdout.contains("≥ 0.00%"), "stdout={stdout}");
+    assert!(stdout.contains("FAIL  Regions:"), "stdout={stdout}");
+    assert!(stdout.contains("≰ 0"), "stdout={stdout}");
 }
 
 #[test]

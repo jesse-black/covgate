@@ -191,25 +191,13 @@ to the outcome helpers.
 **Required action:** Extract `single_scope_result` into `tests/helpers/mod.rs` and import from both
 renderer test files.
 
-## Definition of Done
-
-### Planner
-- [x] Plan is consistent, up to date, decision-complete, and ready to hand off.
-
-### Generator
-- [x] Goal achieved: gate policy outcomes and changed metric evidence are separate in the result model and output.
-- [x] All planned steps are complete.
-- [x] All validation commands pass.
-- [x] Handed off to an independent reviewer (MUST use the `evaluator-execplan` skill via a subagent or separate agent, not the generator agent).
-
-### Evaluator
-- [x] Standard review posture applied.
-- [x] Adheres to the principles of `docs/CODESTYLE.md`.
-- [x] Adheres to the principles of `docs/TESTING.md`.
-- [x] All review findings have been addressed.
-
 ### Generator Response (Finding 11)
 - [x] Finding 11 addressed: collapsed three consecutive `match &outcome.rule` blocks in `render_rule_summary` into a single match returning `(rule_str, observed, counts)`.
+
+### Generator Response (Findings 12, 13, 14)
+- [x] Finding 12 addressed: strengthened CLI metric test assertions to include discriminating comparator/threshold substrings (`≤ 100`, `≰ 0`, `≱ 100.00%`, `≥ 0.00%`); all 18 `cli_metrics` and 39 `cli_interface` tests pass.
+- [x] Finding 13 addressed: `docs/design-docs/token-efficient-output.md` section 4 rewritten to describe current console output without referencing removed functionality.
+- [x] Finding 14 addressed: trailing blank line removed from `docs/design-docs/token-efficient-output.md`.
 
 ### Finding 11 — Low: `render_rule_summary` dispatches on `outcome.rule` three times in sequence
 
@@ -225,3 +213,63 @@ rule.
 **Required action:** Collapse the three consecutive `match &outcome.rule` blocks into a single
 match that returns `(rule_str, observed, counts)` as a tuple. This eliminates the repeated
 dispatch and brings the function under the length guideline.
+
+### Finding 12 — Medium: CLI metric tests no longer prove the rule family being exercised
+
+Several CLI tests that are explicitly about uncovered-count or percent-threshold semantics now
+assert only the coarse compact row prefix, for example:
+
+- `tests/cli_metrics.rs:70-71` checks `PASS  Regions:` for `--fail-uncovered-regions 100`.
+- `tests/cli_metrics.rs:99-100` checks `FAIL  Regions:` for `--fail-uncovered-regions 0`.
+- `tests/cli_metrics.rs:122-124` and `tests/cli_metrics.rs:146-148` both check only
+  `FAIL  Lines:` even though one test exercises `--fail-under-lines` and the other exercises
+  `--fail-uncovered-lines`.
+- `tests/cli_interface.rs:970-974` checks only one passing and one failing `Regions:` row for a
+  CLI-over-TOML precedence scenario with both `fail-under-regions` and `fail-uncovered-regions`.
+
+These assertions would pass for multiple wrong implementations, including one that renders or
+evaluates the wrong rule family while still producing a row for the same metric. That violates
+TESTING.md principle 5 ("Tests earn their place through their assertions"). Removing verbose rule
+labels is fine, but the replacement assertions still need to falsify the behavior named by the
+test.
+
+**Required action:** Strengthen the affected CLI assertions so each test proves the rule family and
+configured value it is exercising. For compact output, assert discriminating substrings such as the
+percent comparator/threshold (`≱ 90.00%`, `≥ 90.00%`) versus uncovered-count comparator/threshold
+(`≰ 0`, `≤ 100`) and, where practical, the observed value/counts.
+
+### Finding 13 — Low: `token-efficient-output.md` still documents a removed `--verbose` switch
+
+Plan 21 explicitly removes `--verbose` and all verbose console rendering. The implementation removes
+the CLI flag from `src/cli.rs` and the config field from `src/config.rs`, but
+`docs/design-docs/token-efficient-output.md:69-72` still proposes `--verbose` as the debuggability
+switch. That leaves two facts in the repository about the same CLI surface, which violates
+CODESTYLE.md principle 2 ("One fact, one place").
+
+**Required action:** Update the design doc so it reflects the new compact-only console architecture
+and points detailed human inspection to Markdown rather than `--verbose`.
+
+### Finding 14 — Low: `git diff --check` reports a whitespace error
+
+`git diff --check origin/main...HEAD` reports:
+
+`docs/design-docs/token-efficient-output.md:73: new blank line at EOF.`
+
+**Required action:** Remove the extra trailing blank line so the branch is clean under `git diff --check`.
+
+## Definition of Done
+
+### Planner
+- [x] Plan is consistent, up to date, decision-complete, and ready to hand off.
+
+### Generator
+- [x] Goal achieved: gate policy outcomes and changed metric evidence are separate in the result model and output.
+- [x] All planned steps are complete.
+- [x] All validation commands pass.
+- [x] Handed off to an independent reviewer (MUST use the `evaluator-execplan` skill via a subagent or separate agent, not the generator agent).
+
+### Evaluator
+- [ ] Standard review posture applied.
+- [ ] Adheres to the principles of `docs/CODESTYLE.md`.
+- [ ] Adheres to the principles of `docs/TESTING.md`.
+- [ ] All review findings have been addressed.
