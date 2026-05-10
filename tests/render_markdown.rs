@@ -53,6 +53,7 @@ fn renders_markdown_tables() {
                 },
                 covered: false,
                 is_named_function: None,
+                named_function_identity: None,
             }],
             changed_totals_by_file: BTreeMap::from([(
                 PathBuf::from("src/lib.rs"),
@@ -447,6 +448,7 @@ fn groups_duplicate_spans_with_counts() {
                     },
                     covered: false,
                     is_named_function: None,
+                    named_function_identity: None,
                 },
                 covgate::model::CoverageOpportunity {
                     kind: OpportunityKind::Region,
@@ -459,6 +461,7 @@ fn groups_duplicate_spans_with_counts() {
                     },
                     covered: false,
                     is_named_function: None,
+                    named_function_identity: None,
                 },
             ],
             changed_totals_by_file: BTreeMap::from([(
@@ -506,6 +509,7 @@ fn sorts_spans_numerically() {
                     },
                     covered: false,
                     is_named_function: None,
+                    named_function_identity: None,
                 },
                 covgate::model::CoverageOpportunity {
                     kind: OpportunityKind::Region,
@@ -518,6 +522,7 @@ fn sorts_spans_numerically() {
                     },
                     covered: false,
                     is_named_function: None,
+                    named_function_identity: None,
                 },
             ],
             changed_totals_by_file: BTreeMap::from([(

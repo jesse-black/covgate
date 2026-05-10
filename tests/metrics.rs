@@ -24,6 +24,7 @@ fn computes_changed_region_metric() {
                 },
                 covered: true,
                 is_named_function: None,
+                named_function_identity: None,
             },
             CoverageOpportunity {
                 kind: OpportunityKind::Region,
@@ -36,6 +37,7 @@ fn computes_changed_region_metric() {
                 },
                 covered: false,
                 is_named_function: None,
+                named_function_identity: None,
             },
         ],
         totals_by_file: BTreeMap::from([(
@@ -141,4 +143,132 @@ fn changed_line_metric_keeps_uncovered_fixture_seed_call_visible() {
     assert_eq!(metric.covered, 0);
     assert_eq!(metric.total, 1);
     assert_eq!(metric.uncovered_changed_opportunities.len(), 1);
+}
+
+#[test]
+fn changed_named_function_metric_collapses_template_instantiations() {
+    let report = CoverageReport {
+        opportunities: vec![
+            CoverageOpportunity {
+                kind: OpportunityKind::Function,
+                span: SourceSpan {
+                    path: PathBuf::from("src/lib.rs"),
+                    start_line: 10,
+                    end_line: 12,
+                    start_col: Some(1),
+                    end_col: Some(1),
+                },
+                covered: false,
+                is_named_function: Some(true),
+                named_function_identity: Some("covgate::metrics::parse".to_string()),
+            },
+            CoverageOpportunity {
+                kind: OpportunityKind::Function,
+                span: SourceSpan {
+                    path: PathBuf::from("src/lib.rs"),
+                    start_line: 20,
+                    end_line: 22,
+                    start_col: Some(1),
+                    end_col: Some(1),
+                },
+                covered: true,
+                is_named_function: Some(true),
+                named_function_identity: Some("covgate::metrics::parse".to_string()),
+            },
+        ],
+        totals_by_file: BTreeMap::from([(
+            MetricKind::NamedFunction,
+            BTreeMap::from([(
+                PathBuf::from("src/lib.rs"),
+                FileTotals {
+                    covered: 1,
+                    total: 1,
+                },
+            )]),
+        )]),
+    };
+    let diff = vec![ChangedFile {
+        path: PathBuf::from("src/lib.rs"),
+        changed_lines: vec![LineRange { start: 10, end: 22 }],
+    }];
+
+    let included_paths = diff
+        .iter()
+        .map(|file| file.path.clone())
+        .collect::<BTreeSet<_>>();
+    let metric = compute_changed_metric(&report, &diff, &included_paths, MetricKind::NamedFunction)
+        .expect("metric works");
+
+    assert_eq!(metric.covered, 1);
+    assert_eq!(metric.total, 1);
+    assert_eq!(metric.uncovered_changed_opportunities.len(), 0);
+    let file_totals = metric
+        .changed_totals_by_file
+        .get(&PathBuf::from("src/lib.rs"))
+        .expect("changed totals by file");
+    assert_eq!(file_totals.covered, 1);
+    assert_eq!(file_totals.total, 1);
+}
+
+#[test]
+fn changed_named_function_metric_reports_one_uncovered_template_group() {
+    let report = CoverageReport {
+        opportunities: vec![
+            CoverageOpportunity {
+                kind: OpportunityKind::Function,
+                span: SourceSpan {
+                    path: PathBuf::from("src/lib.rs"),
+                    start_line: 20,
+                    end_line: 22,
+                    start_col: Some(1),
+                    end_col: Some(1),
+                },
+                covered: false,
+                is_named_function: Some(true),
+                named_function_identity: Some("covgate::metrics::parse".to_string()),
+            },
+            CoverageOpportunity {
+                kind: OpportunityKind::Function,
+                span: SourceSpan {
+                    path: PathBuf::from("src/lib.rs"),
+                    start_line: 10,
+                    end_line: 12,
+                    start_col: Some(1),
+                    end_col: Some(1),
+                },
+                covered: false,
+                is_named_function: Some(true),
+                named_function_identity: Some("covgate::metrics::parse".to_string()),
+            },
+        ],
+        totals_by_file: BTreeMap::from([(
+            MetricKind::NamedFunction,
+            BTreeMap::from([(
+                PathBuf::from("src/lib.rs"),
+                FileTotals {
+                    covered: 0,
+                    total: 1,
+                },
+            )]),
+        )]),
+    };
+    let diff = vec![ChangedFile {
+        path: PathBuf::from("src/lib.rs"),
+        changed_lines: vec![LineRange { start: 10, end: 22 }],
+    }];
+
+    let included_paths = diff
+        .iter()
+        .map(|file| file.path.clone())
+        .collect::<BTreeSet<_>>();
+    let metric = compute_changed_metric(&report, &diff, &included_paths, MetricKind::NamedFunction)
+        .expect("metric works");
+
+    assert_eq!(metric.covered, 0);
+    assert_eq!(metric.total, 1);
+    assert_eq!(metric.uncovered_changed_opportunities.len(), 1);
+    assert_eq!(
+        metric.uncovered_changed_opportunities[0].span.start_line,
+        10
+    );
 }
