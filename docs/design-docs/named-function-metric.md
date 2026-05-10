@@ -116,6 +116,38 @@ The collapse rule must not rely on framework-specific names such as `serde`, `to
 
 Generic/template collapsing is a format-specific concern, not a universal parser requirement. It applies where a coverage backend can report multiple function records for one authored generic/template function. Today that means LLVM-backed parsers, especially Rust and future C/C++ support. Istanbul does not need this rule because TypeScript generics are erased before runtime and Istanbul reports instrumented source function locations. Coverlet does not currently need this rule because its method keys are already source-method oriented for this metric; compiler-generated C# artifacts remain handled by the `<...>` exclusion rule.
 
+### Span Behavior for Generic Instantiation Records
+
+When reporting an uncovered named function that was collapsed from multiple instantiation records, the implementation needs a source span to present to the user. The question is which record's span to use.
+
+In LLVM Rust coverage, every monomorphization of the same generic function reports the same source span — the function definition site, not the call site. The fixture at [`tests/fixtures/llvm-generic/coverage.json`](../../tests/fixtures/llvm-generic/coverage.json) shows this directly:
+
+```json
+{
+  "name": "my_crate::parse::<serde_json::de::Deserializer>",
+  "filenames": ["src/lib.rs"],
+  "count": 5,
+  "regions": [[3, 1, 7, 1, 5, 0, 0, 0]]
+},
+{
+  "name": "my_crate::parse::<toml::de::Deserializer>",
+  "filenames": ["src/lib.rs"],
+  "count": 0,
+  "regions": [[3, 1, 7, 1, 0, 0, 0, 0]]
+}
+```
+
+Both records point to `src/lib.rs` lines 3–7. The execution counts differ (one instantiation was exercised, the other was not), but the source spans are identical. This is physically expected: a generic function has one definition location.
+
+The same pattern holds in the real-world fixture at [`tests/fixtures/llvm-real/covgate-self-full.json`](../../tests/fixtures/llvm-real/covgate-self-full.json). The function `covgate::coverage::llvm_json::de_u32_from_i64` appears twice — instantiated for two different serde deserializer types — and both records report the same start line and column with different execution counts only:
+
+```
+Instance 1 (count 1220): regions [[283, 1, 285, 33, 1220, 0, 0, 0], [287, 9, 287, 14, 1220, 0, 0, 0], ...]
+Instance 2 (count   29): regions [[283, 1, 285, 33,   29, 0, 0, 0], [287, 9, 287, 14,   29, 0, 0, 0], ...]
+```
+
+**Selection rule:** when collapsing generic instantiations into one named-function opportunity, use the span from any record in the group. All records in a same-file, same-authored-function group carry identical spans. In practice, the first record encountered in a deterministic iteration order (such as a `BTreeMap<FunctionKey, bool>`) is sufficient and avoids any ambiguity.
+
 ## Classification Rules Summary
 
 | Format       | Named                                         | Anonymous / Excluded                                                  | Generic / template handling |
