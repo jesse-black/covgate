@@ -4,7 +4,7 @@ use std::{
     sync::Arc,
 };
 
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Context, Result, bail};
 use ignore::gitignore::{Gitignore, GitignoreBuilder};
 use serde::{Deserialize, Deserializer, de::Error as _};
 
@@ -164,8 +164,8 @@ fn parse_file_config(text: &str) -> Result<FileConfig> {
         bail!("legacy [gates] table is no longer supported; use [[gates]] entries instead");
     }
 
-    let config = toml::from_str::<FileConfig>(text)
-        .map_err(|error| anyhow!("failed to parse covgate config text: {error}"))?;
+    let config =
+        toml::from_str::<FileConfig>(text).context("failed to parse covgate config text")?;
     validate_file_config(&config)?;
     Ok(config)
 }
@@ -1244,7 +1244,7 @@ mod tests {
     fn parse_file_config_rejects_invalid_include_type() {
         let error = parse_file_config("[[gates]]\ninclude = 42\nfail-under-lines = 90\n")
             .expect_err("config should fail with invalid include type");
-        assert!(error.to_string().contains("include"));
+        assert!(format!("{error:#}").contains("include"));
     }
 
     #[test]
@@ -1252,7 +1252,7 @@ mod tests {
         let error =
             parse_file_config("[[gates]]\ninclude = [\"**/*.rs\", 42]\nfail-under-lines = 90\n")
                 .expect_err("config should fail with invalid include item type");
-        assert!(error.to_string().contains("include"));
+        assert!(format!("{error:#}").contains("include"));
     }
 
     #[test]
