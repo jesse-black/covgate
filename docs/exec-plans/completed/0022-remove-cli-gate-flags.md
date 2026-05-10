@@ -44,7 +44,7 @@ description: "ExecPlan for removing the ten CLI gate threshold flags from covgat
 - [x] In `TryFrom<Args> for Config`: remove the ten threshold field bindings from the exhaustive `Args { ... }` destructuring pattern (lines 96–111). The pattern currently binds them as `_`; remove all ten `fail_under_*/fail_uncovered_*: _` entries.
 - [x] Delete `resolve_gate_rules` (lines 316–521) in its entirety: the function's only job is merging CLI thresholds with config values, a concept that no longer exists. Gate rules now come from config only.
 - [x] Delete `has_cli_rules` (lines 553–568) in its entirety.
-- [x] Delete `push_percent_rule` (lines 523–536) and `push_uncovered_rule` (lines 538–551): both are only called from `resolve_gate_rules`.
+- [x] Simplify `push_percent_rule` (lines 523–536) and `push_uncovered_rule` (lines 538–551): strip the three-parameter CLI-override signature down to a two-parameter config-only form and retain both as helpers for `gate_rules_from_config` (10 call sites justify keeping them rather than inlining the conditional-push pattern).
 - [x] Rewrite `resolve_gates` (lines 244–314) to build `Vec<ConfiguredGate>` from `file_config` only:
   - Remove the `args: &Args` parameter entirely (callers in `TryFrom<Args>` pass `&args` today).
   - Iterate `config.gates`, convert each `GateEntryConfig` directly to a `ConfiguredGate` using a new local helper `gate_rules_from_config(c: &GateRuleConfig) -> Vec<GateRule>` that reads the ten config fields directly.
@@ -112,6 +112,7 @@ For each test that passes CLI gate flags, decide: **convert** (the behavior unde
 ## Review
 - Clean evaluator pass on 2026-05-10. Reviewed the current worktree against this ExecPlan, `docs/CODESTYLE.md`, and `docs/TESTING.md`; no implementation findings.
 - Validation inspected during review: `cargo fmt --check`, `cargo clippy -- -D warnings`, `cargo test --test cli_interface`, `cargo test -p covgate --lib`, and `cargo xtask validate` all passed.
+- Second independent evaluator pass on 2026-05-10. No findings after review discussion; step 47 description corrected to reflect simplification rather than deletion of `push_percent_rule` and `push_uncovered_rule`.
 
 ## Definition of Done
 
