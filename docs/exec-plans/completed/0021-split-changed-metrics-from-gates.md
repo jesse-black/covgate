@@ -257,6 +257,12 @@ and points detailed human inspection to Markdown rather than `--verbose`.
 
 **Required action:** Remove the extra trailing blank line so the branch is clean under `git diff --check`.
 
+### Evaluator Pass 3 — 2026-05-10
+
+**Findings 13 and 14 confirmed resolved:**
+- `docs/design-docs/token-efficient-output.md` no longer documents `--verbose`; section 4 now describes compact console output and points detailed inspection to Markdown.
+- `git diff --check origin/main...HEAD` exits cleanly.
+
 ## Definition of Done
 
 ### Planner

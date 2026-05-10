@@ -25,6 +25,7 @@ description: "ExecPlan for making minimal console rule summaries unaligned and r
 - [ ] Add failing tests that prove minimal console output has no fixed-width table padding for metric labels, observations, counts, or rules.
 - [ ] Add failing tests that prove uncovered-count gates render as `<N> uncovered` with their uncovered-count comparator and threshold, not as percent coverage plus covered/total counts.
 - [ ] Cover scoped minimal output so optional gate labels remain compact, for example `[frontend] PASS Lines: ...`, without reintroducing column alignment.
+- [ ] Audit `tests/cli_metrics.rs` and consolidate redundant CLI output assertions: keep representative tests that prove CLI flag-to-rule wiring, pass/fail semantics, metric availability, and discriminating rule-family output; rely on renderer tests for exact minimal-console layout instead of strengthening every repeated metric row assertion.
 - [ ] Update `src/render/console.rs` so `render_rule_summary` builds compact record-like lines from the `RuleOutcome` family rather than a shared padded table format.
 - [ ] Update stale CLI/interface expectations that intentionally snapshot minimal console output.
 - [ ] Run focused tests during the edit loop, then run full validation because this changes Rust output behavior.
@@ -38,6 +39,8 @@ description: "ExecPlan for making minimal console rule summaries unaligned and r
 ## Discoveries
 - The token-efficient output design now explicitly rejects fixed-width table alignment in minimal console output.
 - Uncovered-count gates should display observed uncovered count directly; percent evidence belongs to percent rules or changed metric evidence, not uncovered-count rule summaries.
+- Plan 21's former CLI metric-test finding now belongs here: excessive repeated CLI output assertions create churn. Prefer fewer, sharper CLI tests plus renderer-level formatting tests.
+- Because implementation may happen on a fresh branch where unchanged files can lose coverage, do not compensate by adding low-value tests only to satisfy line coverage. Rely on the existing 96% global coverage gate enforced by `cargo xtask llvm-cov` and `cargo xtask validate`.
 
 ## Review
 - None yet.
