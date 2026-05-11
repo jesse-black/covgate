@@ -105,35 +105,44 @@ pub fn run(config: Config) -> Result<i32> {
         .flatten();
     if markdown_output.is_some() || github_summary.is_some() {
         let markdown = render::markdown::render(&check_result, &diff_source.describe());
-        match markdown_output {
-            Some(OutputSink::File(path)) => std::fs::write(path, &markdown)
-                .with_context(|| format!("failed to write markdown output: {}", path.display()))?,
-            Some(OutputSink::Stdout) => print!("{markdown}"),
-            None => {}
-        }
-        if let Some(path) = github_summary {
-            let path = PathBuf::from(path);
-            let already_written = matches!(
-                markdown_output,
-                Some(OutputSink::File(explicit_path))
-                    if paths_refer_to_same_destination(explicit_path, &path)
-            );
-            if !already_written {
-                let mut file = std::fs::OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open(&path)
-                    .with_context(|| {
-                        format!("failed to open GitHub step summary: {}", path.display())
-                    })?;
-                file.write_all(markdown.as_bytes()).with_context(|| {
-                    format!("failed to write GitHub step summary: {}", path.display())
-                })?;
-            }
-        }
+        write_markdown_outputs(markdown_output, github_summary, &markdown)?;
     }
 
     Ok(if check_result.passed { 0 } else { 1 })
+}
+
+fn write_markdown_outputs(
+    markdown_output: &Option<OutputSink>,
+    github_summary: Option<std::ffi::OsString>,
+    markdown: &str,
+) -> Result<()> {
+    match markdown_output {
+        Some(OutputSink::File(path)) => std::fs::write(path, markdown)
+            .with_context(|| format!("failed to write markdown output: {}", path.display()))?,
+        Some(OutputSink::Stdout) => print!("{markdown}"),
+        None => {}
+    }
+    if let Some(path) = github_summary {
+        let path = PathBuf::from(path);
+        let already_written = matches!(
+            markdown_output,
+            Some(OutputSink::File(explicit_path))
+                if paths_refer_to_same_destination(explicit_path, &path)
+        );
+        if !already_written {
+            let mut file = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&path)
+                .with_context(|| {
+                    format!("failed to open GitHub step summary: {}", path.display())
+                })?;
+            file.write_all(markdown.as_bytes()).with_context(|| {
+                format!("failed to write GitHub step summary: {}", path.display())
+            })?;
+        }
+    }
+    Ok(())
 }
 
 fn paths_refer_to_same_destination(left: &Path, right: &Path) -> bool {

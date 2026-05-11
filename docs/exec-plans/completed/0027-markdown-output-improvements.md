@@ -97,6 +97,7 @@ No tests required for xtask changes — it is an internal dev tool.
 - [x] Evaluator finding: `xtask/src/main.rs:31-48` — replaced `trailing_var_arg = true` + `allow_hyphen_values = true` + `skip_arg_separator` with `#[arg(last = true)]` on both `LlvmCov.args` and `Covgate.args`; deleted `skip_arg_separator`. Clap now handles `--` stripping natively.
 - [x] Evaluator finding (post-merge regression): `tests/support/mod.rs` (`run_covgate_with_env`, `run_covgate_raw`) and `tests/cli_interface.rs` (`run_covgate_raw_with_path`) — test helpers inherited `GITHUB_STEP_SUMMARY` from the parent process environment via `Command::envs` / implicit inheritance. Plan 25 replaced these helpers with `covgate(worktree) -> CovgateCommand`; its runner calls `env_clear()`, restores only `PATH` and `LLVM_PROFILE_FILE`, and applies explicit `.env(...)` overrides, so step-summary inheritance is eliminated by default.
 - [x] Evaluator finding: no regression test covers `--markdown-output <path>` and `GITHUB_STEP_SUMMARY` pointing to the same file. Addressed with `github_step_summary_matching_explicit_output_writes_once`, which failed before the fix, plus `src/lib.rs` path-destination deduplication that skips the append-mode GitHub summary write when the explicit file output already wrote the same resolved path.
+- [x] Evaluator finding (blocking): `src/lib.rs::run` is 113 lines with a purely sequential body (load → compute metrics → evaluate gates → render console → write outputs), violating CODESTYLE's "ALWAYS extract sub-steps from any fn longer than ~50 lines whose body is sequential" and contradicting CODESTYLE's own citation of `run` as "the canonical example of a clean orchestration function." Fix: extract the markdown/github output block (`src/lib.rs:103-134`) into a private helper, e.g., `fn write_markdown_outputs(markdown_output: &Option<OutputSink>, github_summary: Option<OsString>, markdown: &str) -> Result<()>`. Addressed: extracted `write_markdown_outputs` from `run`; all tests and `cargo xtask validate` pass.
 
 ## Definition of Done
 
@@ -110,7 +111,8 @@ No tests required for xtask changes — it is an internal dev tool.
 - [x] Handed off to an independent reviewer (MUST use the `evaluator-execplan` skill via a subagent or separate agent, not the generator agent).
 
 ### Evaluator
-- [ ] Standard review posture applied.
-- [ ] Adheres to the principles of `docs/CODESTYLE.md`.
-- [ ] Adheres to the principles of `docs/TESTING.md`.
-- [ ] All review findings have been addressed.
+- [x] Standard review posture applied.
+- [x] Adheres to the principles of `docs/CODESTYLE.md`.
+- [x] Adheres to the principles of `docs/TESTING.md`.
+- [x] Validation evidence is present and sufficient, including `cargo xtask validate` for Rust behavior changes.
+- [x] All review findings have been addressed.
