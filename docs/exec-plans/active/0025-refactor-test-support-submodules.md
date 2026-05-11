@@ -55,7 +55,7 @@ description: "ExecPlan for refactoring the monolithic tests/support/mod.rs into 
 
 ### Replace run_covgate / run_covgate_raw with a fluent builder (resolves Finding 4)
 
-- [ ] Rewrite `tests/support/runner.rs` around a single fluent builder; delete `run_covgate` and `run_covgate_raw`:
+- [x] Rewrite `tests/support/runner.rs` around a single fluent builder; delete `run_covgate` and `run_covgate_raw`:
     - Entrypoint free function: `pub fn covgate(worktree: &Path) -> CovgateCommand`.
     - `CovgateCommand` owns: `worktree: PathBuf`, `args: Vec<OsString>`, `envs: Vec<(OsString, OsString)>`.
     - Methods, all consuming `self` and returning `Self`:
@@ -72,19 +72,18 @@ description: "ExecPlan for refactoring the monolithic tests/support/mod.rs into 
         - `command.current_dir(self.worktree)`
         - `.output().expect("covgate should run")`.
     - Re-export `covgate` and `CovgateCommand` from `tests/support/mod.rs`.
-- [ ] Migrate every `run_covgate(...)` and `run_covgate_raw(...)` call site to the builder. Required equivalences:
+- [x] Migrate every `run_covgate(...)` and `run_covgate_raw(...)` call site to the builder. Required equivalences:
     - `run_covgate(w, cov, &[], &[])` → `covgate(w).check(cov).run()`.
     - `run_covgate(w, cov, &[a, b, ...], &[])` → `covgate(w).check(cov).args([a, b, ...]).run()`.
     - `run_covgate(w, cov, &[args...], &[(K, V), ...])` → `covgate(w).check(cov).args([args...]).env(K, V)....run()`. Today this pattern appears 5× in `tests/cli_interface.rs` (lines 669, 701, 736, 806, 837), all `GITHUB_STEP_SUMMARY`.
     - `run_covgate_raw(w, &[args...], &[])` → `covgate(w).args([args...]).run()` (or `.arg(a)` when there is a single arg).
     - `run_covgate_raw(w, &[args...], &[("PATH", "")])` → `covgate(w).args([args...]).env("PATH", "").run()`. Today this pattern appears 2× in `tests/cli_interface.rs` (lines 111 and 156).
     - Callers should drop the `to_string()` chains on string literals where the builder's `Into<OsString>` bounds make them unnecessary.
-- [ ] Use ast-grep for the mechanical rewrites where the call shape is uniform; consult the `ast-grep` skill for rule authoring. Hand-edit the heterogeneous multi-line calls. After the migration, `ast-grep --lang rust -p 'run_covgate($$$)' tests/` and `ast-grep --lang rust -p 'run_covgate_raw($$$)' tests/` must return no matches.
-- [ ] Delete the now-unused `run_covgate`, `run_covgate_raw`, and any related re-exports from `tests/support/mod.rs`.
+- [x] Use ast-grep for the mechanical rewrites where the call shape is uniform; consult the `ast-grep` skill for rule authoring. Hand-edit the heterogeneous multi-line calls. After the migration, `ast-grep --lang rust -p 'run_covgate($$$)' tests/` and `ast-grep --lang rust -p 'run_covgate_raw($$$)' tests/` must return no matches.
+- [x] Delete the now-unused `run_covgate`, `run_covgate_raw`, and any related re-exports from `tests/support/mod.rs`.
 
 ## Validation
-- `cargo test --workspace`
-- `cargo clippy --all-targets`
+- `cargo xtask validate`
 
 ## Discoveries
 - `assert_fixture_has_no_branch_coverage` was used in Plan 3 but is no longer present in `tests/*.rs`.
@@ -93,12 +92,18 @@ description: "ExecPlan for refactoring the monolithic tests/support/mod.rs into 
 - `config_discovery.rs` only uses `run_git` from support; its local copy had a slightly different error message format but was otherwise identical.
 - `run_covgate` and `run_covgate_raw` now call `env_clear()` before setting PATH and applying `env_vars`. This means the covgate subprocess no longer inherits the test runner's environment (e.g., `RUST_LOG`, `HOME`, locale vars). All current tests pass under these semantics, so no inherited vars are required. Future callers must supply any needed env vars explicitly via the `env_vars` slice.
 - Call-site audit (2026-05-11) of Finding 4: `run_covgate` has 5 call sites in `tests/cli_interface.rs` passing a non-empty `env_vars` slice (`GITHUB_STEP_SUMMARY`), and `run_covgate_raw` has 2 call sites passing `&[("PATH", "")]`. The finding's premise that `env_vars` is `&[]` at virtually every call site is wrong, so the proposed `run_covgate_raw_with_env` split would not collapse to a single exceptional caller. Resolution shifted to a fluent builder; see Review note below.
+- `run_covgate` and `run_covgate_raw` were replaced by `covgate(worktree) -> CovgateCommand`; the old helper names no longer match under `ast-grep --lang rust -p 'run_covgate($$$)' tests/` or `ast-grep --lang rust -p 'run_covgate_raw($$$)' tests/`.
+- Validation after the fluent-builder migration passed on 2026-05-11: `cargo test --workspace` and `cargo clippy --all-targets`.
+- `Command::env_clear()` in the covgate test runner must preserve `LLVM_PROFILE_FILE`; otherwise `cargo llvm-cov` cannot collect coverage from child `covgate` binaries launched by integration tests, causing covered CLI paths in `src/lib.rs` to appear uncovered. The builder now forwards `LLVM_PROFILE_FILE` while still avoiding broad environment inheritance.
+- Validation after preserving `LLVM_PROFILE_FILE` passed on 2026-05-11: `cargo fmt --check`, `cargo test --workspace`, and `cargo xtask validate`.
 
 ## Review
 
-- [ ] Finding 3 — `OverallTotals` duplication in `llvm_real_parity.rs`. `tests/llvm_real_parity.rs` defines a private `OverallTotals` struct (lines 8–12) instead of importing `support::OverallTotals` from `parity.rs`. This duplicates a type definition (CODESTYLE principle 2).
-- [ ] Finding 4 — `env_vars` parameter is `&[]` at virtually every call site (CODESTYLE principle 4: parameter not earning its place). Fix: remove `env_vars` from `run_covgate` entirely (no caller passes a non-empty value); remove `env_vars` from `run_covgate_raw` and introduce `run_covgate_raw_with_env` for the single caller that passes a non-empty env slice. This is a large bulk call-site refactor; use `ast-grep` (via the `ast-grep` skill) to rewrite call sites mechanically.
-- [ ] Finding 4 — revised resolution (planner, 2026-05-11). The original fix is rejected on factual grounds (see Discoveries: 5 `run_covgate` callers and 2 `run_covgate_raw` callers pass non-empty env). Splitting into `_with_env` variants would still leave a populated variant and add a fourth helper for symmetry. Replace `run_covgate` + `run_covgate_raw` with a single fluent `covgate(worktree).check(coverage).args(...).env(...).run()` builder per the new Steps subsection, which (a) leaves trivial arguments off the call site entirely instead of pushing them into `&[]`, (b) collapses two helpers into one, satisfying CODESTYLE principle 4 without manufacturing a `_with_env` cousin, and (c) lets callers that need `PATH=""` overrides express it inline with `.env("PATH", "")` instead of a dedicated parameter. Finding stays open until the Steps subsection is complete and `ast-grep --lang rust -p 'run_covgate($$$)' tests/` returns no matches.
+- [x] Finding 3 — `OverallTotals` duplication in `llvm_real_parity.rs`. `tests/llvm_real_parity.rs` defines a private `OverallTotals` struct (lines 8–12) instead of importing `support::OverallTotals` from `parity.rs`. This duplicates a type definition (CODESTYLE principle 2). Addressed by importing `support::OverallTotals`.
+- [x] Finding 4 — `env_vars` parameter is `&[]` at virtually every call site (CODESTYLE principle 4: parameter not earning its place). Fix: remove `env_vars` from `run_covgate` entirely (no caller passes a non-empty value); remove `env_vars` from `run_covgate_raw` and introduce `run_covgate_raw_with_env` for the single caller that passes a non-empty env slice. This is a large bulk call-site refactor; use `ast-grep` (via the `ast-grep` skill) to rewrite call sites mechanically. Superseded by the revised planner resolution below after the call-site audit found non-empty env usage in multiple callers.
+- [x] Finding 4 — revised resolution (planner, 2026-05-11). The original fix is rejected on factual grounds (see Discoveries: 5 `run_covgate` callers and 2 `run_covgate_raw` callers pass non-empty env). Splitting into `_with_env` variants would still leave a populated variant and add a fourth helper for symmetry. Replace `run_covgate` + `run_covgate_raw` with a single fluent `covgate(worktree).check(coverage).args(...).env(...).run()` builder per the new Steps subsection, which (a) leaves trivial arguments off the call site entirely instead of pushing them into `&[]`, (b) collapses two helpers into one, satisfying CODESTYLE principle 4 without manufacturing a `_with_env` cousin, and (c) lets callers that need `PATH=""` overrides express it inline with `.env("PATH", "")` instead of a dedicated parameter. Addressed; both required ast-grep checks return no matches.
+- [x] Evaluator clean pass (2026-05-11) — Reviewed the current worktree against this ExecPlan, `docs/CODESTYLE.md`, and `docs/TESTING.md`. No implementation findings found; verified the fluent `covgate(...)` builder migration, absence of `run_covgate`/`run_covgate_raw`/related helpers, single `OverallTotals` definition in `tests/support/parity.rs`, and validation passing with `cargo test --workspace`, `cargo clippy --all-targets`, and `cargo fmt --check`.
+- [x] Evaluator clean pass after coverage-env fix (2026-05-11) — Reviewed the post-review `tests/support/runner.rs` change against this ExecPlan, `docs/CODESTYLE.md`, and `docs/TESTING.md`. Preserving only `LLVM_PROFILE_FILE` after `env_clear()` is the right fix for child-process `cargo llvm-cov` coverage: it restores the profiler runtime contract for integration-test-launched `covgate` binaries while preserving the clean-env intent by continuing to inherit only `PATH`, the llvm-cov profile sink, and explicit builder `.env(...)` overrides. Validation note is accurate; `cargo xtask validate` passed after the fix with `llvm-cov` and `covgate-check` reporting 100.00% region coverage.
 
 ## Definition of Done
 
@@ -107,12 +112,12 @@ description: "ExecPlan for refactoring the monolithic tests/support/mod.rs into 
 
 ### Generator
 - [x] Goal achieved: tests/support/ refactored into logical submodules with re-exports.
-- [ ] All planned steps are complete. (Re-opened: fluent-builder migration added to address Finding 4.)
-- [ ] All validation commands pass. (Re-run after the fluent-builder migration.)
-- [ ] Handed off to an independent reviewer (MUST use the `evaluator-execplan` skill via a subagent or separate agent, not the generator agent).
+- [x] All planned steps are complete. (Re-opened: fluent-builder migration added to address Finding 4.)
+- [x] All validation commands pass. (Re-run after the fluent-builder migration.)
+- [x] Handed off to an independent reviewer (MUST use the `evaluator-execplan` skill via a subagent or separate agent, not the generator agent).
 
 ### Evaluator
-- [ ] Standard review posture applied.
-- [ ] Adheres to the principles of `docs/CODESTYLE.md`.
-- [ ] Adheres to the principles of `docs/TESTING.md`.
-- [ ] All review findings have been addressed.
+- [x] Standard review posture applied.
+- [x] Adheres to the principles of `docs/CODESTYLE.md`.
+- [x] Adheres to the principles of `docs/TESTING.md`.
+- [x] All review findings have been addressed.

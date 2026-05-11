@@ -5,9 +5,9 @@ use std::{fs, path::PathBuf};
 use tempfile::tempdir;
 
 use crate::support::{
-    copy_tree, init_git_repo, run_covgate, run_covgate_raw, run_git, rust_basic_fail_fixture,
-    rust_basic_pass_fixture, setup_fixture_worktree, vitest_path_scoped_gates_fixture,
-    write_absolute_path_coverage_fixture, write_worktree_diff,
+    copy_tree, covgate, init_git_repo, run_git, rust_basic_fail_fixture, rust_basic_pass_fixture,
+    setup_fixture_worktree, vitest_path_scoped_gates_fixture, write_absolute_path_coverage_fixture,
+    write_worktree_diff,
 };
 
 fn setup_path_scoped_fixture() -> (tempfile::TempDir, PathBuf, PathBuf) {
@@ -25,7 +25,7 @@ fn record_base_noops_when_standard_base_ref_is_available() {
     let worktree = setup_fixture_worktree(temp.path(), fixture);
     run_git(&worktree, &["branch", "-M", "main"]);
 
-    let output = run_covgate_raw(&worktree, &["record-base".to_string()], &[]);
+    let output = covgate(&worktree).arg("record-base").run();
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
     assert!(
@@ -52,7 +52,7 @@ fn record_base_creates_worktree_ref_in_constrained_repo() {
     let worktree = setup_fixture_worktree(temp.path(), fixture);
     run_git(&worktree, &["branch", "-M", "task/record-base"]);
 
-    let output = run_covgate_raw(&worktree, &["record-base".to_string()], &[]);
+    let output = covgate(&worktree).arg("record-base").run();
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
     assert!(stdout.contains("Recorded base commit"), "stdout={stdout}");
@@ -76,7 +76,7 @@ fn record_base_does_not_break_git_ref_enumeration() {
     let worktree = setup_fixture_worktree(temp.path(), fixture);
     run_git(&worktree, &["branch", "-M", "task/record-base"]);
 
-    let output = run_covgate_raw(&worktree, &["record-base".to_string()], &[]);
+    let output = covgate(&worktree).arg("record-base").run();
     assert_eq!(output.status.code(), Some(0));
 
     let show_ref = std::process::Command::new("git")
@@ -95,7 +95,7 @@ fn record_base_does_not_break_git_ref_enumeration() {
 fn record_base_fails_outside_git_repo() {
     let temp = tempdir().expect("tempdir should exist");
 
-    let output = run_covgate_raw(temp.path(), &["record-base".to_string()], &[]);
+    let output = covgate(temp.path()).arg("record-base").run();
     assert_eq!(output.status.code(), Some(1));
     let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
     assert!(
@@ -108,7 +108,10 @@ fn record_base_fails_outside_git_repo() {
 fn record_base_fails_fast_when_git_is_missing() {
     let temp = tempdir().expect("tempdir should exist");
 
-    let output = run_covgate_raw(temp.path(), &["record-base".to_string()], &[("PATH", "")]);
+    let output = covgate(temp.path())
+        .arg("record-base")
+        .env("PATH", "")
+        .run();
 
     assert_eq!(output.status.code(), Some(1));
     let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
@@ -122,7 +125,7 @@ fn record_base_fails_fast_when_git_is_missing() {
 fn missing_check_subcommand_is_reported_as_clap_usage_error() {
     let temp = tempdir().expect("tempdir should exist");
 
-    let output = run_covgate_raw(temp.path(), &[], &[]);
+    let output = covgate(temp.path()).run();
     assert_eq!(output.status.code(), Some(2));
     let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
     assert!(
@@ -136,7 +139,7 @@ fn missing_check_subcommand_is_reported_as_clap_usage_error() {
 fn missing_check_coverage_report_is_reported_as_clap_usage_error() {
     let temp = tempdir().expect("tempdir should exist");
 
-    let output = run_covgate_raw(temp.path(), &["check".to_string()], &[]);
+    let output = covgate(temp.path()).arg("check").run();
     assert_eq!(output.status.code(), Some(2));
     let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
     assert!(
@@ -150,11 +153,10 @@ fn missing_check_coverage_report_is_reported_as_clap_usage_error() {
 fn check_fails_fast_when_git_is_missing() {
     let temp = tempdir().expect("tempdir should exist");
 
-    let output = run_covgate_raw(
-        temp.path(),
-        &["check".to_string(), "missing.json".to_string()],
-        &[("PATH", "")],
-    );
+    let output = covgate(temp.path())
+        .args(["check", "missing.json"])
+        .env("PATH", "")
+        .run();
 
     assert_eq!(output.status.code(), Some(1));
     let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
@@ -168,7 +170,7 @@ fn check_fails_fast_when_git_is_missing() {
 fn help_lists_record_base_as_subcommand() {
     let temp = tempdir().expect("tempdir should exist");
 
-    let output = run_covgate_raw(temp.path(), &["--help".to_string()], &[]);
+    let output = covgate(temp.path()).arg("--help").run();
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
     assert!(stdout.contains("Commands:"), "stdout={stdout}");
@@ -187,7 +189,9 @@ fn version_switches_report_current_binary_version() {
     let temp = tempdir().expect("tempdir should exist");
 
     for args in [vec!["--version".to_string()], vec!["-V".to_string()]] {
-        let output = run_covgate_raw(temp.path(), &args, &[]);
+        let output = covgate(temp.path())
+            .args(args.iter().map(String::as_str))
+            .run();
         assert_eq!(output.status.code(), Some(0), "args={args:?}");
         let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
         assert!(
@@ -201,7 +205,7 @@ fn version_switches_report_current_binary_version() {
 fn check_help_describes_arguments_and_options() {
     let temp = tempdir().expect("tempdir should exist");
 
-    let output = run_covgate_raw(temp.path(), &["check".to_string(), "--help".to_string()], &[]);
+    let output = covgate(temp.path()).args(["check", "--help"]).run();
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
     assert!(stdout.contains("Arguments:"), "stdout={stdout}");
@@ -226,11 +230,7 @@ fn check_help_describes_arguments_and_options() {
 fn record_base_help_is_user_focused() {
     let temp = tempdir().expect("tempdir should exist");
 
-    let output = run_covgate_raw(
-        temp.path(),
-        &["record-base".to_string(), "--help".to_string()],
-        &[],
-    );
+    let output = covgate(temp.path()).args(["record-base", "--help"]).run();
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
     assert!(
@@ -259,7 +259,7 @@ fn record_base_is_idempotent() {
     let worktree = setup_fixture_worktree(temp.path(), fixture);
     run_git(&worktree, &["branch", "-M", "task/idempotent"]);
 
-    let first = run_covgate_raw(&worktree, &["record-base".to_string()], &[]);
+    let first = covgate(&worktree).arg("record-base").run();
     assert_eq!(first.status.code(), Some(0));
     let first_ref = std::process::Command::new("git")
         .args(["rev-parse", "--verify", "refs/worktree/covgate/base"])
@@ -272,7 +272,7 @@ fn record_base_is_idempotent() {
     run_git(&worktree, &["add", "."]);
     run_git(&worktree, &["commit", "-m", "change after record-base"]);
 
-    let second = run_covgate_raw(&worktree, &["record-base".to_string()], &[]);
+    let second = covgate(&worktree).arg("record-base").run();
     assert_eq!(second.status.code(), Some(0));
     let second_stdout = String::from_utf8(second.stdout).expect("stdout should be utf8");
     assert!(second_stdout.contains("Base already recorded"));
@@ -293,7 +293,7 @@ fn record_base_refreshes_after_branch_switch() {
     let worktree = setup_fixture_worktree(temp.path(), fixture);
     run_git(&worktree, &["branch", "-M", "task/base"]);
 
-    let first = run_covgate_raw(&worktree, &["record-base".to_string()], &[]);
+    let first = covgate(&worktree).arg("record-base").run();
     assert_eq!(first.status.code(), Some(0));
     let first_ref = std::process::Command::new("git")
         .args(["rev-parse", "--verify", "refs/worktree/covgate/base"])
@@ -307,7 +307,7 @@ fn record_base_refreshes_after_branch_switch() {
     run_git(&worktree, &["add", "."]);
     run_git(&worktree, &["commit", "-m", "refresh branch work"]);
 
-    let second = run_covgate_raw(&worktree, &["record-base".to_string()], &[]);
+    let second = covgate(&worktree).arg("record-base").run();
     assert_eq!(second.status.code(), Some(0));
     let second_stdout = String::from_utf8(second.stdout).expect("stdout should be utf8");
     assert!(
@@ -346,7 +346,7 @@ fn covgate_includes_dirty_worktree_changes_by_default() {
     )
     .expect("config should be written");
 
-    let output = run_covgate(&worktree, &fixture.coverage_json(), &[], &[]);
+    let output = covgate(&worktree).check(&fixture.coverage_json()).run();
 
     assert_eq!(output.status.code(), Some(0));
     let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
@@ -368,15 +368,13 @@ fn diff_file_mode_skips_dirty_worktree_guard() {
     )
     .expect("config should be written");
 
-    let output = run_covgate(
-        &worktree,
-        &fixture.coverage_json(),
-        &[
-            "--diff-file".to_string(),
+    let output = covgate(&worktree)
+        .check(&fixture.coverage_json())
+        .args([
+            "--diff-file".into(),
             diff_file.to_string_lossy().into_owned(),
-        ],
-        &[],
-    );
+        ])
+        .run();
 
     assert_eq!(output.status.code(), Some(0));
     let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
@@ -401,7 +399,7 @@ fn git_base_mode_errors_on_coverage_untracked_files() {
 
     run_git(&worktree, &["rm", "--cached", "src/lib.rs"]);
 
-    let output = run_covgate(&worktree, &fixture.coverage_json(), &[], &[]);
+    let output = covgate(&worktree).check(&fixture.coverage_json()).run();
 
     assert_eq!(output.status.code(), Some(1));
     let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
@@ -425,7 +423,7 @@ fn git_base_mode_passes_for_uncovered_untracked_file() {
     fs::write(worktree.join("new_untracked.rs"), "pub fn pending() {}\n")
         .expect("untracked file should write");
 
-    let output = run_covgate(&worktree, &fixture.coverage_json(), &[], &[]);
+    let output = covgate(&worktree).check(&fixture.coverage_json()).run();
 
     assert_eq!(output.status.code(), Some(0));
     let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
@@ -446,15 +444,13 @@ fn diff_file_mode_skips_untracked_files_check() {
     )
     .expect("config should be written");
 
-    let output = run_covgate(
-        &worktree,
-        &fixture.coverage_json(),
-        &[
-            "--diff-file".to_string(),
+    let output = covgate(&worktree)
+        .check(&fixture.coverage_json())
+        .args([
+            "--diff-file".into(),
             diff_file.to_string_lossy().into_owned(),
-        ],
-        &[],
-    );
+        ])
+        .run();
 
     assert_eq!(output.status.code(), Some(0));
     let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
@@ -473,7 +469,7 @@ fn automatic_base_prefers_standard_branch_ref_over_recorded_worktree_ref() {
     init_git_repo(&worktree);
     run_git(&worktree, &["branch", "-M", "task/recorded-base"]);
 
-    let output = run_covgate_raw(&worktree, &["record-base".to_string()], &[]);
+    let output = covgate(&worktree).arg("record-base").run();
     assert_eq!(output.status.code(), Some(0));
     run_git(&worktree, &["branch", "main", "HEAD"]);
 
@@ -486,7 +482,7 @@ fn automatic_base_prefers_standard_branch_ref_over_recorded_worktree_ref() {
     run_git(&worktree, &["add", "."]);
     run_git(&worktree, &["commit", "-m", "feature change"]);
 
-    let output = run_covgate(&worktree, &fixture.coverage_json(), &[], &[]);
+    let output = covgate(&worktree).check(&fixture.coverage_json()).run();
 
     assert_eq!(output.status.code(), Some(0));
 }
@@ -503,7 +499,7 @@ fn explicit_base_overrides_recorded_worktree_ref() {
     init_git_repo(&worktree);
     run_git(&worktree, &["branch", "-M", "task/explicit-base"]);
 
-    let output = run_covgate_raw(&worktree, &["record-base".to_string()], &[]);
+    let output = covgate(&worktree).arg("record-base").run();
     assert_eq!(output.status.code(), Some(0));
     run_git(&worktree, &["branch", "main", "HEAD"]);
 
@@ -516,12 +512,10 @@ fn explicit_base_overrides_recorded_worktree_ref() {
     run_git(&worktree, &["add", "."]);
     run_git(&worktree, &["commit", "-m", "feature change"]);
 
-    let output = run_covgate(
-        &worktree,
-        &fixture.coverage_json(),
-        &["--base".to_string(), "main".to_string()],
-        &[],
-    );
+    let output = covgate(&worktree)
+        .check(&fixture.coverage_json())
+        .args(["--base", "main"])
+        .run();
 
     assert_eq!(output.status.code(), Some(0));
 }
@@ -531,7 +525,7 @@ fn failure_text_requires_git_repo_when_run_outside_repository() {
     let fixture = rust_basic_pass_fixture();
     let temp = tempdir().expect("tempdir should exist");
 
-    let output = run_covgate(temp.path(), &fixture.coverage_json(), &[], &[]);
+    let output = covgate(temp.path()).check(&fixture.coverage_json()).run();
 
     assert_eq!(output.status.code(), Some(1));
     let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
@@ -554,17 +548,15 @@ fn markdown_summary_rust_fixture() {
     )
     .expect("config should be written");
 
-    let output = run_covgate(
-        &worktree,
-        &fixture.coverage_json(),
-        &[
-            "--diff-file".to_string(),
+    let output = covgate(&worktree)
+        .check(&fixture.coverage_json())
+        .args([
+            "--diff-file".into(),
             diff_file.to_string_lossy().into_owned(),
-            "--markdown-output".to_string(),
+            "--markdown-output".into(),
             markdown_output.to_string_lossy().into_owned(),
-        ],
-        &[],
-    );
+        ])
+        .run();
 
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
@@ -600,17 +592,15 @@ fn markdown_output_to_stdout() {
     )
     .expect("config should be written");
 
-    let output = run_covgate(
-        &worktree,
-        &fixture.coverage_json(),
-        &[
-            "--diff-file".to_string(),
+    let output = covgate(&worktree)
+        .check(&fixture.coverage_json())
+        .args([
+            "--diff-file".into(),
             diff_file.to_string_lossy().into_owned(),
-            "--markdown-output".to_string(),
+            "--markdown-output".into(),
             "-".to_string(),
-        ],
-        &[],
-    );
+        ])
+        .run();
 
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
@@ -635,17 +625,15 @@ fn markdown_output_to_file_regression() {
     )
     .expect("config should be written");
 
-    let output = run_covgate(
-        &worktree,
-        &fixture.coverage_json(),
-        &[
-            "--diff-file".to_string(),
+    let output = covgate(&worktree)
+        .check(&fixture.coverage_json())
+        .args([
+            "--diff-file".into(),
             diff_file.to_string_lossy().into_owned(),
-            "--markdown-output".to_string(),
+            "--markdown-output".into(),
             markdown_output.to_string_lossy().into_owned(),
-        ],
-        &[],
-    );
+        ])
+        .run();
 
     assert_eq!(output.status.code(), Some(0));
     let markdown = fs::read_to_string(markdown_output).expect("markdown should be readable");
@@ -666,18 +654,17 @@ fn github_step_summary_auto_detected() {
     )
     .expect("config should be written");
 
-    let output = run_covgate(
-        &worktree,
-        &fixture.coverage_json(),
-        &[
-            "--diff-file".to_string(),
+    let output = covgate(&worktree)
+        .check(&fixture.coverage_json())
+        .args([
+            "--diff-file".into(),
             diff_file.to_string_lossy().into_owned(),
-        ],
-        &[(
+        ])
+        .env(
             "GITHUB_STEP_SUMMARY",
             summary_output.to_str().expect("path should be utf8"),
-        )],
-    );
+        )
+        .run();
 
     assert_eq!(output.status.code(), Some(0));
     let markdown = fs::read_to_string(summary_output).expect("summary should be readable");
@@ -698,19 +685,18 @@ fn github_step_summary_suppressed_by_flag() {
     )
     .expect("config should be written");
 
-    let output = run_covgate(
-        &worktree,
-        &fixture.coverage_json(),
-        &[
-            "--diff-file".to_string(),
+    let output = covgate(&worktree)
+        .check(&fixture.coverage_json())
+        .args([
+            "--diff-file".into(),
             diff_file.to_string_lossy().into_owned(),
-            "--no-github-summary".to_string(),
-        ],
-        &[(
+            "--no-github-summary".into(),
+        ])
+        .env(
             "GITHUB_STEP_SUMMARY",
             summary_output.to_str().expect("path should be utf8"),
-        )],
-    );
+        )
+        .run();
 
     assert_eq!(output.status.code(), Some(0));
     assert!(
@@ -733,20 +719,19 @@ fn github_step_summary_and_explicit_output_both_write() {
     )
     .expect("config should be written");
 
-    let output = run_covgate(
-        &worktree,
-        &fixture.coverage_json(),
-        &[
-            "--diff-file".to_string(),
+    let output = covgate(&worktree)
+        .check(&fixture.coverage_json())
+        .args([
+            "--diff-file".into(),
             diff_file.to_string_lossy().into_owned(),
-            "--markdown-output".to_string(),
+            "--markdown-output".into(),
             markdown_output.to_string_lossy().into_owned(),
-        ],
-        &[(
+        ])
+        .env(
             "GITHUB_STEP_SUMMARY",
             summary_output.to_str().expect("path should be utf8"),
-        )],
-    );
+        )
+        .run();
 
     assert_eq!(output.status.code(), Some(0));
     let markdown = fs::read_to_string(markdown_output).expect("markdown should be readable");
@@ -767,17 +752,15 @@ fn markdown_output_file_write_error_is_reported() {
     )
     .expect("config should be written");
 
-    let output = run_covgate(
-        &worktree,
-        &fixture.coverage_json(),
-        &[
-            "--diff-file".to_string(),
+    let output = covgate(&worktree)
+        .check(&fixture.coverage_json())
+        .args([
+            "--diff-file".into(),
             diff_file.to_string_lossy().into_owned(),
-            "--markdown-output".to_string(),
+            "--markdown-output".into(),
             temp.path().to_string_lossy().into_owned(),
-        ],
-        &[],
-    );
+        ])
+        .run();
 
     assert_eq!(output.status.code(), Some(1));
     let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
@@ -803,15 +786,14 @@ fn github_step_summary_write_error_is_reported() {
     )
     .expect("config should be written");
 
-    let output = run_covgate(
-        &worktree,
-        &fixture.coverage_json(),
-        &[
-            "--diff-file".to_string(),
+    let output = covgate(&worktree)
+        .check(&fixture.coverage_json())
+        .args([
+            "--diff-file".into(),
             diff_file.to_string_lossy().into_owned(),
-        ],
-        &[("GITHUB_STEP_SUMMARY", "/dev/full")],
-    );
+        ])
+        .env("GITHUB_STEP_SUMMARY", "/dev/full")
+        .run();
 
     assert_eq!(output.status.code(), Some(1));
     let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
@@ -834,18 +816,17 @@ fn github_step_summary_open_error_is_reported() {
     )
     .expect("config should be written");
 
-    let output = run_covgate(
-        &worktree,
-        &fixture.coverage_json(),
-        &[
-            "--diff-file".to_string(),
+    let output = covgate(&worktree)
+        .check(&fixture.coverage_json())
+        .args([
+            "--diff-file".into(),
             diff_file.to_string_lossy().into_owned(),
-        ],
-        &[(
+        ])
+        .env(
             "GITHUB_STEP_SUMMARY",
             temp.path().to_str().expect("path should be utf8"),
-        )],
-    );
+        )
+        .run();
 
     assert_eq!(output.status.code(), Some(1));
     let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
@@ -869,15 +850,13 @@ fn path_scoped_gates_render_labeled_minimal_output() {
     )
     .expect("config should be written");
 
-    let output = run_covgate(
-        &worktree,
-        &fixture.coverage_json(),
-        &[
-            "--diff-file".to_string(),
+    let output = covgate(&worktree)
+        .check(&fixture.coverage_json())
+        .args([
+            "--diff-file".into(),
             diff_file.to_string_lossy().into_owned(),
-        ],
-        &[],
-    );
+        ])
+        .run();
 
     assert_eq!(output.status.code(), Some(1));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
@@ -903,15 +882,13 @@ fn path_scoped_gates_accept_single_string_include_and_exclude() {
     )
     .expect("config should be written");
 
-    let output = run_covgate(
-        &worktree,
-        &fixture.coverage_json(),
-        &[
-            "--diff-file".to_string(),
+    let output = covgate(&worktree)
+        .check(&fixture.coverage_json())
+        .args([
+            "--diff-file".into(),
             diff_file.to_string_lossy().into_owned(),
-        ],
-        &[],
-    );
+        ])
+        .run();
 
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
@@ -930,17 +907,15 @@ fn path_scoped_gates_markdown_adds_gate_column() {
     )
     .expect("config should be written");
 
-    let output = run_covgate(
-        &worktree,
-        &fixture.coverage_json(),
-        &[
-            "--diff-file".to_string(),
+    let output = covgate(&worktree)
+        .check(&fixture.coverage_json())
+        .args([
+            "--diff-file".into(),
             diff_file.to_string_lossy().into_owned(),
-            "--markdown-output".to_string(),
+            "--markdown-output".into(),
             markdown_output.to_string_lossy().into_owned(),
-        ],
-        &[],
-    );
+        ])
+        .run();
 
     assert_eq!(output.status.code(), Some(1));
     let markdown = fs::read_to_string(markdown_output).expect("markdown should be readable");
@@ -969,17 +944,15 @@ fn path_scoped_gates_markdown_labels_single_named_fallback() {
     )
     .expect("config should be written");
 
-    let output = run_covgate(
-        &worktree,
-        &fixture.coverage_json(),
-        &[
-            "--diff-file".to_string(),
+    let output = covgate(&worktree)
+        .check(&fixture.coverage_json())
+        .args([
+            "--diff-file".into(),
             diff_file.to_string_lossy().into_owned(),
-            "--markdown-output".to_string(),
+            "--markdown-output".into(),
             markdown_output.to_string_lossy().into_owned(),
-        ],
-        &[],
-    );
+        ])
+        .run();
 
     assert_eq!(output.status.code(), Some(0));
     let markdown = fs::read_to_string(markdown_output).expect("markdown should be readable");
@@ -1005,15 +978,13 @@ fn path_scoped_gates_reject_overlap_on_changed_files() {
     )
     .expect("config should be written");
 
-    let output = run_covgate(
-        &worktree,
-        &fixture.coverage_json(),
-        &[
-            "--diff-file".to_string(),
+    let output = covgate(&worktree)
+        .check(&fixture.coverage_json())
+        .args([
+            "--diff-file".into(),
             diff_file.to_string_lossy().into_owned(),
-        ],
-        &[],
-    );
+        ])
+        .run();
 
     assert_eq!(output.status.code(), Some(1));
     let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
@@ -1036,15 +1007,13 @@ fn path_scoped_gates_require_a_fallback_for_unmatched_supported_files() {
     )
     .expect("config should be written");
 
-    let output = run_covgate(
-        &worktree,
-        &fixture.coverage_json(),
-        &[
-            "--diff-file".to_string(),
+    let output = covgate(&worktree)
+        .check(&fixture.coverage_json())
+        .args([
+            "--diff-file".into(),
             diff_file.to_string_lossy().into_owned(),
-        ],
-        &[],
-    );
+        ])
+        .run();
 
     assert_eq!(output.status.code(), Some(1));
     let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
@@ -1073,15 +1042,13 @@ fn absolute_llvm_paths_match_diff_fixture() {
     )
     .expect("config should be written");
 
-    let output = run_covgate(
-        &worktree,
-        &coverage_json,
-        &[
-            "--diff-file".to_string(),
+    let output = covgate(&worktree)
+        .check(&coverage_json)
+        .args([
+            "--diff-file".into(),
             diff_file.to_string_lossy().into_owned(),
-        ],
-        &[],
-    );
+        ])
+        .run();
 
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
@@ -1110,12 +1077,10 @@ fn pr_branch_against_main_fixture() {
     run_git(&worktree, &["add", "."]);
     run_git(&worktree, &["commit", "-m", "feature change"]);
 
-    let output = run_covgate(
-        &worktree,
-        &fixture.coverage_json(),
-        &["--base".to_string(), "main".to_string()],
-        &[],
-    );
+    let output = covgate(&worktree)
+        .check(&fixture.coverage_json())
+        .args(["--base", "main"])
+        .run();
 
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
@@ -1147,7 +1112,7 @@ fn uses_repo_config_defaults_for_base_and_threshold() {
     run_git(&worktree, &["add", "covgate.toml"]);
     run_git(&worktree, &["commit", "-m", "add covgate defaults"]);
 
-    let output = run_covgate(&worktree, &fixture.coverage_json(), &[], &[]);
+    let output = covgate(&worktree).check(&fixture.coverage_json()).run();
 
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
@@ -1182,7 +1147,7 @@ fn uses_repo_config_defaults_from_parent_directory() {
     run_git(&worktree, &["commit", "-m", "add covgate defaults"]);
 
     let nested_dir = worktree.join("src");
-    let output = run_covgate(&nested_dir, &fixture.coverage_json(), &[], &[]);
+    let output = covgate(&nested_dir).check(&fixture.coverage_json()).run();
 
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
@@ -1204,15 +1169,13 @@ fn unknown_coverage_json_shape_reports_supported_formats() {
     )
     .expect("config should be written");
 
-    let output = run_covgate(
-        &worktree,
-        &invalid_coverage,
-        &[
-            "--diff-file".to_string(),
+    let output = covgate(&worktree)
+        .check(&invalid_coverage)
+        .args([
+            "--diff-file".into(),
             diff_file.to_string_lossy().into_owned(),
-        ],
-        &[],
-    );
+        ])
+        .run();
 
     assert_eq!(output.status.code(), Some(1));
     let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
@@ -1236,7 +1199,7 @@ fn minimal_pass_output_is_token_efficient() {
     )
     .expect("config should be written");
 
-    let output = run_covgate(&worktree, &fixture.coverage_json(), &[], &[]);
+    let output = covgate(&worktree).check(&fixture.coverage_json()).run();
 
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
@@ -1268,7 +1231,7 @@ fn minimal_fail_output_is_focused() {
     )
     .expect("config should be written");
 
-    let output = run_covgate(&worktree, &fixture.coverage_json(), &[], &[]);
+    let output = covgate(&worktree).check(&fixture.coverage_json()).run();
 
     assert_eq!(output.status.code(), Some(1));
     let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
@@ -1304,17 +1267,15 @@ fn overall_coverage_remains_global_when_scoped_gates_are_configured() {
     )
     .expect("config should be written");
 
-    let output = run_covgate(
-        &worktree,
-        &fixture.coverage_json(),
-        &[
-            "--diff-file".to_string(),
+    let output = covgate(&worktree)
+        .check(&fixture.coverage_json())
+        .args([
+            "--diff-file".into(),
             diff_file.to_string_lossy().into_owned(),
-            "--markdown-output".to_string(),
+            "--markdown-output".into(),
             markdown_output.to_string_lossy().into_owned(),
-        ],
-        &[],
-    );
+        ])
+        .run();
 
     if !markdown_output.exists() {
         panic!(

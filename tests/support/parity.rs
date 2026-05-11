@@ -4,7 +4,7 @@ use std::{fs, path::Path, path::PathBuf};
 
 use super::fixtures::Fixture;
 use super::git::{setup_fixture_worktree, write_worktree_diff};
-use super::runner::run_covgate;
+use super::runner::covgate;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct OverallTotals {
@@ -67,17 +67,15 @@ impl MetricFixtureCase {
         )
         .expect("config should be written");
 
-        let output = run_covgate(
-            &worktree,
-            &self.fixture.coverage_json(),
-            &[
-                "--diff-file".to_string(),
+        let output = covgate(&worktree)
+            .check(&self.fixture.coverage_json())
+            .args([
+                "--diff-file".into(),
                 diff_file.to_string_lossy().into_owned(),
-                "--markdown-output".to_string(),
+                "--markdown-output".into(),
                 markdown_output.to_string_lossy().into_owned(),
-            ],
-            &[],
-        );
+            ])
+            .run();
         assert!(
             markdown_output.exists(),
             "covgate should always emit markdown for fixture {} metric {}; stdout={} stderr={}",

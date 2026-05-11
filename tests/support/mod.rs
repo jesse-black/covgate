@@ -24,4 +24,4 @@ pub use parity::{
     write_rebased_real_llvm_fixture,
 };
 
-pub use runner::{run_covgate, run_covgate_raw};
+pub use runner::{CovgateCommand, covgate};
