@@ -67,6 +67,7 @@ description: "ExecPlan for refactoring the monolithic tests/support/mod.rs into 
 ## Review
 
 - [ ] Finding 3 — `OverallTotals` duplication in `llvm_real_parity.rs`. `tests/llvm_real_parity.rs` defines a private `OverallTotals` struct (lines 8–12) instead of importing `support::OverallTotals` from `parity.rs`. This duplicates a type definition (CODESTYLE principle 2).
+- [ ] Finding 4 — `env_vars` parameter is `&[]` at virtually every call site (CODESTYLE principle 4: parameter not earning its place). Fix: remove `env_vars` from `run_covgate` entirely (no caller passes a non-empty value); remove `env_vars` from `run_covgate_raw` and introduce `run_covgate_raw_with_env` for the single caller that passes a non-empty env slice. This is a large bulk call-site refactor; use `ast-grep` (via the `ast-grep` skill) to rewrite call sites mechanically.
 
 ## Definition of Done
 
@@ -80,7 +81,7 @@ description: "ExecPlan for refactoring the monolithic tests/support/mod.rs into 
 - [x] Handed off to an independent reviewer (MUST use the `evaluator-execplan` skill via a subagent or separate agent, not the generator agent).
 
 ### Evaluator
-- [x] Standard review posture applied.
-- [x] Adheres to the principles of `docs/CODESTYLE.md`.
-- [x] Adheres to the principles of `docs/TESTING.md`.
-- [x] All review findings have been addressed.
+- [ ] Standard review posture applied.
+- [ ] Adheres to the principles of `docs/CODESTYLE.md`.
+- [ ] Adheres to the principles of `docs/TESTING.md`.
+- [ ] All review findings have been addressed.

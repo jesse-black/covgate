@@ -60,6 +60,7 @@ Worked examples grouped by topic. Each rule tags the principle(s) it expresses. 
 *Principle 4.*
 
 - NEVER introduce a `Foo { only_field: T }` struct that callers immediately destructure. Return `T` directly. Same for `FooOptions` types that exist to bundle one collection — pass `&[T]` instead.
+- NEVER keep a parameter whose argument is structurally trivial (`&[]`, `None`, `""`) at the majority of call sites. The parameter is not earning its place; remove it or introduce a `_with_x` variant for the exceptional callers that need it.
 - ALWAYS justify a wrapper struct by either fields planned in the current task or a real semantic distinction between the wrapper and its field.
 - NEVER bundle fields into a context struct only to re-explode them at the call site. If a state struct exists, downstream helpers should accept `&mut State`, not five individual references to its fields.
 

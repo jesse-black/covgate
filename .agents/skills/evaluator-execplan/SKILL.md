@@ -19,6 +19,8 @@ MUST READ before reviewing:
 
 Review against all three authorities: the ExecPlan, `CODESTYLE.md`, and `TESTING.md`. The ExecPlan defines task intent, but it is not the only acceptance criteria. If the plan conflicts with, narrows away, or omits a requirement from the code or testing docs, record that as a finding instead of accepting the plan as authoritative.
 
+A design element that appears in the ExecPlan spec is not pre-approved against `CODESTYLE.md`. Apply the same scrutiny to plan-specified designs as to emergent ones.
+
 Apply each rule at the granularity it requires. For example, if `TESTING.md` says individual tests must move unless they call private functions, inspect individual tests, not just whether a module contains any private-helper test.
 
 Role-specific review responsibilities stop here; `docs/PLANS.md` remains the source of truth for ExecPlan structure and maintenance rules.
