@@ -8,6 +8,7 @@
       "Bash(cargo xtask *)",
       "Bash(cargo fmt *)",
       "Bash(cargo clippy *)",
+      "Bash(ast-grep *)",
       "Bash(docgarden *)"
     ]
   }
