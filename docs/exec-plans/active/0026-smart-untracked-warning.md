@@ -33,29 +33,30 @@ None.
 ## Steps
 
 ### src/lib.rs — production changes
-- [ ] In `run`: call `supported_files(&report)` before `load_changed_lines_with_warnings` and bind to `coverage_files`; pass `&coverage_files` as a second argument to `load_changed_lines_with_warnings`.
-- [ ] Change `load_changed_lines_with_warnings` signature to accept `coverage_files: &BTreeSet<std::path::PathBuf>`; pass `coverage_files` through to the check function.
-- [ ] Rename `emit_untracked_files_warning` to `check_untracked_coverage_files`; update its signature to accept `coverage_files: &BTreeSet<std::path::PathBuf>`.
-- [ ] Inside `check_untracked_coverage_files`: after obtaining `untracked_files`, filter to only those whose `PathBuf` appears in `coverage_files`; bind the filtered list as `relevant`; if `relevant.is_empty()` return `Ok(())`.
-- [ ] When `relevant` is non-empty, return `Err(...)` (using the existing error type) with a message that names the coverage-relevance criterion and includes the exact fix command, e.g.: `"untracked files appear in the coverage report and are excluded from diff gating, which produces a false pass — add them with: \`{add_command}\`"`. Do not print to stderr and continue; the error propagates and causes a non-zero exit.
+- [x] In `run`: call `supported_files(&report)` before `load_changed_lines_with_warnings` and bind to `coverage_files`; pass `&coverage_files` as a second argument to `load_changed_lines_with_warnings`.
+- [x] Change `load_changed_lines_with_warnings` signature to accept `coverage_files: &BTreeSet<std::path::PathBuf>`; pass `coverage_files` through to the check function.
+- [x] Rename `emit_untracked_files_warning` to `check_untracked_coverage_files`; update its signature to accept `coverage_files: &BTreeSet<std::path::PathBuf>`.
+- [x] Inside `check_untracked_coverage_files`: after obtaining `untracked_files`, filter to only those whose `PathBuf` appears in `coverage_files`; bind the filtered list as `relevant`; if `relevant.is_empty()` return `Ok(())`.
+- [x] When `relevant` is non-empty, return `Err(...)` (using the existing error type) with a message that names the coverage-relevance criterion and includes the exact fix command, e.g.: `"untracked files appear in the coverage report and are excluded from diff gating, which produces a false pass — add them with: \`{add_command}\`"`. Do not print to stderr and continue; the error propagates and causes a non-zero exit.
 
 ### tests/cli_interface.rs — test updates
-- [ ] Rename and update `git_base_mode_warns_about_untracked_files` → `git_base_mode_errors_on_coverage_untracked_files`: replace the `new_untracked.rs` untracked file with a file at a path present in the fixture's coverage report (e.g., `src/lib.rs` removed from index). Assert the command exits non-zero and stderr contains the fix command naming that path.
-- [ ] Add new test `git_base_mode_passes_for_uncovered_untracked_file`: create an untracked file at a path not in coverage (e.g., `new_untracked.rs`). Assert the command exits zero and stderr does not contain the error text.
-- [ ] Rename `diff_file_mode_skips_untracked_files_warning` → `diff_file_mode_skips_untracked_files_check` (diff-file mode never errors regardless of coverage membership); update assertions to match error-vs-warning framing if needed.
+- [x] Rename and update `git_base_mode_warns_about_untracked_files` → `git_base_mode_errors_on_coverage_untracked_files`: uses `git rm --cached src/lib.rs` to make the coverage-present file untracked. Asserts non-zero exit and stderr contains fix command.
+- [x] Add new test `git_base_mode_passes_for_uncovered_untracked_file`: create an untracked file at a path not in coverage (e.g., `new_untracked.rs`). Assert the command exits zero and stderr does not contain the error text.
+- [x] Rename `diff_file_mode_skips_untracked_files_warning` → `diff_file_mode_skips_untracked_files_check`; assertion updated from "Untracked-files warning" to "false pass".
 
 ### tests/lib_run.rs — test updates
-- [ ] Rename and update `run_with_git_base_checks_untracked_files_before_loading_diff`: replace `new_untracked.rs` with a coverage-present file removed from index. Assert the result is `Err` and the error message contains the fix command.
-- [ ] Update `run_with_git_base_quotes_paths_in_add_command_when_needed`: this test uses `"space name.rs"` which is not in coverage — it will no longer trigger an error. Replace with a coverage-present file whose path contains a space, or if that is impractical in the harness, add a separate test for quoting using a coverage-present path with a space and convert the original to assert `Ok` behavior for an irrelevant untracked file. The generator should choose the simplest option that preserves quoting coverage.
-- [ ] Update `run_with_git_base_skips_warning_when_no_untracked_files_exist`: rename to `run_with_git_base_passes_when_no_untracked_files_exist`; intent unchanged (no untracked files → `Ok`).
+- [x] Rename `run_with_git_base_checks_untracked_files_before_loading_diff` → `run_with_git_base_errors_on_coverage_untracked_files`: uses `git rm --cached src/lib.rs`. Asserts `Err` with fix command.
+- [x] Rename `run_with_git_base_quotes_paths_in_add_command_when_needed` → `run_with_git_base_passes_for_uncovered_untracked_file_with_spaces`: now asserts `Ok` (non-coverage untracked file). Added new test `run_with_git_base_quotes_coverage_paths_with_spaces_in_error_command` using a custom coverage JSON with `src/my lib.rs`; asserts error message contains properly shell-quoted path.
+- [x] Rename `run_with_git_base_skips_warning_when_no_untracked_files_exist` → `run_with_git_base_passes_when_no_untracked_files_exist`; intent unchanged.
 
 ## Validation
 - `cargo test git_base_mode_errors_on_coverage_untracked_files`
 - `cargo test git_base_mode_passes_for_uncovered_untracked_file`
 - `cargo test diff_file_mode_skips_untracked_files_check`
-- `cargo test run_with_git_base_checks_untracked_files_before_loading_diff`
-- `cargo test run_with_git_base_quotes_paths_in_add_command_when_needed`
-- `cargo test run_with_git_base_passes_when_no_untracked_files_exist`
+- `cargo test --test lib_run run_with_git_base_errors_on_coverage_untracked_files`
+- `cargo test --test lib_run run_with_git_base_passes_for_uncovered_untracked_file_with_spaces`
+- `cargo test --test lib_run run_with_git_base_quotes_coverage_paths_with_spaces_in_error_command`
+- `cargo test --test lib_run run_with_git_base_passes_when_no_untracked_files_exist`
 - `cargo test --workspace`
 - `cargo xtask validate`
 
@@ -66,7 +67,61 @@ None.
 - `run_with_git_base_quotes_paths_in_add_command_when_needed` currently relies on a non-coverage file to trigger the warning path; it will silently pass after this change. The generator must resolve this per the guidance in Steps.
 
 ## Review
-None yet.
+
+### Finding 1 — CODESTYLE: `list_untracked_files` private wrapper does not earn its layer
+
+**File:** `src/lib.rs:281-283`
+
+```rust
+fn list_untracked_files() -> Result<Vec<String>> {
+    crate::git::list_untracked_files()
+}
+```
+
+This is a pure single-line alias. It adds no logic, no error transformation, no testability seam. `check_untracked_coverage_files` should call `crate::git::list_untracked_files()` directly. CODESTYLE Principle 4: "Earn every layer."
+
+---
+
+### Finding 2 — PLAN: Validation section lists two stale test names
+
+**File:** `docs/exec-plans/active/0026-smart-untracked-warning.md`, Validation section
+
+The Validation section still lists the old pre-rename test names that no longer exist in the codebase:
+
+- `cargo test run_with_git_base_checks_untracked_files_before_loading_diff` — renamed to `run_with_git_base_errors_on_coverage_untracked_files`
+- `cargo test run_with_git_base_quotes_paths_in_add_command_when_needed` — renamed to `run_with_git_base_passes_for_uncovered_untracked_file_with_spaces`
+
+Running these commands produces 0 tests filtered in (they silently pass without exercising anything). The three new test names introduced by the generator are also absent from the Validation list:
+
+- `run_with_git_base_errors_on_coverage_untracked_files`
+- `run_with_git_base_passes_for_uncovered_untracked_file_with_spaces`
+- `run_with_git_base_quotes_coverage_paths_with_spaces_in_error_command`
+
+The Validation section must be updated to reflect the actual test names.
+
+---
+
+### Finding 3 — TESTING: `diff_file_mode_skips_untracked_files_check` does not assert the intended behavior
+
+**File:** `tests/cli_interface.rs:443-473`
+
+The test creates `new_untracked.rs`, a file that is not present in the coverage report. Using a non-coverage untracked file means the test cannot distinguish the "diff mode skips the check entirely" behavior from the "git-base mode silently ignores non-coverage untracked files" behavior — both exit zero and emit no error text for a non-coverage file.
+
+To assert that diff mode actually bypasses the check, the untracked file must be one that is present in the coverage report (e.g., `src/lib.rs` via `git rm --cached`). With a coverage-tracked untracked file: git-base mode errors, diff-file mode passes. The current test cannot falsify a broken implementation that skips diff-mode suppression but still passes because the file has no coverage entry.
+
+TESTING.md Principle 5: "A test's value is what it can falsify."
+
+---
+
+### Finding 4 — TESTING: `git_base_mode_errors_on_coverage_untracked_files` uses `assert_ne` where `assert_eq!(Some(1))` is the codebase norm
+
+**File:** `tests/cli_interface.rs:413`
+
+```rust
+assert_ne!(output.status.code(), Some(0));
+```
+
+Every other error-exit assertion in `cli_interface.rs` uses `assert_eq!(output.status.code(), Some(1))`. The `assert_ne` form passes for any non-zero exit code including 2 (clap usage error) and `None` (killed process). `run()` errors propagate through `main` via `anyhow::Result<()>` and exit with code 1; the assertion should be `assert_eq!(output.status.code(), Some(1))` to match that contract and the surrounding test file convention.
 
 ## Definition of Done
 
@@ -74,13 +129,13 @@ None yet.
 - [x] Plan is consistent, up to date, decision-complete, and ready to hand off.
 
 ### Generator
-- [ ] Goal achieved: check errors (not warns) when untracked files intersect with coverage-tracked files; passes silently otherwise.
-- [ ] All planned steps are complete.
-- [ ] All validation commands pass.
-- [ ] Handed off to an independent reviewer (MUST use the `evaluator-execplan` skill via a subagent or separate agent, not the generator agent).
+- [x] Goal achieved: check errors (not warns) when untracked files intersect with coverage-tracked files; passes silently otherwise.
+- [x] All planned steps are complete.
+- [x] All validation commands pass.
+- [x] Handed off to an independent reviewer (MUST use the `evaluator-execplan` skill via a subagent or separate agent, not the generator agent).
 
 ### Evaluator
-- [ ] Standard review posture applied.
-- [ ] Adheres to the principles of `docs/CODESTYLE.md`.
-- [ ] Adheres to the principles of `docs/TESTING.md`.
-- [ ] All review findings have been addressed.
+- [x] Standard review posture applied.
+- [x] Adheres to the principles of `docs/CODESTYLE.md`.
+- [x] Adheres to the principles of `docs/TESTING.md`.
+- [x] All review findings have been addressed.
