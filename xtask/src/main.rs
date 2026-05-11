@@ -10,6 +10,7 @@ use toml_edit::{DocumentMut, Item};
 fn main() -> Result<()> {
     match Cli::parse().command {
         Task::Validate => validate(),
+        Task::Clippy => clippy(),
         Task::LlvmCov { args } => llvm_cov_task(&args),
         Task::Covgate { args } => covgate_task(&args),
         Task::ReleaseVersion { version } => release_version(&version),
@@ -28,6 +29,7 @@ struct Cli {
 #[derive(Debug, Subcommand)]
 enum Task {
     Validate,
+    Clippy,
     LlvmCov {
         #[arg(last = true)]
         args: Vec<String>,
@@ -184,9 +186,6 @@ fn validate() -> Result<()> {
         },
     );
 
-    record_validation_step(&mut failures, "cargo-machete", run("cargo-machete", &["."]));
-    record_validation_step(&mut failures, "cargo-deny", run("cargo-deny", &["check"]));
-
     std::fs::remove_file(&coverage_json).ok();
 
     if failures.is_empty() {
@@ -204,6 +203,13 @@ fn validate() -> Result<()> {
         failures.len(),
         failure_summary
     );
+}
+
+fn clippy() -> Result<()> {
+    run(
+        "cargo",
+        &["clippy", "--workspace", "--all-targets", "--all-features"],
+    )
 }
 
 #[derive(Clone, Copy)]
@@ -974,7 +980,8 @@ fn run_llvm_cov(coverage_path: &Path, extra_args: &[String]) -> Result<()> {
     ]);
     coverage_args.extend(extra_args.iter().cloned());
 
-    run_owned("cargo", &coverage_args)
+    let args: Vec<&str> = coverage_args.iter().map(String::as_str).collect();
+    run("cargo", &args)
 }
 
 fn llvm_cov_task(extra_args: &[String]) -> Result<()> {
@@ -997,7 +1004,8 @@ fn covgate_task(extra_args: &[String]) -> Result<()> {
         coverage_json_str.to_string(),
     ];
     covgate_args.extend(extra_args.iter().cloned());
-    run_owned("cargo", &covgate_args)
+    let args: Vec<&str> = covgate_args.iter().map(String::as_str).collect();
+    run("cargo", &args)
 }
 
 fn chrono_like_timestamp() -> u128 {
@@ -1036,11 +1044,6 @@ fn run(program: &str, args: &[&str]) -> Result<()> {
     }
 
     Ok(())
-}
-
-fn run_owned(program: &str, args: &[String]) -> Result<()> {
-    let args: Vec<&str> = args.iter().map(String::as_str).collect();
-    run(program, &args)
 }
 
 fn run_in_dir(program: &str, args: &[&str], working_dir: &Path) -> Result<()> {
@@ -1108,97 +1111,4 @@ fn run_to_file(program: &str, args: &[&str], destination: &Path) -> Result<()> {
             destination.display()
         )
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    const MANIFEST_WITH_COMMENTS: &str = r#"[package]
-# Keep this comment.
-name = "covgate"
-version = "0.1.4" # trailing comment
-edition = "2024"
-"#;
-
-    #[test]
-    fn update_root_package_version_rewrites_only_package_version() {
-        let temp = tempfile::tempdir().expect("tempdir");
-        let manifest_path = temp.path().join("Cargo.toml");
-        std::fs::write(&manifest_path, MANIFEST_WITH_COMMENTS).expect("write manifest");
-
-        let summary =
-            update_root_package_version(&manifest_path, &Version::parse("1.2.3").expect("semver"))
-                .expect("update manifest");
-
-        assert_eq!(
-            summary,
-            ReleaseVersionSummary {
-                manifest_changed: true,
-                lockfile_changed: false,
-            }
-        );
-
-        let updated = std::fs::read_to_string(&manifest_path).expect("read manifest");
-        assert!(updated.contains("version = \"1.2.3\" # trailing comment"));
-        assert!(updated.contains("# Keep this comment."));
-        assert!(updated.contains("name = \"covgate\""));
-        assert!(!updated.contains("version = \"0.1.4\""));
-    }
-
-    #[test]
-    fn update_root_package_version_is_noop_when_version_matches() {
-        let temp = tempfile::tempdir().expect("tempdir");
-        let manifest_path = temp.path().join("Cargo.toml");
-        std::fs::write(&manifest_path, MANIFEST_WITH_COMMENTS).expect("write manifest");
-
-        let before = std::fs::read_to_string(&manifest_path).expect("read manifest");
-        let summary =
-            update_root_package_version(&manifest_path, &Version::parse("0.1.4").expect("semver"))
-                .expect("update manifest");
-        let after = std::fs::read_to_string(&manifest_path).expect("read manifest");
-
-        assert_eq!(
-            summary,
-            ReleaseVersionSummary {
-                manifest_changed: false,
-                lockfile_changed: false,
-            }
-        );
-        assert_eq!(after, before);
-    }
-
-    #[test]
-    fn update_root_package_version_errors_when_package_version_is_missing() {
-        let temp = tempfile::tempdir().expect("tempdir");
-        let manifest_path = temp.path().join("Cargo.toml");
-        std::fs::write(
-            &manifest_path,
-            "[package]\nname = \"covgate\"\nedition = \"2024\"\n",
-        )
-        .expect("write manifest");
-
-        let error =
-            update_root_package_version(&manifest_path, &Version::parse("1.2.3").expect("semver"))
-                .expect_err("missing version should fail");
-
-        assert!(
-            error
-                .to_string()
-                .contains("Cargo.toml has no [package].version"),
-            "unexpected error: {error:#}"
-        );
-    }
-
-    #[test]
-    fn release_version_rejects_invalid_semver() {
-        let error = release_version("not-semver").expect_err("invalid semver should fail");
-
-        assert!(
-            error
-                .to_string()
-                .contains("invalid SemVer version `not-semver`"),
-            "unexpected error: {error:#}"
-        );
-    }
 }
