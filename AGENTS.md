@@ -4,11 +4,12 @@
 
 Before reaching for `rg`/`grep`/`find`, agents, `sed`, one-off scripts, or regex bulk edits, route by target type:
 
-- **Docs, plans, repo guidance, repo-local skills** → `docgarden match <query>`. Use `docgarden ls --active-plans` to list active ExecPlans.
-- **Code symbols or structure** → `ast-grep --lang rust -p '<pattern>'` for call sites, signatures, impl blocks, macros, match arms, trait bounds, attributes, and symbol-shaped searches.
-- **Structural bulk edits** (rename across call sites, replace a deprecated pattern, migrate signatures) → `ast-grep --lang rust -p '<pattern>' --rewrite '<replacement>'` or an `ast-grep scan` rule with a `fix:` field, before reaching for `sed`, one-off Python, or a regex replace. See the `ast-grep` skill for rule authoring. Adjust `--lang` for non-Rust sources.
+- **Active plans** → `docgarden ls --active-plans`.
+- **Docs, repo guidance, repo-local skills, or topic routing** → `docgarden match <query>`.
+- **Code symbols or structure** → `ast-grep --lang rust -p '<pattern>'`; use the `ast-grep` skill for patterns beyond simple syntax.
+- **Structural bulk edits** → `ast-grep --lang rust -p '<pattern>' --rewrite '<replacement>'` or an `ast-grep scan` rule with `fix:`; use the `ast-grep` skill for rule authoring.
 
-Skip routing only when the exact file is already named by the user or in active context. If a named symbol needs callers, definitions, signatures, or rewrites, still use `ast-grep`. Use plain-text tools directly only for literal non-structural text such as log lines, error messages, comments, or fixture strings.
+Skip routing only when the exact file is already named by the user or in active context. If a named symbol needs callers, definitions, signatures, or rewrites, still use `ast-grep`. Use plain-text tools directly only for literal non-structural text such as log lines, error messages, comments, fixture strings, or "does this exact text occur?" checks.
 
 ## Development Process
 ### Workflow
