@@ -741,6 +741,38 @@ fn github_step_summary_and_explicit_output_both_write() {
 }
 
 #[test]
+fn github_step_summary_matching_explicit_output_writes_once() {
+    let fixture = rust_basic_pass_fixture();
+    let temp = tempdir().expect("tempdir should exist");
+    let worktree = setup_fixture_worktree(temp.path(), fixture);
+    let diff_file = write_worktree_diff(temp.path(), &worktree);
+    let markdown_output = temp.path().join("summary.md");
+    fs::write(
+        worktree.join("covgate.toml"),
+        "[[gates]]\nfail-under-regions = 90\n",
+    )
+    .expect("config should be written");
+
+    let output = covgate(&worktree)
+        .check(&fixture.coverage_json())
+        .args([
+            "--diff-file".into(),
+            diff_file.to_string_lossy().into_owned(),
+            "--markdown-output".into(),
+            markdown_output.to_string_lossy().into_owned(),
+        ])
+        .env(
+            "GITHUB_STEP_SUMMARY",
+            markdown_output.to_str().expect("path should be utf8"),
+        )
+        .run();
+
+    assert_eq!(output.status.code(), Some(0));
+    let markdown = fs::read_to_string(markdown_output).expect("markdown should be readable");
+    assert_eq!(markdown.matches("## Covgate").count(), 1, "{markdown}");
+}
+
+#[test]
 fn markdown_output_file_write_error_is_reported() {
     let fixture = rust_basic_pass_fixture();
     let temp = tempdir().expect("tempdir should exist");
