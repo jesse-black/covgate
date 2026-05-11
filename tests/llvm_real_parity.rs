@@ -48,6 +48,7 @@ mod tests {
                 "--markdown-output".to_string(),
                 markdown_output.to_string_lossy().into_owned(),
             ],
+            &[],
         );
 
         assert_eq!(

@@ -1,3 +1,5 @@
+mod support;
+
 use std::{fs, path::PathBuf, sync::Mutex};
 
 use covgate::{
@@ -7,6 +9,8 @@ use covgate::{
 };
 use tempfile::tempdir;
 
+use crate::support::run_git;
+
 static CWD_LOCK: Mutex<()> = Mutex::new(());
 
 struct CwdGuard(PathBuf);
@@ -15,15 +19,6 @@ impl Drop for CwdGuard {
     fn drop(&mut self) {
         let _ = std::env::set_current_dir(&self.0);
     }
-}
-
-fn run_git(repo: &std::path::Path, args: &[&str]) {
-    let output = std::process::Command::new("git")
-        .args(args)
-        .current_dir(repo)
-        .output()
-        .expect("git should run");
-    assert!(output.status.success(), "stderr={:?}", output.stderr);
 }
 
 fn args_for_config_discovery() -> Args {

@@ -138,6 +138,7 @@ fn run_real_fixture_gate(diff_text: &str, config_text: &str) -> std::process::Ou
             "--diff-file".to_string(),
             diff_file.to_string_lossy().into_owned(),
         ],
+        &[],
     )
 }
 
