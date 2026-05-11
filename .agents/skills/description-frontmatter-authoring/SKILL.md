@@ -16,8 +16,8 @@ Use this skill to make frontmatter descriptions work as the repository's routing
    - Write down nearby documents that should not outrank it.
 
 2. Inspect the current route.
-   - Run `cargo run -- match <query>` for each realistic query.
-   - Use `cargo run -- match --explain <query>` when ranking looks surprising.
+   - Run `docgarden match <query>` for each realistic query.
+   - Use `docgarden match --explain <query>` when ranking looks surprising.
 
 3. Rewrite the description as a positive routing cue.
    - Lead with the document type or task family.
@@ -31,8 +31,8 @@ Use this skill to make frontmatter descriptions work as the repository's routing
    - Avoid duplicating another document's strongest trigger phrase unless both should route together.
 
 5. Validate the route and the lint policy.
-   - Rerun the same `cargo run -- match <query>` checks.
-   - After modifying any Markdown file, run `cargo run -- lint <changed-files> --color never`.
+   - Rerun the same `docgarden match <query>` checks.
+   - After modifying any Markdown file, run `docgarden lint <changed-files>`.
 
 ## Description Pattern
 
@@ -91,4 +91,4 @@ A description is good enough when:
 - expected queries route to the document near the top
 - unrelated documents stop appearing because of accidental shared words
 - the description remains true when read alone in `docgarden match` output
-- `docgarden lint <changed-files> --color never` passes
+- `docgarden lint <changed-files>` passes

@@ -83,6 +83,7 @@ description: "<plan-specific routing cue; read when implementing, reviewing, or 
 
 ## Validation
 - `<command>`
+- For Rust behavior changes: `cargo xtask validate`
 - <manual check>
 
 ## Discoveries
@@ -101,13 +102,14 @@ description: "<plan-specific routing cue; read when implementing, reviewing, or 
 ### Generator
 - [ ] Goal achieved: <desired end state>
 - [ ] All planned steps are complete.
-- [ ] All validation commands pass.
+- [ ] All validation commands pass; for Rust behavior changes, `cargo xtask validate` passes before handoff.
 - [ ] Handed off to an independent reviewer (MUST use the `evaluator-execplan` skill via a subagent or separate agent, not the generator agent).
 
 ### Evaluator
 - [ ] Standard review posture applied.
 - [ ] Adheres to the principles of `docs/CODESTYLE.md`.
 - [ ] Adheres to the principles of `docs/TESTING.md`.
+- [ ] Validation evidence is present and sufficient, including `cargo xtask validate` for Rust behavior changes.
 - [ ] All review findings have been addressed.
 ```
 
@@ -118,7 +120,7 @@ description: "<plan-specific routing cue; read when implementing, reviewing, or 
 - `Relevant Areas`: list only files, modules, or systems likely to matter.
 - `Open Questions`: include only unresolved items that could affect implementation. Use `None yet` if there are none.
 - `Steps`: use actionable checkboxes.
-- `Validation`: list exact commands and checks.
+- `Validation`: list exact commands and checks. Include `cargo xtask validate` for Rust behavior changes; for docs changes, include `docgarden lint`; for CI, metadata, lint, or config-only changes, list focused checks instead.
 - `Discoveries`: append-only findings that affect implementation, scope, or validation. Use `None yet` if there are none.
 - `Review`: append-only review findings. Use `None yet` if there are none.
 - `Definition of Done`: persona-based checklists to verify full completion of the task and proper handoff.

@@ -10,7 +10,7 @@ use covgate::{
 use tempfile::tempdir;
 
 use crate::support::{
-    cpp_basic_fail_fixture, cpp_basic_pass_fixture, run_covgate_raw, rust_basic_fail_fixture,
+    covgate, cpp_basic_fail_fixture, cpp_basic_pass_fixture, rust_basic_fail_fixture,
     rust_basic_pass_fixture, setup_fixture_worktree, swift_basic_fail_fixture,
     swift_basic_pass_fixture, write_absolute_path_coverage_fixture,
     write_rebased_real_llvm_fixture, write_worktree_diff,
@@ -130,15 +130,13 @@ fn run_real_fixture_gate(diff_text: &str, config_text: &str) -> std::process::Ou
     let coverage_json = temp.path().join("covgate-self-full-rebased.json");
     write_rebased_real_llvm_fixture(&coverage_json);
 
-    run_covgate_raw(
-        temp.path(),
-        &[
-            "check".to_string(),
-            coverage_json.to_string_lossy().into_owned(),
-            "--diff-file".to_string(),
+    covgate(temp.path())
+        .check(&coverage_json)
+        .args([
+            "--diff-file".into(),
             diff_file.to_string_lossy().into_owned(),
-        ],
-    )
+        ])
+        .run()
 }
 
 #[test]

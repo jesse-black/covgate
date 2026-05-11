@@ -1,3 +1,5 @@
+mod support;
+
 use std::fs;
 use std::sync::Mutex;
 
@@ -10,6 +12,8 @@ use covgate::{
     git::{RECORDED_BASE_REF, record_base_ref},
 };
 
+use crate::support::run_git;
+
 static CWD_LOCK: Mutex<()> = Mutex::new(());
 
 struct CwdGuard(std::path::PathBuf);
@@ -17,20 +21,6 @@ impl Drop for CwdGuard {
     fn drop(&mut self) {
         let _ = std::env::set_current_dir(&self.0);
     }
-}
-
-fn run_git(path: &std::path::Path, args: &[&str]) {
-    let output = std::process::Command::new("git")
-        .args(args)
-        .current_dir(path)
-        .output()
-        .expect("git should run");
-    assert!(
-        output.status.success(),
-        "git {:?} failed: {}",
-        args,
-        String::from_utf8_lossy(&output.stderr)
-    );
 }
 
 #[test]
@@ -64,6 +54,7 @@ fn config_uses_recorded_base_when_base_is_omitted() {
         base: None,
         diff_file: None,
         markdown_output: None,
+        no_github_summary: false,
     })
     .expect("config should resolve");
 

@@ -35,6 +35,7 @@
               gh
               file
               python3
+              ast-grep
 
               # Shell/script tooling
               shellcheck

@@ -8,11 +8,15 @@ pub mod metrics;
 pub mod model;
 pub mod render;
 
-use anyhow::Result;
-use std::collections::BTreeSet;
+use anyhow::{Context, Result};
+use std::{
+    collections::BTreeSet,
+    io::Write,
+    path::{Path, PathBuf},
+};
 
 use crate::{
-    config::{Config, ConfiguredGate},
+    config::{Config, ConfiguredGate, OutputSink},
     diff::DiffSource,
     model::{ChangedFile, CheckResult, ComputedMetric, MetricKind},
 };
@@ -23,6 +27,7 @@ pub fn run(config: Config) -> Result<i32> {
         diff_source,
         gates,
         markdown_output,
+        no_github_summary,
     } = config;
     let coverage_report = &coverage_report;
     let diff_source = &diff_source;
@@ -95,12 +100,66 @@ pub fn run(config: Config) -> Result<i32> {
     let console = render::console::render(&check_result, &diff_source.describe());
     println!("{console}");
 
-    if let Some(path) = markdown_output {
+    let github_summary = (!no_github_summary)
+        .then(|| std::env::var_os("GITHUB_STEP_SUMMARY"))
+        .flatten();
+    if markdown_output.is_some() || github_summary.is_some() {
         let markdown = render::markdown::render(&check_result, &diff_source.describe());
-        std::fs::write(path, markdown)?;
+        write_markdown_outputs(markdown_output, github_summary, &markdown)?;
     }
 
     Ok(if check_result.passed { 0 } else { 1 })
+}
+
+fn write_markdown_outputs(
+    markdown_output: &Option<OutputSink>,
+    github_summary: Option<std::ffi::OsString>,
+    markdown: &str,
+) -> Result<()> {
+    match markdown_output {
+        Some(OutputSink::File(path)) => std::fs::write(path, markdown)
+            .with_context(|| format!("failed to write markdown output: {}", path.display()))?,
+        Some(OutputSink::Stdout) => print!("{markdown}"),
+        None => {}
+    }
+    if let Some(path) = github_summary {
+        let path = PathBuf::from(path);
+        let already_written = matches!(
+            markdown_output,
+            Some(OutputSink::File(explicit_path))
+                if paths_refer_to_same_destination(explicit_path, &path)
+        );
+        if !already_written {
+            let mut file = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&path)
+                .with_context(|| {
+                    format!("failed to open GitHub step summary: {}", path.display())
+                })?;
+            file.write_all(markdown.as_bytes()).with_context(|| {
+                format!("failed to write GitHub step summary: {}", path.display())
+            })?;
+        }
+    }
+    Ok(())
+}
+
+fn paths_refer_to_same_destination(left: &Path, right: &Path) -> bool {
+    comparable_path(left) == comparable_path(right)
+}
+
+fn comparable_path(path: &Path) -> PathBuf {
+    if let Ok(path) = path.canonicalize() {
+        return path;
+    }
+    if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .expect("current directory should be available")
+            .join(path)
+    }
 }
 
 fn compute_run_changed_metrics(
@@ -296,4 +355,39 @@ fn shell_escape_path(path: &str) -> String {
     }
 
     format!("'{}'", path.replace('\'', "'\''"))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{fs, path::Path};
+
+    use super::{comparable_path, paths_refer_to_same_destination};
+
+    #[test]
+    fn same_destination_detects_existing_file_paths() {
+        let temp = tempfile::tempdir().expect("tempdir should exist");
+        let file = temp.path().join("summary.md");
+        fs::write(&file, "markdown").expect("summary should be written");
+
+        assert!(paths_refer_to_same_destination(&file, &file));
+    }
+
+    #[test]
+    fn comparable_path_preserves_missing_absolute_path() {
+        let missing = std::env::current_dir()
+            .expect("current directory should be available")
+            .join("target/missing-covgate-summary.md");
+
+        assert_eq!(comparable_path(&missing), missing);
+    }
+
+    #[test]
+    fn comparable_path_resolves_missing_relative_path_from_current_dir() {
+        let relative = Path::new("target/missing-covgate-summary.md");
+        let expected = std::env::current_dir()
+            .expect("current directory should be available")
+            .join(relative);
+
+        assert_eq!(comparable_path(relative), expected);
+    }
 }

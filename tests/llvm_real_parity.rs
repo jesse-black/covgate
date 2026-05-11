@@ -3,13 +3,7 @@ mod support;
 use std::{collections::BTreeMap, fs, path::PathBuf};
 
 use covgate::{coverage, model::MetricKind};
-use support::run_covgate_raw;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct OverallTotals {
-    covered: usize,
-    total: usize,
-}
+use support::{OverallTotals, covgate};
 
 #[cfg(test)]
 mod tests {
@@ -38,17 +32,15 @@ mod tests {
         )
         .expect("config should be written");
 
-        let output = run_covgate_raw(
-            worktree.path(),
-            &[
-                "check".to_string(),
-                coverage_report.to_string_lossy().into_owned(),
-                "--diff-file".to_string(),
+        let output = covgate(worktree.path())
+            .check(&coverage_report)
+            .args([
+                "--diff-file".into(),
                 diff_file.to_string_lossy().into_owned(),
-                "--markdown-output".to_string(),
+                "--markdown-output".into(),
                 markdown_output.to_string_lossy().into_owned(),
-            ],
-        );
+            ])
+            .run();
 
         assert_eq!(
             output.status.code(),

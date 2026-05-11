@@ -11,3 +11,4 @@ This file tracks follow-up cleanup ideas that came up during planning but are no
 - Consider consolidating the repeated test harness helpers used by coverage integration-style tests after the file-backed coverage tests move out of `src/coverage/mod.rs`. The cwd lock, temporary git-repo setup, and `run_git`/PATH override helpers are currently duplicated across coverage-focused tests.
 
 - Revisit whether any deeper parser-internal deduplication is worth doing after the naming and boundary cleanup lands. For now, avoid broad parser rewrites that would obscure format-specific behavior, but a later pass may be worthwhile once the API and test boundaries settle.
+

@@ -38,7 +38,11 @@ pub struct Args {
     #[arg(long, conflicts_with = "base")]
     pub diff_file: Option<PathBuf>,
 
-    /// Write a Markdown summary to this file
+    /// Write a Markdown summary to this file, or `-` for stdout
     #[arg(long)]
     pub markdown_output: Option<PathBuf>,
+
+    /// Disable automatic GitHub Actions step summary output
+    #[arg(long)]
+    pub no_github_summary: bool,
 }
