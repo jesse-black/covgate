@@ -30,7 +30,8 @@ pub fn run(config: Config) -> Result<i32> {
     let markdown_output = &markdown_output;
 
     let report = coverage::load_from_path(coverage_report)?;
-    let diff = load_changed_lines_with_warnings(diff_source)?;
+    let coverage_files = supported_files(&report);
+    let diff = load_changed_lines_with_warnings(diff_source, &coverage_files)?;
 
     let mut overall_metrics = Vec::new();
     for kind in [
@@ -245,30 +246,36 @@ fn supported_files(report: &crate::model::CoverageReport) -> BTreeSet<std::path:
         .collect()
 }
 
-fn load_changed_lines_with_warnings(source: &DiffSource) -> Result<Vec<ChangedFile>> {
-    emit_untracked_files_warning(source)?;
+fn load_changed_lines_with_warnings(
+    source: &DiffSource,
+    coverage_files: &BTreeSet<std::path::PathBuf>,
+) -> Result<Vec<ChangedFile>> {
+    check_untracked_coverage_files(source, coverage_files)?;
     diff::load_changed_lines(source)
 }
 
-fn emit_untracked_files_warning(source: &DiffSource) -> Result<()> {
+fn check_untracked_coverage_files(
+    source: &DiffSource,
+    coverage_files: &BTreeSet<std::path::PathBuf>,
+) -> Result<()> {
     if !matches!(source, DiffSource::GitBase(_)) {
         return Ok(());
     }
 
-    let untracked_files = list_untracked_files()?;
-    if untracked_files.is_empty() {
+    let untracked_files = crate::git::list_untracked_files()?;
+    let relevant: Vec<String> = untracked_files
+        .into_iter()
+        .filter(|path| coverage_files.contains(std::path::Path::new(path)))
+        .collect();
+
+    if relevant.is_empty() {
         return Ok(());
     }
 
-    let add_command = format_git_add_command(&untracked_files);
-    eprintln!(
-        "⚠️ Untracked-files warning: untracked files are not included in diff gating and can produce a false pass. Add them with: `{add_command}`."
-    );
-    Ok(())
-}
-
-fn list_untracked_files() -> Result<Vec<String>> {
-    crate::git::list_untracked_files()
+    let add_command = format_git_add_command(&relevant);
+    Err(anyhow::anyhow!(
+        "untracked files appear in the coverage report and are excluded from diff gating, which produces a false pass — add them with: `{add_command}`"
+    ))
 }
 
 fn format_git_add_command(paths: &[String]) -> String {

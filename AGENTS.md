@@ -1,5 +1,12 @@
 # AGENTS
 
+## Step 0 (required before keyword-searching for documentation)
+Run `docgarden match <query>` before using `rg`, `grep`, `find`, or agents to locate Markdown documentation, plans, repository guidance, or repository-local skills.
+Use this when your first instinct is to search docs or guidance by keyword.
+Run `docgarden ls --active-plans` to list active ExecPlans when continuing or checking current plan-driven work.
+Do not repeat this step when the relevant file is already named by the user, listed in this file, or still in active context.
+Do not use this step for code-first work, code symbol searches, test names, compiler errors, or known file paths; inspect and search code directly.
+
 ## Development Process
 ### Must Follow
 - Run `cargo xtask validate` before declaring Rust behavior changes complete, including parser, metric, gate, CLI behavior, fixture, or validation-policy changes. For documentation-only, CI-only, metadata-only, or lint/config-only changes, run the focused checks that exercise the touched surface instead.

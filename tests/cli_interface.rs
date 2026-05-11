@@ -394,7 +394,7 @@ fn diff_file_mode_skips_dirty_worktree_guard() {
 }
 
 #[test]
-fn git_base_mode_warns_about_untracked_files() {
+fn git_base_mode_errors_on_coverage_untracked_files() {
     let fixture = rust_basic_pass_fixture();
     let temp = tempdir().expect("tempdir should exist");
     let worktree = setup_fixture_worktree(temp.path(), fixture);
@@ -406,42 +406,47 @@ fn git_base_mode_warns_about_untracked_files() {
     run_git(&worktree, &["add", "covgate.toml"]);
     run_git(&worktree, &["commit", "-m", "add covgate config"]);
 
+    run_git(&worktree, &["rm", "--cached", "src/lib.rs"]);
+
+    let output = run_covgate(&worktree, fixture, &[]);
+
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
+    assert!(stderr.contains("false pass"), "stderr={stderr}");
+    assert!(stderr.contains("git add -N src/lib.rs"), "stderr={stderr}");
+}
+
+#[test]
+fn git_base_mode_passes_for_uncovered_untracked_file() {
+    let fixture = rust_basic_pass_fixture();
+    let temp = tempdir().expect("tempdir should exist");
+    let worktree = setup_fixture_worktree(temp.path(), fixture);
     fs::write(
-        worktree.join("new_untracked.rs"),
-        "pub fn pending() {}
-",
+        worktree.join("covgate.toml"),
+        "[[gates]]\nfail-under-regions = 90\n",
     )
-    .expect("untracked file should write");
+    .expect("config should be written");
+    run_git(&worktree, &["add", "covgate.toml"]);
+    run_git(&worktree, &["commit", "-m", "add covgate config"]);
+
+    fs::write(worktree.join("new_untracked.rs"), "pub fn pending() {}\n")
+        .expect("untracked file should write");
 
     let output = run_covgate(&worktree, fixture, &[]);
 
     assert_eq!(output.status.code(), Some(0));
     let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
-    assert!(
-        stderr.contains("Untracked-files warning"),
-        "stderr={stderr}"
-    );
-    assert!(stderr.contains("false pass"), "stderr={stderr}");
-    assert!(stderr.contains("Add them with:"), "stderr={stderr}");
-    assert!(
-        stderr.contains("git add -N new_untracked.rs"),
-        "stderr={stderr}"
-    );
+    assert!(!stderr.contains("false pass"), "stderr={stderr}");
 }
 
 #[test]
-fn diff_file_mode_skips_untracked_files_warning() {
+fn diff_file_mode_skips_untracked_files_check() {
     let fixture = rust_basic_pass_fixture();
     let temp = tempdir().expect("tempdir should exist");
     let worktree = setup_fixture_worktree(temp.path(), fixture);
     let diff_file = write_worktree_diff(temp.path(), &worktree);
 
-    fs::write(
-        worktree.join("new_untracked.rs"),
-        "pub fn pending() {}
-",
-    )
-    .expect("untracked file should write");
+    run_git(&worktree, &["rm", "--cached", "src/lib.rs"]);
     fs::write(
         worktree.join("covgate.toml"),
         "[[gates]]\nfail-under-regions = 90\n",
@@ -459,10 +464,7 @@ fn diff_file_mode_skips_untracked_files_warning() {
 
     assert_eq!(output.status.code(), Some(0));
     let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
-    assert!(
-        !stderr.contains("Untracked-files warning"),
-        "stderr={stderr}"
-    );
+    assert!(!stderr.contains("false pass"), "stderr={stderr}");
 }
 
 #[test]
