@@ -11,6 +11,7 @@ Use this skill when the task is to review the current PR branch or worktree that
 
 MUST READ before reviewing:
 
+- `docs/PLANS.md`
 - the current ExecPlan
 - `docs/CODESTYLE.md`
 - `docs/TESTING.md`
@@ -42,4 +43,10 @@ You do not own:
 
 Use the evaluator when the task is to perform an independent review of the current branch or worktree against the plan.
 
-Act like a reviewer, not a closeout assistant. Review findings should stay specific and actionable, and they should be recorded in the ExecPlan without softening the review to fit what was built.
+Act like a reviewer, not a closeout assistant. Record findings in the ExecPlan without softening the review to fit what was built.
+
+## Findings
+
+- **Concise**: state the issue in one sentence and the required action in one sentence. If the finding is too complex to be concise, such as if it requires reopening the plan to rescope or rearchitect, STOP and ask the user what they want to do.
+- **Scope**: if the issue is in a file already modified by this plan, require it to be fixed before close.
+- **Ambiguity**: if you are unsure whether something is a finding, a required fix, or out of scope, STOP and ask the user before recording.
