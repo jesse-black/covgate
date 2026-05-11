@@ -170,7 +170,7 @@ When running `covgate` against the default branch in GitHub Actions, set `fetch-
   run: cargo llvm-cov --json --output-path coverage.json
 
 - name: Gate Pull Request
-  run: covgate check coverage.json --markdown-output "$GITHUB_STEP_SUMMARY"
+  run: covgate check coverage.json
 ```
 
 ## How does `covgate` compare to existing tools?
