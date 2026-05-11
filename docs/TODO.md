@@ -12,4 +12,3 @@ This file tracks follow-up cleanup ideas that came up during planning but are no
 
 - Revisit whether any deeper parser-internal deduplication is worth doing after the naming and boundary cleanup lands. For now, avoid broad parser rewrites that would obscure format-specific behavior, but a later pass may be worthwhile once the API and test boundaries settle.
 
-- `tests/llvm_real_parity.rs` defines a private `OverallTotals` struct locally (lines 8–12) instead of importing `support::OverallTotals` from `parity.rs`. Delete the local copy and import from support.
