@@ -123,6 +123,17 @@ assert_ne!(output.status.code(), Some(0));
 
 Every other error-exit assertion in `cli_interface.rs` uses `assert_eq!(output.status.code(), Some(1))`. The `assert_ne` form passes for any non-zero exit code including 2 (clap usage error) and `None` (killed process). `run()` errors propagate through `main` via `anyhow::Result<()>` and exit with code 1; the assertion should be `assert_eq!(output.status.code(), Some(1))` to match that contract and the surrounding test file convention.
 
+### Re-review — 2026-05-11
+
+No open findings. The current branch addresses the prior review notes:
+
+- `src/lib.rs` now calls `crate::git::list_untracked_files()` directly rather than using an unearned private wrapper.
+- `docs/exec-plans/active/0026-smart-untracked-warning.md` lists the current validation commands.
+- `tests/cli_interface.rs::diff_file_mode_skips_untracked_files_check` now uses `git rm --cached src/lib.rs`, so diff-file mode is tested with a coverage-present untracked file.
+- `tests/cli_interface.rs::git_base_mode_errors_on_coverage_untracked_files` now asserts `Some(1)`.
+
+Validation evidence: `cargo xtask validate` passed on 2026-05-11.
+
 ## Definition of Done
 
 ### Planner
