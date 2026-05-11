@@ -1,3 +1,7 @@
+---
+description: "Reference for ast-grep YAML rule syntax, including rule objects, atomic rules, relational rules, composite rules, metavariables, and fixes; read when authoring or validating structural search and rewrite rules."
+---
+
 # ast-grep Rule Reference
 
 This document provides comprehensive documentation for ast-grep rule syntax, covering all rule types and metavariables.

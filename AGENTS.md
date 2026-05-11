@@ -7,11 +7,12 @@ Run `docgarden ls --active-plans` to list active ExecPlans when continuing or ch
 Do not repeat this step when the relevant file is already named by the user, listed in this file, or still in active context.
 Do not use this step for code-first work, code symbol searches, test names, compiler errors, or known file paths; inspect and search code directly.
 
-## Step 0 (required before keyword-searching for code)
+## Step 0 (required before keyword-searching or bulk-editing code)
 Run `ast-grep --lang rust -p '<pattern>'` before using `rg`, `grep`, `find`, or agents for any code search that depends on syntax or code structure (function signatures, impl blocks, macro invocations, match arms, trait bounds, attribute usage, etc.). Adjust `--lang` for non-Rust files when searching the few non-Rust sources in this repo.
-Use this when your first instinct is to search code by symbol shape or structural pattern.
+Run `ast-grep --lang rust -p '<pattern>' --rewrite '<replacement>'` (or an ast-grep rule file with a `fix:` field, applied with `ast-grep scan`) before reaching for `sed`, a one-off Python script, or a regex replace for any structural bulk edit — renaming a function across all call sites, replacing a deprecated pattern, migrating signatures, etc. Consult the `ast-grep` skill for rule authoring when the rewrite needs more than a single pattern.
+Use this when your first instinct is to search or rewrite code by symbol shape or structural pattern.
 Do not repeat this step when the relevant file or symbol is already named by the user or still in active context.
-Do not use this step for plain-text searches (log lines, error messages, comments, fixture strings, documentation) or when a plain-text search is explicitly requested; use `rg` directly.
+Do not use this step for plain-text searches or replaces (log lines, error messages, comments, fixture strings, documentation) or when a plain-text operation is explicitly requested; use `rg` or `sed` directly.
 
 ## Development Process
 ### Must Follow

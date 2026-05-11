@@ -1,13 +1,13 @@
 ---
 name: ast-grep
-description: Guide for writing ast-grep rules to perform structural code search and analysis. Use when users need to search codebases using Abstract Syntax Tree (AST) patterns, find specific code structures, or perform complex code queries that go beyond simple text search. This skill should be used when users ask to search for code patterns, find specific language constructs, or locate code with particular structural characteristics.
+description: Guide for writing ast-grep rules to perform structural code search, analysis, and bulk rewrites/refactors. Use when users need to search codebases using Abstract Syntax Tree (AST) patterns, find specific code structures, perform complex code queries that go beyond simple text search, or carry out structural refactors and code transformations across many files. This skill should be used when users ask to search for code patterns, find specific language constructs, locate code with particular structural characteristics, or rewrite/refactor/migrate code structurally (e.g., renaming an API across all callers, replacing a deprecated pattern, migrating call signatures) instead of reaching for sed, custom Python scripts, or one-off regex replacements.
 ---
 
-# ast-grep Code Search
+# ast-grep Code Search and Refactor
 
 ## Overview
 
-This skill helps translate natural language queries into ast-grep rules for structural code search. ast-grep uses Abstract Syntax Tree (AST) patterns to match code based on its structure rather than just text, enabling powerful and precise code search across large codebases.
+This skill helps translate natural language queries into ast-grep rules for structural code search and bulk rewrites. ast-grep uses Abstract Syntax Tree (AST) patterns to match code based on its structure rather than just text, enabling powerful and precise code search and refactoring across large codebases.
 
 ## When to Use This Skill
 
@@ -17,6 +17,7 @@ Use this skill when users:
 - Request searches that require understanding code structure rather than just text
 - Ask to search for code with particular AST characteristics
 - Need to perform complex code queries that traditional text search cannot handle
+- Need to perform bulk structural rewrites or refactors (renaming an API across all callers, removing an unused parameter from many call sites, migrating call signatures) — reach for ast-grep before `sed`, custom Python scripts, or regex replacements
 
 ## General Workflow
 
@@ -313,6 +314,84 @@ rule:
           pattern: try { \$\$\$ } catch (\$E) { \$\$\$ }
           stopBy: end" /path/to/project
 ```
+
+## Bulk Rewrites and Refactors
+
+When the goal is to *change* code rather than just find it, use `--rewrite` (for one-pattern rewrites) or a rule file with `fix:` (for anything more complex). Prefer this over `sed`, custom Python scripts, or regex replacements whenever the change depends on code structure rather than literal text.
+
+### Workflow
+
+Four discrete steps — do them in order, do not skip:
+
+1. **Search** to see what matches and how many call sites the pattern will touch:
+   ```bash
+   ast-grep run --lang rust -p 'foo($A, $B, &[])' tests/
+   ```
+2. **Preview** the rewrite as a colored diff (no `--update-all` — files are not modified):
+   ```bash
+   ast-grep run --lang rust -p 'foo($A, $B, &[])' --rewrite 'foo($A, $B)' tests/
+   ```
+3. **Apply** in place with `--update-all`:
+   ```bash
+   ast-grep run --lang rust -p 'foo($A, $B, &[])' --rewrite 'foo($A, $B)' --update-all tests/
+   ```
+4. **Reformat** with the language's formatter. ast-grep splices the rewrite text into the existing layout without re-indenting, so multi-line argument lists often end up oddly formatted:
+   ```bash
+   cargo fmt --all          # Rust
+   prettier --write .       # JS/TS
+   gofmt -w .               # Go
+   ```
+
+### Pre-flight: search for what the pattern WON'T match
+
+A pattern only rewrites the call sites that literally match it. **Before changing a callee's signature on the assumption a single rewrite handled everything, run a complementary search for the survivors.**
+
+Concrete example from a real refactor: the goal was to drop the `env_vars: &[(&str, &str)]` parameter from `run_covgate`. Rewriting `run_covgate($W, $C, $A, &[])` → `run_covgate($W, $C, $A)` cleaned up 27 callers — but several remaining 4-arg call sites still passed *non-empty* env_vars (e.g., `&[("GITHUB_STEP_SUMMARY", path)]`). Those did not match the empty-`&[]` pattern, were not rewritten, and broke compilation when the parameter was removed from the function definition.
+
+The pre-flight that would have caught this: before removing the parameter, also run a "what's left" search with a fully open metavariable in the trailing slot:
+
+```bash
+# Find all 4-arg calls (any third arg, including non-empty env)
+ast-grep run --lang rust -p 'run_covgate($W, $C, $A, $E)' tests/
+```
+
+If anything remains after the targeted rewrite, decide explicitly how to handle each survivor (manual edit, separate `_with_env` overload, etc.) *before* changing the signature.
+
+### Metavariable substitution in rewrites
+
+In both `--rewrite` strings and rule-file `fix:` strings:
+- `$X` (single uppercase identifier) substitutes the matched node verbatim
+- `$$$X` substitutes a variadic match (zero or more nodes)
+- Everything else in the pattern is a literal — only metavariables are substituted
+
+Because matching is structural, the same pattern works whether the original call is on one line or spread across many — the AST match is identical. ast-grep does not re-indent the substitution, which is why the reformat step matters.
+
+### When to escalate to a rule file with `fix:`
+
+`-p` + `--rewrite` on the command line is enough when the rewrite is unconditional and expressible as a single pattern → replacement. Reach for a YAML rule file with a `fix:` field when:
+- The rewrite is conditional on context (only inside `tests/`, only when a metavariable matches a regex, only when wrapped in a specific construct)
+- You need composite logic — `all`, `any`, `not`, `inside`, `has`
+- You want the refactor to be a reviewable, replayable artifact committed alongside the diff
+
+**Example rule file (drop-empty-env.yml):**
+```yaml
+id: drop-empty-env-from-run-covgate
+language: rust
+rule:
+  pattern: run_covgate($W, $C, $A, &[])
+fix: run_covgate($W, $C, $A)
+```
+
+Apply with `scan` (not `run`):
+```bash
+# Preview
+ast-grep scan --rule drop-empty-env.yml tests/
+
+# Apply
+ast-grep scan --rule drop-empty-env.yml --update-all tests/
+```
+
+For conditional rewrites, add `constraints:` to bind metavariables to sub-patterns or regexes, and use relational rules (`inside`, `has`) under `rule:`. See `references/rule_reference.md` for the full YAML grammar.
 
 ## Resources
 
