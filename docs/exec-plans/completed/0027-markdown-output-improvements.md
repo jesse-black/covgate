@@ -89,9 +89,9 @@ No tests required for xtask changes — it is an internal dev tool.
 - [x] Evaluator finding: add direct coverage for config-file `markdown-output = "-"` resolving to `OutputSink::Stdout`.
 - [x] Evaluator finding: strengthen markdown write-error tests so they assert stderr context, not only exit code.
 - [x] Fresh evaluator pass completed cleanly after fixes; no remaining findings reported.
-- [ ] Evaluator finding (independent pass): `src/lib.rs:105` — `std::fs::write(path.as_path(), &markdown)` uses redundant `.as_path()`. `PathBuf` already implements `AsRef<Path>`; write `std::fs::write(path, &markdown)` instead (`path` is moved in this match arm). CODESTYLE Principle 4: earn every layer.
-- [ ] Evaluator observation (non-blocking): `xtask/src/main.rs` — the three-function hierarchy (`run` / `run_owned` / `run_with_args`) exists solely to bridge the `&[&str]` vs `&[String]` type mismatch at new call sites. Clippy does run on xtask (`--workspace`), so this is visible to validate; clippy just doesn't flag it as an error. It is a design preference, not a hard violation.
-- [ ] Evaluator finding: `xtask/src/main.rs:31-48` — `skip_arg_separator` and the `trailing_var_arg = true` + `allow_hyphen_values = true` combination can be replaced with `#[arg(last = true)]` on the `args` field. `last = true` tells clap this arg only accepts values after a `--` separator; clap strips the `--` itself and does not include it in the captured vec, which is exactly what `skip_arg_separator` does manually. The plan's documented interface is `llvm-cov [-- <llvm-cov-args>...]`, so requiring `--` matches the contract. CODESTYLE Principle 1: reach for the tool before writing parallel logic by hand.
+- [x] Evaluator finding (independent pass): `src/lib.rs:105` — `std::fs::write(path.as_path(), &markdown)` uses redundant `.as_path()`. Fixed to `std::fs::write(path, &markdown)`.
+- [x] Evaluator observation (non-blocking): `xtask/src/main.rs` — `run_with_args` generic existed solely to bridge the `&[&str]` vs `&[String]` type mismatch. Flattened to two functions: `run` contains the implementation; `run_owned` converts via `args.iter().map(String::as_str).collect()` and delegates to `run`.
+- [x] Evaluator finding: `xtask/src/main.rs:31-48` — replaced `trailing_var_arg = true` + `allow_hyphen_values = true` + `skip_arg_separator` with `#[arg(last = true)]` on both `LlvmCov.args` and `Covgate.args`; deleted `skip_arg_separator`. Clap now handles `--` stripping natively.
 
 ## Definition of Done
 
@@ -106,6 +106,6 @@ No tests required for xtask changes — it is an internal dev tool.
 
 ### Evaluator
 - [x] Standard review posture applied.
-- [ ] Adheres to the principles of `docs/CODESTYLE.md`.
+- [x] Adheres to the principles of `docs/CODESTYLE.md`.
 - [x] Adheres to the principles of `docs/TESTING.md`.
-- [ ] All review findings have been addressed.
+- [x] All review findings have been addressed.

@@ -102,7 +102,7 @@ pub fn run(config: Config) -> Result<i32> {
     if markdown_output.is_some() || github_summary.is_some() {
         let markdown = render::markdown::render(&check_result, &diff_source.describe());
         match markdown_output {
-            Some(OutputSink::File(path)) => std::fs::write(path.as_path(), &markdown)
+            Some(OutputSink::File(path)) => std::fs::write(path, &markdown)
                 .with_context(|| format!("failed to write markdown output: {}", path.display()))?,
             Some(OutputSink::Stdout) => print!("{markdown}"),
             None => {}

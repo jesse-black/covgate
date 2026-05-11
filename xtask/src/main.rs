@@ -10,8 +10,8 @@ use toml_edit::{DocumentMut, Item};
 fn main() -> Result<()> {
     match Cli::parse().command {
         Task::Validate => validate(),
-        Task::LlvmCov { args } => llvm_cov_task(&skip_arg_separator(&args)),
-        Task::Covgate { args } => covgate_task(&skip_arg_separator(&args)),
+        Task::LlvmCov { args } => llvm_cov_task(&args),
+        Task::Covgate { args } => covgate_task(&args),
         Task::ReleaseVersion { version } => release_version(&version),
         Task::RegenFixtureCoverage { fixture_id } => regen_fixture_coverage(&fixture_id),
         Task::RegenFixtureCoverageAll => regen_fixture_coverage_all(),
@@ -28,14 +28,12 @@ struct Cli {
 #[derive(Debug, Subcommand)]
 enum Task {
     Validate,
-    #[command(trailing_var_arg = true)]
     LlvmCov {
-        #[arg(allow_hyphen_values = true)]
+        #[arg(last = true)]
         args: Vec<String>,
     },
-    #[command(trailing_var_arg = true)]
     Covgate {
-        #[arg(allow_hyphen_values = true)]
+        #[arg(last = true)]
         args: Vec<String>,
     },
     ReleaseVersion {
@@ -45,14 +43,6 @@ enum Task {
         fixture_id: String,
     },
     RegenFixtureCoverageAll,
-}
-
-fn skip_arg_separator(args: &[String]) -> Vec<String> {
-    if let Some(stripped) = args.strip_prefix(&["--".to_string()]) {
-        stripped.to_vec()
-    } else {
-        args.to_vec()
-    }
 }
 
 fn release_version(version: &str) -> Result<()> {
@@ -1032,18 +1022,9 @@ fn record_validation_step(
 }
 
 fn run(program: &str, args: &[&str]) -> Result<()> {
-    run_with_args(program, args.iter().copied())
-}
-
-fn run_owned(program: &str, args: &[String]) -> Result<()> {
-    run_with_args(program, args.iter().map(String::as_str))
-}
-
-fn run_with_args<'a>(program: &str, args: impl IntoIterator<Item = &'a str>) -> Result<()> {
-    let args = args.into_iter().collect::<Vec<_>>();
     eprintln!("> {} {}", program, args.join(" "));
     let status = Command::new(program)
-        .args(&args)
+        .args(args)
         .status()
         .with_context(|| format!("failed to execute `{program}`"))?;
 
@@ -1055,6 +1036,11 @@ fn run_with_args<'a>(program: &str, args: impl IntoIterator<Item = &'a str>) -> 
     }
 
     Ok(())
+}
+
+fn run_owned(program: &str, args: &[String]) -> Result<()> {
+    let args: Vec<&str> = args.iter().map(String::as_str).collect();
+    run(program, &args)
 }
 
 fn run_in_dir(program: &str, args: &[&str], working_dir: &Path) -> Result<()> {
