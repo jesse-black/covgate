@@ -431,6 +431,67 @@ fn git_base_mode_passes_for_uncovered_untracked_file() {
 }
 
 #[test]
+fn git_base_mode_passes_for_uncovered_untracked_file_with_spaces() {
+    let fixture = rust_basic_pass_fixture();
+    let temp = tempdir().expect("tempdir should exist");
+    let worktree = setup_fixture_worktree(temp.path(), fixture);
+    fs::write(
+        worktree.join("covgate.toml"),
+        "[[gates]]\nfail-under-regions = 90\n",
+    )
+    .expect("config should be written");
+    run_git(&worktree, &["add", "covgate.toml"]);
+    run_git(&worktree, &["commit", "-m", "add covgate config"]);
+
+    fs::write(worktree.join("space name.rs"), "pub fn pending() {}\n")
+        .expect("untracked file should write");
+
+    let output = covgate(&worktree).check(&fixture.coverage_json()).run();
+
+    assert_eq!(output.status.code(), Some(0));
+    let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
+    assert!(!stderr.contains("false pass"), "stderr={stderr}");
+}
+
+#[test]
+fn git_base_mode_quotes_coverage_paths_with_spaces_in_error_command() {
+    let fixture = rust_basic_pass_fixture();
+    let temp = tempdir().expect("tempdir should exist");
+    let worktree = setup_fixture_worktree(temp.path(), fixture);
+    fs::write(
+        worktree.join("covgate.toml"),
+        "[[gates]]\nfail-under-regions = 90\n",
+    )
+    .expect("config should be written");
+    run_git(&worktree, &["add", "covgate.toml"]);
+    run_git(&worktree, &["commit", "-m", "add covgate config"]);
+
+    let coverage_path = temp.path().join("coverage-with-space.json");
+    let original =
+        fs::read_to_string(fixture.coverage_json()).expect("fixture coverage should be readable");
+    fs::write(
+        &coverage_path,
+        original.replace("\"src/lib.rs\"", "\"src/my lib.rs\""),
+    )
+    .expect("modified coverage should be written");
+
+    fs::write(
+        worktree.join("src").join("my lib.rs"),
+        "pub fn pending() {}\n",
+    )
+    .expect("untracked file with space should write");
+
+    let output = covgate(&worktree).check(&coverage_path).run();
+
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
+    assert!(
+        stderr.contains("git add -N 'src/my lib.rs'"),
+        "stderr={stderr}"
+    );
+}
+
+#[test]
 fn diff_file_mode_skips_untracked_files_check() {
     let fixture = rust_basic_pass_fixture();
     let temp = tempdir().expect("tempdir should exist");
