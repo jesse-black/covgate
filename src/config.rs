@@ -22,7 +22,14 @@ pub struct Config {
     pub coverage_report: PathBuf,
     pub diff_source: DiffSource,
     pub gates: Vec<ConfiguredGate>,
-    pub markdown_output: Option<PathBuf>,
+    pub markdown_output: Option<OutputSink>,
+    pub no_github_summary: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OutputSink {
+    File(PathBuf),
+    Stdout,
 }
 
 #[derive(Debug)]
@@ -98,6 +105,7 @@ impl TryFrom<Args> for Config {
             markdown_output,
             base: _,
             diff_file: _,
+            no_github_summary,
         } = &args;
 
         let dir = env::current_dir()
@@ -107,18 +115,30 @@ impl TryFrom<Args> for Config {
         let match_root = repo_root.unwrap_or(dir);
         let diff_source = resolve_diff_source(&args, file_config.as_ref())?;
         let gates = resolve_gates(file_config.as_ref(), &match_root)?;
-        let markdown_output = markdown_output.clone().or_else(|| {
-            file_config
-                .as_ref()
-                .and_then(|config| config.markdown_output.clone())
-        });
+        let markdown_output = markdown_output
+            .clone()
+            .or_else(|| {
+                file_config
+                    .as_ref()
+                    .and_then(|config| config.markdown_output.clone())
+            })
+            .map(resolve_output_sink);
 
         Ok(Self {
             coverage_report: coverage_report.clone(),
             diff_source,
             gates,
             markdown_output,
+            no_github_summary: *no_github_summary,
         })
+    }
+}
+
+fn resolve_output_sink(path: PathBuf) -> OutputSink {
+    if path == Path::new("-") {
+        OutputSink::Stdout
+    } else {
+        OutputSink::File(path)
     }
 }
 
@@ -501,6 +521,7 @@ mod tests {
             base: None,
             diff_file: None,
             markdown_output: None,
+            no_github_summary: false,
         };
 
         let diff_source =

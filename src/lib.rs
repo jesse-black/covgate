@@ -8,11 +8,11 @@ pub mod metrics;
 pub mod model;
 pub mod render;
 
-use anyhow::Result;
-use std::collections::BTreeSet;
+use anyhow::{Context, Result};
+use std::{collections::BTreeSet, io::Write, path::PathBuf};
 
 use crate::{
-    config::{Config, ConfiguredGate},
+    config::{Config, ConfiguredGate, OutputSink},
     diff::DiffSource,
     model::{ChangedFile, CheckResult, ComputedMetric, MetricKind},
 };
@@ -23,6 +23,7 @@ pub fn run(config: Config) -> Result<i32> {
         diff_source,
         gates,
         markdown_output,
+        no_github_summary,
     } = config;
     let coverage_report = &coverage_report;
     let diff_source = &diff_source;
@@ -95,9 +96,30 @@ pub fn run(config: Config) -> Result<i32> {
     let console = render::console::render(&check_result, &diff_source.describe());
     println!("{console}");
 
-    if let Some(path) = markdown_output {
+    let github_summary = (!no_github_summary)
+        .then(|| std::env::var_os("GITHUB_STEP_SUMMARY"))
+        .flatten();
+    if markdown_output.is_some() || github_summary.is_some() {
         let markdown = render::markdown::render(&check_result, &diff_source.describe());
-        std::fs::write(path, markdown)?;
+        match markdown_output {
+            Some(OutputSink::File(path)) => std::fs::write(path.as_path(), &markdown)
+                .with_context(|| format!("failed to write markdown output: {}", path.display()))?,
+            Some(OutputSink::Stdout) => print!("{markdown}"),
+            None => {}
+        }
+        if let Some(path) = github_summary {
+            let path = PathBuf::from(path);
+            let mut file = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&path)
+                .with_context(|| {
+                    format!("failed to open GitHub step summary: {}", path.display())
+                })?;
+            file.write_all(markdown.as_bytes()).with_context(|| {
+                format!("failed to write GitHub step summary: {}", path.display())
+            })?;
+        }
     }
 
     Ok(if check_result.passed { 0 } else { 1 })

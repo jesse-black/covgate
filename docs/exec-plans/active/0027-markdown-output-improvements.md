@@ -29,22 +29,22 @@ description: "ExecPlan for adding stdout support (`-` sentinel) and auto-detecte
 
 ### Production code
 
-- [ ] Add `OutputSink` enum to `src/config.rs`:
+- [x] Add `OutputSink` enum to `src/config.rs`:
   ```rust
   pub enum OutputSink {
       File(PathBuf),
       Stdout,
   }
   ```
-- [ ] Change `Config.markdown_output: Option<PathBuf>` → `markdown_output: Option<OutputSink>`.
-- [ ] Add `Config.no_github_summary: bool`.
-- [ ] Update `TryFrom<Args> for Config` in `src/config.rs`:
+- [x] Change `Config.markdown_output: Option<PathBuf>` → `markdown_output: Option<OutputSink>`.
+- [x] Add `Config.no_github_summary: bool`.
+- [x] Update `TryFrom<Args> for Config` in `src/config.rs`:
   - Convert `--markdown-output -` → `OutputSink::Stdout`.
   - Convert any other path → `OutputSink::File(path)`.
   - Apply the same `-`-to-`Stdout` conversion when resolving the value from `FileConfig.markdown_output`.
   - Propagate `args.no_github_summary` to `Config.no_github_summary`.
-- [ ] Add `--no-github-summary` boolean flag to `Args` in `src/cli.rs`.
-- [ ] Update `src/lib.rs::run`:
+- [x] Add `--no-github-summary` boolean flag to `Args` in `src/cli.rs`.
+- [x] Update `src/lib.rs::run`:
   - Destructure `no_github_summary` from `Config` alongside `markdown_output`.
   - Render the markdown string once (reuse for all sinks).
   - Match on `markdown_output`:
@@ -57,18 +57,18 @@ description: "ExecPlan for adding stdout support (`-` sentinel) and auto-detecte
 
 No tests required for xtask changes — it is an internal dev tool.
 
-- [ ] Migrate xtask arg parsing to clap: replace the manual `args.next()` dispatch in `main` with a clap `Cli` / `Subcommand` derived struct. Use `trailing_var_arg = true` on the `LlvmCov` and `Covgate` subcommands to capture forwarded args natively. Check whether clap is already in `xtask/Cargo.toml`; add it if not.
-- [ ] Remove the freshness cache: delete `coverage_is_fresh` and `most_recent_rs_mtime`; remove their call sites in `llvm_cov_task` and `covgate_task`.
-- [ ] Remove `--force` from `llvm_cov_task` (parameter and call site in `main`); `cargo xtask llvm-cov` always reruns.
-- [ ] Update `run_llvm_cov` to accept `extra_args: &[String]` and append them at the end of the `cargo llvm-cov` invocation.
-- [ ] Update `llvm_cov_task` and `covgate_task` to accept `extra_args: &[String]` and forward to `run_llvm_cov` / `cargo run` respectively.
-- [ ] Update the `"llvm-cov"` and `"covgate"` arms in `main` to collect remaining args (skipping a leading `--` separator if present) and pass them to their task functions.
-- [ ] Update the usage string in `main`: `llvm-cov [-- <llvm-cov-args>...]`, `covgate [-- <covgate-args>...]`; remove `[--force]`.
+- [x] Migrate xtask arg parsing to clap: replace the manual `args.next()` dispatch in `main` with a clap `Cli` / `Subcommand` derived struct. Use `trailing_var_arg = true` on the `LlvmCov` and `Covgate` subcommands to capture forwarded args natively. Check whether clap is already in `xtask/Cargo.toml`; add it if not.
+- [x] Remove the freshness cache: delete `coverage_is_fresh` and `most_recent_rs_mtime`; remove their call sites in `llvm_cov_task` and `covgate_task`.
+- [x] Remove `--force` from `llvm_cov_task` (parameter and call site in `main`); `cargo xtask llvm-cov` always reruns.
+- [x] Update `run_llvm_cov` to accept `extra_args: &[String]` and append them at the end of the `cargo llvm-cov` invocation.
+- [x] Update `llvm_cov_task` and `covgate_task` to accept `extra_args: &[String]` and forward to `run_llvm_cov` / `cargo run` respectively.
+- [x] Update the `"llvm-cov"` and `"covgate"` arms in `main` to collect remaining args (skipping a leading `--` separator if present) and pass them to their task functions.
+- [x] Update the usage string in `main`: `llvm-cov [-- <llvm-cov-args>...]`, `covgate [-- <covgate-args>...]`; remove `[--force]`.
 
 ### Tests
 
-- [ ] Add `run_covgate_with_env(worktree, coverage_json, extra_args, env_vars)` helper to `tests/support/mod.rs` that accepts `&[(&str, &str)]` and sets them on the `Command` before running.
-- [ ] In `tests/cli_interface.rs`, add:
+- [x] Add `run_covgate_with_env(worktree, coverage_json, extra_args, env_vars)` helper to `tests/support/mod.rs` that accepts `&[(&str, &str)]` and sets them on the `Command` before running.
+- [x] In `tests/cli_interface.rs`, add:
   - `markdown_output_to_stdout`: pass `--markdown-output -`; assert stdout contains markdown table content.
   - `markdown_output_to_file_regression`: pass `--markdown-output <tempfile>`; assert file is written with markdown content (regression guard).
   - `github_step_summary_auto_detected`: set `GITHUB_STEP_SUMMARY` to a temp file path; assert that file is created and contains markdown content after run.
@@ -81,10 +81,14 @@ No tests required for xtask changes — it is an internal dev tool.
 - `cargo xtask validate`
 
 ## Discoveries
-- None yet
+- Added failing CLI regressions first: `markdown_output_to_stdout` failed because `-` was treated as a file path, and GitHub summary tests failed because auto-detection and `--no-github-summary` did not exist yet.
+- `cargo xtask validate` initially failed covgate's own changed-region gate on new markdown filesystem error branches in `src/lib.rs`; added CLI error-path tests for explicit file write errors and GitHub summary write errors instead of lowering gate defaults.
+- Evaluator findings were addressed by adding config-file `markdown-output = "-"` coverage, destination-specific IO error context, stronger stderr assertions, and a GitHub summary open-error regression.
 
 ## Review
-- [ ] None yet
+- [x] Evaluator finding: add direct coverage for config-file `markdown-output = "-"` resolving to `OutputSink::Stdout`.
+- [x] Evaluator finding: strengthen markdown write-error tests so they assert stderr context, not only exit code.
+- [x] Fresh evaluator pass completed cleanly after fixes; no remaining findings reported.
 
 ## Definition of Done
 
@@ -92,10 +96,10 @@ No tests required for xtask changes — it is an internal dev tool.
 - [x] Plan is consistent, up to date, decision-complete, and ready to hand off.
 
 ### Generator
-- [ ] Goal achieved: stdout sink via `-`, auto-detected GITHUB_STEP_SUMMARY, `--no-github-summary` suppression, `--` arg forwarding for both xtask tasks, and freshness cache removed.
-- [ ] All planned steps are complete.
-- [ ] All validation commands pass.
-- [ ] Handed off to an independent reviewer (MUST use the `evaluator-execplan` skill via a subagent or separate agent, not the generator agent).
+- [x] Goal achieved: stdout sink via `-`, auto-detected GITHUB_STEP_SUMMARY, `--no-github-summary` suppression, `--` arg forwarding for both xtask tasks, and freshness cache removed.
+- [x] All planned steps are complete.
+- [x] All validation commands pass.
+- [x] Handed off to an independent reviewer (MUST use the `evaluator-execplan` skill via a subagent or separate agent, not the generator agent).
 
 ### Evaluator
 - [ ] Standard review posture applied.

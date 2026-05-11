@@ -22,6 +22,7 @@ fn git_base_args(coverage_report: std::path::PathBuf) -> Args {
         base: Some("HEAD".to_string()),
         diff_file: None,
         markdown_output: None,
+        no_github_summary: false,
     }
 }
 
@@ -46,6 +47,7 @@ fn run_with_diff_file_executes_without_untracked_warning_lookup() {
         base: None,
         diff_file: Some(diff_file),
         markdown_output: None,
+        no_github_summary: false,
     })
     .expect("config should resolve");
 

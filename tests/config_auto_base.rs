@@ -64,6 +64,7 @@ fn config_uses_recorded_base_when_base_is_omitted() {
         base: None,
         diff_file: None,
         markdown_output: None,
+        no_github_summary: false,
     })
     .expect("config should resolve");
 

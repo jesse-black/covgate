@@ -5,9 +5,10 @@ use std::{fs, path::PathBuf, process::Output};
 use tempfile::tempdir;
 
 use crate::support::{
-    copy_tree, init_git_repo, run_covgate, run_covgate_raw, run_covgate_with_coverage, run_git,
-    rust_basic_fail_fixture, rust_basic_pass_fixture, setup_fixture_worktree,
-    vitest_path_scoped_gates_fixture, write_absolute_path_coverage_fixture, write_worktree_diff,
+    copy_tree, init_git_repo, run_covgate, run_covgate_raw, run_covgate_with_coverage,
+    run_covgate_with_env, run_git, rust_basic_fail_fixture, rust_basic_pass_fixture,
+    setup_fixture_worktree, vitest_path_scoped_gates_fixture, write_absolute_path_coverage_fixture,
+    write_worktree_diff,
 };
 
 fn run_covgate_raw_with_path(worktree: &std::path::Path, path: &str, args: &[String]) -> Output {
@@ -590,6 +591,274 @@ fn markdown_summary_rust_fixture() {
     assert!(markdown.contains("#### Function"));
     assert!(markdown.contains("| File | Covered Regions | Regions | Missed Regions | Coverage |"));
     assert!(markdown.contains("| **Total** | **"));
+}
+
+#[test]
+fn markdown_output_to_stdout() {
+    let fixture = rust_basic_pass_fixture();
+    let temp = tempdir().expect("tempdir should exist");
+    let worktree = setup_fixture_worktree(temp.path(), fixture);
+    let diff_file = write_worktree_diff(temp.path(), &worktree);
+    fs::write(
+        worktree.join("covgate.toml"),
+        "[[gates]]\nfail-under-regions = 90\n",
+    )
+    .expect("config should be written");
+
+    let output = run_covgate(
+        &worktree,
+        fixture,
+        &[
+            "--diff-file".to_string(),
+            diff_file.to_string_lossy().into_owned(),
+            "--markdown-output".to_string(),
+            "-".to_string(),
+        ],
+    );
+
+    assert_eq!(output.status.code(), Some(0));
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+    assert!(stdout.contains("PASS Regions:"), "stdout={stdout}");
+    assert!(stdout.contains("## Covgate"), "stdout={stdout}");
+    assert!(
+        stdout.contains("| Result | Rule | Observed | Configured |"),
+        "stdout={stdout}"
+    );
+}
+
+#[test]
+fn markdown_output_to_file_regression() {
+    let fixture = rust_basic_pass_fixture();
+    let temp = tempdir().expect("tempdir should exist");
+    let worktree = setup_fixture_worktree(temp.path(), fixture);
+    let diff_file = write_worktree_diff(temp.path(), &worktree);
+    let markdown_output = temp.path().join("summary.md");
+    fs::write(
+        worktree.join("covgate.toml"),
+        "[[gates]]\nfail-under-regions = 90\n",
+    )
+    .expect("config should be written");
+
+    let output = run_covgate(
+        &worktree,
+        fixture,
+        &[
+            "--diff-file".to_string(),
+            diff_file.to_string_lossy().into_owned(),
+            "--markdown-output".to_string(),
+            markdown_output.to_string_lossy().into_owned(),
+        ],
+    );
+
+    assert_eq!(output.status.code(), Some(0));
+    let markdown = fs::read_to_string(markdown_output).expect("markdown should be readable");
+    assert!(markdown.contains("## Covgate"));
+    assert!(markdown.contains("| Result | Rule | Observed | Configured |"));
+}
+
+#[test]
+fn github_step_summary_auto_detected() {
+    let fixture = rust_basic_pass_fixture();
+    let temp = tempdir().expect("tempdir should exist");
+    let worktree = setup_fixture_worktree(temp.path(), fixture);
+    let diff_file = write_worktree_diff(temp.path(), &worktree);
+    let summary_output = temp.path().join("github-step-summary.md");
+    fs::write(
+        worktree.join("covgate.toml"),
+        "[[gates]]\nfail-under-regions = 90\n",
+    )
+    .expect("config should be written");
+
+    let output = run_covgate_with_env(
+        &worktree,
+        &fixture.coverage_json(),
+        &[
+            "--diff-file".to_string(),
+            diff_file.to_string_lossy().into_owned(),
+        ],
+        &[(
+            "GITHUB_STEP_SUMMARY",
+            summary_output.to_str().expect("path should be utf8"),
+        )],
+    );
+
+    assert_eq!(output.status.code(), Some(0));
+    let markdown = fs::read_to_string(summary_output).expect("summary should be readable");
+    assert!(markdown.contains("## Covgate"));
+    assert!(markdown.contains("| Result | Rule | Observed | Configured |"));
+}
+
+#[test]
+fn github_step_summary_suppressed_by_flag() {
+    let fixture = rust_basic_pass_fixture();
+    let temp = tempdir().expect("tempdir should exist");
+    let worktree = setup_fixture_worktree(temp.path(), fixture);
+    let diff_file = write_worktree_diff(temp.path(), &worktree);
+    let summary_output = temp.path().join("github-step-summary.md");
+    fs::write(
+        worktree.join("covgate.toml"),
+        "[[gates]]\nfail-under-regions = 90\n",
+    )
+    .expect("config should be written");
+
+    let output = run_covgate_with_env(
+        &worktree,
+        &fixture.coverage_json(),
+        &[
+            "--diff-file".to_string(),
+            diff_file.to_string_lossy().into_owned(),
+            "--no-github-summary".to_string(),
+        ],
+        &[(
+            "GITHUB_STEP_SUMMARY",
+            summary_output.to_str().expect("path should be utf8"),
+        )],
+    );
+
+    assert_eq!(output.status.code(), Some(0));
+    assert!(
+        !summary_output.exists(),
+        "summary file should not be written"
+    );
+}
+
+#[test]
+fn github_step_summary_and_explicit_output_both_write() {
+    let fixture = rust_basic_pass_fixture();
+    let temp = tempdir().expect("tempdir should exist");
+    let worktree = setup_fixture_worktree(temp.path(), fixture);
+    let diff_file = write_worktree_diff(temp.path(), &worktree);
+    let markdown_output = temp.path().join("summary.md");
+    let summary_output = temp.path().join("github-step-summary.md");
+    fs::write(
+        worktree.join("covgate.toml"),
+        "[[gates]]\nfail-under-regions = 90\n",
+    )
+    .expect("config should be written");
+
+    let output = run_covgate_with_env(
+        &worktree,
+        &fixture.coverage_json(),
+        &[
+            "--diff-file".to_string(),
+            diff_file.to_string_lossy().into_owned(),
+            "--markdown-output".to_string(),
+            markdown_output.to_string_lossy().into_owned(),
+        ],
+        &[(
+            "GITHUB_STEP_SUMMARY",
+            summary_output.to_str().expect("path should be utf8"),
+        )],
+    );
+
+    assert_eq!(output.status.code(), Some(0));
+    let markdown = fs::read_to_string(markdown_output).expect("markdown should be readable");
+    let summary = fs::read_to_string(summary_output).expect("summary should be readable");
+    assert!(markdown.contains("## Covgate"));
+    assert!(summary.contains("## Covgate"));
+}
+
+#[test]
+fn markdown_output_file_write_error_is_reported() {
+    let fixture = rust_basic_pass_fixture();
+    let temp = tempdir().expect("tempdir should exist");
+    let worktree = setup_fixture_worktree(temp.path(), fixture);
+    let diff_file = write_worktree_diff(temp.path(), &worktree);
+    fs::write(
+        worktree.join("covgate.toml"),
+        "[[gates]]\nfail-under-regions = 90\n",
+    )
+    .expect("config should be written");
+
+    let output = run_covgate(
+        &worktree,
+        fixture,
+        &[
+            "--diff-file".to_string(),
+            diff_file.to_string_lossy().into_owned(),
+            "--markdown-output".to_string(),
+            temp.path().to_string_lossy().into_owned(),
+        ],
+    );
+
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
+    assert!(
+        stderr.contains("failed to write markdown output"),
+        "stderr={stderr}"
+    );
+    assert!(
+        stderr.contains(&temp.path().display().to_string()),
+        "stderr={stderr}"
+    );
+}
+
+#[test]
+fn github_step_summary_write_error_is_reported() {
+    let fixture = rust_basic_pass_fixture();
+    let temp = tempdir().expect("tempdir should exist");
+    let worktree = setup_fixture_worktree(temp.path(), fixture);
+    let diff_file = write_worktree_diff(temp.path(), &worktree);
+    fs::write(
+        worktree.join("covgate.toml"),
+        "[[gates]]\nfail-under-regions = 90\n",
+    )
+    .expect("config should be written");
+
+    let output = run_covgate_with_env(
+        &worktree,
+        &fixture.coverage_json(),
+        &[
+            "--diff-file".to_string(),
+            diff_file.to_string_lossy().into_owned(),
+        ],
+        &[("GITHUB_STEP_SUMMARY", "/dev/full")],
+    );
+
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
+    assert!(
+        stderr.contains("failed to write GitHub step summary"),
+        "stderr={stderr}"
+    );
+    assert!(stderr.contains("/dev/full"), "stderr={stderr}");
+}
+
+#[test]
+fn github_step_summary_open_error_is_reported() {
+    let fixture = rust_basic_pass_fixture();
+    let temp = tempdir().expect("tempdir should exist");
+    let worktree = setup_fixture_worktree(temp.path(), fixture);
+    let diff_file = write_worktree_diff(temp.path(), &worktree);
+    fs::write(
+        worktree.join("covgate.toml"),
+        "[[gates]]\nfail-under-regions = 90\n",
+    )
+    .expect("config should be written");
+
+    let output = run_covgate_with_env(
+        &worktree,
+        &fixture.coverage_json(),
+        &[
+            "--diff-file".to_string(),
+            diff_file.to_string_lossy().into_owned(),
+        ],
+        &[(
+            "GITHUB_STEP_SUMMARY",
+            temp.path().to_str().expect("path should be utf8"),
+        )],
+    );
+
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8(output.stderr).expect("stderr should be utf8");
+    assert!(
+        stderr.contains("failed to open GitHub step summary"),
+        "stderr={stderr}"
+    );
+    assert!(
+        stderr.contains(&temp.path().display().to_string()),
+        "stderr={stderr}"
+    );
 }
 
 #[test]

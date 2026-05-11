@@ -1,6 +1,10 @@
 use std::{fs, path::PathBuf, sync::Mutex};
 
-use covgate::{cli::Args, config::Config, diff::DiffSource};
+use covgate::{
+    cli::Args,
+    config::{Config, OutputSink},
+    diff::DiffSource,
+};
 use tempfile::tempdir;
 
 static CWD_LOCK: Mutex<()> = Mutex::new(());
@@ -28,6 +32,7 @@ fn args_for_config_discovery() -> Args {
         base: None,
         diff_file: Some("scenario.diff".into()),
         markdown_output: None,
+        no_github_summary: false,
     }
 }
 
@@ -50,8 +55,31 @@ fn loads_config_from_parent_directory() {
 
     let config = Config::try_from(args_for_config_discovery()).expect("config should resolve");
 
-    assert_eq!(config.markdown_output, Some(PathBuf::from("summary.md")));
+    assert_eq!(
+        config.markdown_output,
+        Some(OutputSink::File(PathBuf::from("summary.md")))
+    );
     assert!(matches!(config.diff_source, DiffSource::DiffFile(_)));
+}
+
+#[test]
+fn config_markdown_output_dash_resolves_to_stdout() {
+    let _lock = CWD_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
+
+    let temp = tempdir().expect("tempdir should exist");
+    fs::write(
+        temp.path().join("covgate.toml"),
+        "markdown-output = \"-\"\n[[gates]]\nfail-under-lines = 80\n",
+    )
+    .expect("config should write");
+
+    let previous = std::env::current_dir().expect("cwd should resolve");
+    let _guard = CwdGuard(previous);
+    std::env::set_current_dir(temp.path()).expect("should chdir into config directory");
+
+    let config = Config::try_from(args_for_config_discovery()).expect("config should resolve");
+
+    assert_eq!(config.markdown_output, Some(OutputSink::Stdout));
 }
 
 #[test]
@@ -103,7 +131,10 @@ fn still_walks_past_parent_boundaries_when_repo_root_is_unknown() {
 
     let config = Config::try_from(args_for_config_discovery()).expect("config should resolve");
 
-    assert_eq!(config.markdown_output, Some(PathBuf::from("outside.md")));
+    assert_eq!(
+        config.markdown_output,
+        Some(OutputSink::File(PathBuf::from("outside.md")))
+    );
 }
 
 #[test]
