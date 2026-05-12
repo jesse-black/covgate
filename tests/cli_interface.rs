@@ -1407,3 +1407,44 @@ fn overall_coverage_remains_global_when_scoped_gates_are_configured() {
         "Overall Coverage should not contain gate labels"
     );
 }
+#[test]
+fn path_scoped_gates_ignore_files_in_siblings_do_not_leak_globally() {
+    let fixture = vitest_path_scoped_gates_fixture();
+    let (_temp, worktree, diff_file) = setup_path_scoped_fixture();
+
+    // Create a sibling ignored directory with a broad gitignore rule.
+    // In v0.2.0-rc1, this rule would incorrectly leak and ignore files in other directories.
+    let sibling_gitignore = worktree.join("sibling").join(".gitignore");
+    fs::create_dir_all(sibling_gitignore.parent().unwrap()).unwrap();
+    fs::write(&sibling_gitignore, "*\n").expect("sibling gitignore should be written");
+
+    fs::write(
+        worktree.join("covgate.toml"),
+        "[[gates]]\nname = \"logic\"\ninclude = [\"src/**/*.ts\"]\nfail-under-lines = 10\n\n[[gates]]\nname = \"fallback\"\nfail-under-lines = 0\n",
+    )
+    .expect("config should be written");
+
+    let output = covgate(&worktree)
+        .check(&fixture.coverage_json())
+        .args([
+            "--diff-file".into(),
+            diff_file.to_string_lossy().into_owned(),
+        ])
+        .run();
+
+    assert!(
+        output.status.success(),
+        "covgate should succeed. stdout={}\nstderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).expect("stdout should be utf8");
+    assert!(
+        stdout.contains("[logic] PASS Lines: 33.33% (2/6)"),
+        "stdout={stdout}"
+    );
+    assert!(
+        stdout.contains("[fallback] PASS Lines: 80.00% (4/5)"),
+        "stdout={stdout}"
+    );
+}

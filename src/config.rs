@@ -1,7 +1,6 @@
 use std::{
     env, fs,
     path::{Path, PathBuf},
-    sync::Arc,
 };
 
 use anyhow::{Context, Result, bail};
@@ -256,7 +255,6 @@ fn resolve_gates(
     match_root: &Path,
 ) -> Result<Vec<ConfiguredGate>> {
     let mut configured = Vec::new();
-    let repo_ignores = Arc::new(build_repo_ignores(match_root)?);
 
     if let Some(config) = file_config {
         for (index, gate) in config.gates.iter().enumerate() {
@@ -274,12 +272,7 @@ fn resolve_gates(
             let matcher = if is_fallback {
                 None
             } else {
-                Some(PathMatcher::new(
-                    match_root,
-                    &gate.include,
-                    &gate.exclude,
-                    repo_ignores.clone(),
-                )?)
+                Some(PathMatcher::new(match_root, &gate.include, &gate.exclude)?)
             };
 
             configured.push(ConfiguredGate {
@@ -387,25 +380,15 @@ fn derive_scoped_gate_label(include: &[String], index: usize) -> Option<String> 
 
 #[derive(Debug, Clone)]
 struct PathMatcher {
-    repo_ignores: Arc<Gitignore>,
     include: Gitignore,
     exclude: Gitignore,
 }
 
 impl PathMatcher {
-    fn new(
-        root: &Path,
-        include: &[String],
-        exclude: &[String],
-        repo_ignores: Arc<Gitignore>,
-    ) -> Result<Self> {
+    fn new(root: &Path, include: &[String], exclude: &[String]) -> Result<Self> {
         let include = build_pattern_matcher(root, include)?;
         let exclude = build_pattern_matcher(root, exclude)?;
-        Ok(Self {
-            repo_ignores,
-            include,
-            exclude,
-        })
+        Ok(Self { include, exclude })
     }
 
     fn matches(&self, path: &Path) -> bool {
@@ -416,11 +399,6 @@ impl PathMatcher {
 
         let exclude_match = self.exclude.matched(path, false);
         if exclude_match.is_ignore() {
-            return false;
-        }
-
-        let repo_ignore_match = self.repo_ignores.matched(path, false);
-        if repo_ignore_match.is_ignore() {
             return false;
         }
 
@@ -438,59 +416,9 @@ fn build_pattern_matcher(root: &Path, patterns: &[String]) -> Result<Gitignore> 
     builder.build().context("failed to build gate matcher")
 }
 
-fn build_repo_ignores(root: &Path) -> Result<Gitignore> {
-    let mut builder = GitignoreBuilder::new(root);
-    add_gitignore_files(root, &mut builder)?;
-
-    let info_exclude = root.join(".git").join("info").join("exclude");
-    if info_exclude.exists()
-        && let Some(error) = builder.add(&info_exclude)
-    {
-        return Err(error).context("failed to load repository exclude file");
-    }
-
-    builder
-        .build()
-        .context("failed to build repository ignore matcher")
-}
-
-fn add_gitignore_files(dir: &Path, builder: &mut GitignoreBuilder) -> Result<()> {
-    for entry in fs::read_dir(dir).context(format!(
-        "failed to read directory while loading gitignore files: {}",
-        dir.display()
-    ))? {
-        let entry = entry.context(format!(
-            "failed to read directory entry while loading gitignore files: {}",
-            dir.display()
-        ))?;
-        let path = entry.path();
-        let file_name = entry.file_name();
-
-        if file_name == ".git" {
-            continue;
-        }
-
-        if path.is_dir() {
-            add_gitignore_files(&path, builder)?;
-            continue;
-        }
-
-        if file_name == ".gitignore"
-            && let Some(error) = builder.add(&path)
-        {
-            return Err(error).context(format!(
-                "failed to load gitignore file for gate matching: {}",
-                path.display()
-            ));
-        }
-    }
-
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
-    use std::{fs, path::PathBuf};
+    use std::path::PathBuf;
 
     use super::{
         PathMatcher, config_candidate_paths, derive_scoped_gate_label, parse_file_config,
@@ -596,18 +524,25 @@ mod tests {
     }
 
     #[test]
-    fn path_matcher_respects_repo_gitignore_files() {
-        let temp = tempfile::tempdir().expect("tempdir should exist");
-        fs::write(temp.path().join(".gitignore"), "ignored.ts\n").expect("gitignore should exist");
+    fn resolve_gates_rejects_invalid_pattern() {
+        let file_config = parse_file_config(
+            "[[gates]]\nname = \"invalid\"\ninclude = [\"foo\\\\\"]\nfail-under-lines = 90\n",
+        )
+        .expect("config should parse");
 
-        let repo_ignores = std::sync::Arc::new(
-            super::build_repo_ignores(temp.path()).expect("repo ignores should build"),
-        );
-        let matcher = PathMatcher::new(temp.path(), &["**/*.ts".to_string()], &[], repo_ignores)
+        let error = resolve_gates(Some(&file_config), std::path::Path::new("."))
+            .expect_err("invalid pattern should fail");
+
+        assert!(error.to_string().contains("invalid gate pattern"));
+    }
+
+    #[test]
+    fn path_matcher_matches_nested_tsx_paths() {
+        let temp = tempfile::tempdir().expect("tempdir should exist");
+        let matcher = PathMatcher::new(temp.path(), &["**/*.tsx".to_string()], &[])
             .expect("matcher should build");
 
-        assert!(matcher.matches(std::path::Path::new("src/kept.ts")));
-        assert!(!matcher.matches(std::path::Path::new("ignored.ts")));
+        assert!(matcher.matches(std::path::Path::new("web/src/features/chat/Chat.tsx")));
     }
 
     #[test]
